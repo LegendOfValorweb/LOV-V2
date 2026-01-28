@@ -80,6 +80,11 @@ export default function Pets() {
   const [isMerging, setIsMerging] = useState(false);
   const [trainStatDialog, setTrainStatDialog] = useState<Pet | null>(null);
   const [isTrainingPetStat, setIsTrainingPetStat] = useState(false);
+  const [bondDialog, setBondDialog] = useState<Pet | null>(null);
+  const [isBonding, setIsBonding] = useState(false);
+  const [rebirthDialog, setRebirthDialog] = useState<Pet | null>(null);
+  const [isRebirthing, setIsRebirthing] = useState(false);
+  const [personalityDialog, setPersonalityDialog] = useState<Pet | null>(null);
 
   const { data: playerPets = [], isLoading: petsLoading, refetch: refetchPets } = useQuery<Pet[]>({
     queryKey: ["/api/accounts", account?.id, "pets"],
@@ -338,6 +343,87 @@ export default function Pets() {
     }
   };
 
+  const handleBond = async (pet: Pet) => {
+    if (!account) return;
+    setIsBonding(true);
+    try {
+      const res = await apiRequest("POST", `/api/pets/${pet.id}/bond`, { accountId: account.id });
+      const data = await res.json();
+      
+      await refetchPets();
+      const accountRes = await apiRequest("GET", `/api/accounts/${account.id}`);
+      setAccount(await accountRes.json());
+      
+      toast({
+        title: "Bond Strengthened!",
+        description: `${data.message}${data.statBonus ? ` (${data.statBonus})` : ''} Bond level: ${data.bondLevel}`,
+      });
+      setBondDialog(null);
+    } catch (error: any) {
+      const errorData = await error.json?.() || { error: "Could not bond with pet." };
+      toast({
+        title: "Bonding Failed",
+        description: errorData.error,
+        variant: "destructive",
+      });
+    } finally {
+      setIsBonding(false);
+    }
+  };
+
+  const handleRebirth = async (pet: Pet) => {
+    if (!account) return;
+    setIsRebirthing(true);
+    try {
+      const res = await apiRequest("POST", `/api/pets/${pet.id}/rebirth`, { accountId: account.id });
+      const data = await res.json();
+      
+      await refetchPets();
+      const accountRes = await apiRequest("GET", `/api/accounts/${account.id}`);
+      setAccount(await accountRes.json());
+      
+      toast({
+        title: "Rebirth Complete!",
+        description: `${data.message} ${data.rebirthBonus}`,
+      });
+      setRebirthDialog(null);
+    } catch (error: any) {
+      const errorData = await error.json?.() || { error: "Could not rebirth pet." };
+      toast({
+        title: "Rebirth Failed",
+        description: errorData.error,
+        variant: "destructive",
+      });
+    } finally {
+      setIsRebirthing(false);
+    }
+  };
+
+  const handleSetPersonality = async (pet: Pet, personality: string) => {
+    if (!account) return;
+    try {
+      const res = await apiRequest("PATCH", `/api/pets/${pet.id}/personality`, { 
+        accountId: account.id, 
+        personality 
+      });
+      const data = await res.json();
+      
+      await refetchPets();
+      
+      toast({
+        title: "Personality Set!",
+        description: `${pet.name} now has a ${personality} personality.`,
+      });
+      setPersonalityDialog(null);
+    } catch (error: any) {
+      toast({
+        title: "Failed",
+        description: "Could not set personality.",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (!account || account.role !== "player") {
     navigate("/");
     return null;
@@ -434,6 +520,47 @@ export default function Pets() {
                 <ArrowUp className="w-3 h-3 mr-1" />
                 Evolve ({config.evolutionCost.toLocaleString()}g)
               </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1"
+              onClick={() => setBondDialog(pet)}
+              disabled={(account.soulGins || 0) < 100}
+            >
+              <Heart className="w-3 h-3 mr-1 text-pink-400" />
+              Bond
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setPersonalityDialog(pet)}
+            >
+              <Sparkles className="w-3 h-3" />
+            </Button>
+            {tier === "mythic" && (
+              <Button
+                size="sm"
+                className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600"
+                onClick={() => setRebirthDialog(pet)}
+                disabled={account.gold < 500000000}
+              >
+                <ArrowLeftRight className="w-3 h-3 mr-1" />
+                Rebirth
+              </Button>
+            )}
+          </div>
+          <div className="text-xs text-muted-foreground mt-2 flex items-center gap-2">
+            <span>Bond: {(pet as any).bondLevel || 0}</span>
+            {((pet as any).rebirthCount || 0) > 0 && (
+              <Badge variant="secondary" className="text-xs">
+                Rebirth x{(pet as any).rebirthCount}
+              </Badge>
+            )}
+            {(pet as any).personality && (
+              <Badge variant="outline" className="text-xs capitalize">
+                {(pet as any).personality}
+              </Badge>
             )}
           </div>
         </CardContent>
@@ -817,6 +944,117 @@ export default function Pets() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setTrainStatDialog(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!bondDialog} onOpenChange={() => setBondDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-serif">Bond with {bondDialog?.name}</DialogTitle>
+            <DialogDescription>
+              Strengthen your bond using Soul Gins. Every 10 bond levels grants stat bonuses!
+            </DialogDescription>
+          </DialogHeader>
+          {bondDialog && (
+            <div className="space-y-4 py-4">
+              <div className="flex items-center justify-between p-3 rounded-md bg-pink-500/10 border border-pink-500/20">
+                <span className="text-sm font-medium flex items-center gap-2">
+                  <Heart className="w-4 h-4 text-pink-400" />
+                  Current Bond Level
+                </span>
+                <span className="font-mono font-bold text-pink-400">{(bondDialog as any).bondLevel || 0}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-md bg-purple-500/10 border border-purple-500/20">
+                <span className="text-sm font-medium flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-purple-400" />
+                  Soul Gins
+                </span>
+                <span className="font-mono font-bold text-purple-400">{(account?.soulGins || 0).toLocaleString()}</span>
+              </div>
+              <p className="text-xs text-muted-foreground">Cost: 100 Soul Gins per bond interaction</p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBondDialog(null)}>Cancel</Button>
+            <Button 
+              onClick={() => bondDialog && handleBond(bondDialog)}
+              disabled={isBonding || (account?.soulGins || 0) < 100}
+            >
+              <Heart className="w-4 h-4 mr-1" />
+              {isBonding ? "Bonding..." : "Bond (100 Soul Gins)"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!rebirthDialog} onOpenChange={() => setRebirthDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-serif">Rebirth {rebirthDialog?.name}</DialogTitle>
+            <DialogDescription>
+              Transform your mythic pet back into an egg with bonus stats! Each rebirth grants +10% permanent stat bonus.
+            </DialogDescription>
+          </DialogHeader>
+          {rebirthDialog && (
+            <div className="space-y-4 py-4">
+              <div className="p-3 rounded-md bg-purple-500/10 border border-purple-500/20">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">Current Rebirth Count</span>
+                  <span className="font-mono font-bold text-purple-400">{(rebirthDialog as any).rebirthCount || 0}</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Next rebirth will grant: +{((rebirthDialog as any).rebirthCount || 0) + 1}0% stat bonus
+                </p>
+              </div>
+              <div className="p-3 rounded-md bg-yellow-500/10 border border-yellow-500/20">
+                <p className="text-sm">
+                  Cost: <span className="font-bold text-yellow-400">500,000,000 Gold</span>
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Your gold: {account?.gold.toLocaleString()}
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRebirthDialog(null)}>Cancel</Button>
+            <Button 
+              className="bg-gradient-to-r from-purple-600 to-pink-600"
+              onClick={() => rebirthDialog && handleRebirth(rebirthDialog)}
+              disabled={isRebirthing || (account?.gold || 0) < 500000000}
+            >
+              <ArrowLeftRight className="w-4 h-4 mr-1" />
+              {isRebirthing ? "Rebirthing..." : "Confirm Rebirth"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!personalityDialog} onOpenChange={() => setPersonalityDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-serif">Set Personality for {personalityDialog?.name}</DialogTitle>
+            <DialogDescription>
+              Choose a personality that defines how your pet behaves and interacts.
+            </DialogDescription>
+          </DialogHeader>
+          {personalityDialog && (
+            <div className="grid grid-cols-2 gap-2 py-4">
+              {["loyal", "playful", "fierce", "calm", "mysterious"].map(personality => (
+                <Button
+                  key={personality}
+                  variant={(personalityDialog as any).personality === personality ? "default" : "outline"}
+                  className="capitalize"
+                  onClick={() => handleSetPersonality(personalityDialog, personality)}
+                >
+                  {personality}
+                </Button>
+              ))}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPersonalityDialog(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

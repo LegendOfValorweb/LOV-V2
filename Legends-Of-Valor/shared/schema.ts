@@ -263,6 +263,9 @@ export const petTierConfig = {
   mythic: { maxExp: null, evolutionCost: null, statMultiplier: 32 },
 } as const;
 
+export const petPersonalities = ["loyal", "playful", "fierce", "calm", "mysterious"] as const;
+export type PetPersonality = typeof petPersonalities[number];
+
 export const pets = pgTable("pets", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   accountId: varchar("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
@@ -272,6 +275,9 @@ export const pets = pgTable("pets", {
   tier: text("tier").notNull().$type<PetTier>().default("egg"),
   exp: integer("exp").notNull().default(0),
   stats: jsonb("stats").notNull().default({ Str: 1, Spd: 1, Luck: 1, ElementalPower: 1 }).$type<PetStats>(),
+  bondLevel: integer("bond_level").notNull().default(0),
+  rebirthCount: integer("rebirth_count").notNull().default(0),
+  personality: text("personality").$type<PetPersonality>().default("loyal"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

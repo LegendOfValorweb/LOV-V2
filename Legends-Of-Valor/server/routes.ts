@@ -2166,6 +2166,191 @@ export async function registerRoutes(
     }
   });
 
+  // Pet Rebirth - Convert mythic pet back to egg with bonus stats
+  app.post("/api/pets/:id/rebirth", async (req, res) => {
+    try {
+      const { accountId } = req.body;
+      
+      const session = activeSessions.get(accountId);
+      if (!session) {
+        return res.status(401).json({ error: "Active session required" });
+      }
+      
+      const pet = await storage.getPet(req.params.id);
+      if (!pet) {
+        return res.status(404).json({ error: "Pet not found" });
+      }
+      
+      if (pet.accountId !== accountId) {
+        return res.status(403).json({ error: "This is not your pet" });
+      }
+      
+      if (pet.tier !== "mythic") {
+        return res.status(400).json({ error: "Only mythic pets can be reborn" });
+      }
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const REBIRTH_COST = 500000000; // 500 million gold
+      if (account.gold < REBIRTH_COST) {
+        return res.status(400).json({ error: `Need ${REBIRTH_COST.toLocaleString()} gold for rebirth` });
+      }
+      
+      // Rebirth bonuses: Each rebirth adds +10% to base stats
+      const rebirthCount = (pet.rebirthCount || 0) + 1;
+      const rebirthMultiplier = 1 + (rebirthCount * 0.1); // 1.1, 1.2, 1.3, etc.
+      
+      // Keep elements from mythic stage
+      const elements = pet.elements || [pet.element];
+      const primaryElement = pet.element;
+      
+      // New egg stats are boosted based on rebirth count
+      const newStats = {
+        Str: Math.floor(5 * rebirthMultiplier),
+        Spd: Math.floor(5 * rebirthMultiplier),
+        Luck: Math.floor(5 * rebirthMultiplier),
+        ElementalPower: Math.floor(10 * rebirthMultiplier),
+      };
+      
+      // Update pet to egg tier with boosted stats, preserving elements and personality
+      await storage.updatePet(pet.id, {
+        tier: "egg",
+        exp: 0,
+        stats: newStats,
+        rebirthCount,
+        bondLevel: (pet.bondLevel || 0) + 5, // Rebirth increases bond
+        elements: elements, // Preserve all elements
+        element: primaryElement, // Preserve primary element
+      });
+      
+      await storage.updateAccount(accountId, { gold: account.gold - REBIRTH_COST });
+      
+      const updatedPet = await storage.getPet(pet.id);
+      
+      res.json({ 
+        pet: updatedPet, 
+        message: `${pet.name} has been reborn! Rebirth count: ${rebirthCount}`,
+        rebirthBonus: `${(rebirthMultiplier * 100 - 100).toFixed(0)}% stat bonus`
+      });
+    } catch (error) {
+      console.error("Failed to rebirth pet:", error);
+      res.status(500).json({ error: "Failed to rebirth pet" });
+    }
+  });
+
+  // Pet Bonding - Increase bond level with your pet
+  app.post("/api/pets/:id/bond", async (req, res) => {
+    try {
+      const { accountId } = req.body;
+      
+      const session = activeSessions.get(accountId);
+      if (!session) {
+        return res.status(401).json({ error: "Active session required" });
+      }
+      
+      const pet = await storage.getPet(req.params.id);
+      if (!pet) {
+        return res.status(404).json({ error: "Pet not found" });
+      }
+      
+      if (pet.accountId !== accountId) {
+        return res.status(403).json({ error: "This is not your pet" });
+      }
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const BOND_COST = 100; // 100 soul gins per bond interaction
+      if (account.soulGins < BOND_COST) {
+        return res.status(400).json({ error: `Need ${BOND_COST} Soul Gins to bond with pet` });
+      }
+      
+      const currentBond = pet.bondLevel || 0;
+      const newBond = currentBond + 1;
+      
+      // Every 10 bond levels, grant a small stat bonus
+      let statBonus = null;
+      if (newBond % 10 === 0) {
+        const currentStats = pet.stats as { Str: number; Spd: number; Luck: number; ElementalPower: number };
+        const bonusStats = {
+          Str: currentStats.Str + 1,
+          Spd: currentStats.Spd + 1,
+          Luck: currentStats.Luck + 1,
+          ElementalPower: currentStats.ElementalPower + 2,
+        };
+        await storage.updatePet(pet.id, { bondLevel: newBond, stats: bonusStats });
+        statBonus = "+1 to all stats, +2 ElementalPower";
+      } else {
+        await storage.updatePet(pet.id, { bondLevel: newBond });
+      }
+      
+      await storage.updateAccount(accountId, { soulGins: account.soulGins - BOND_COST });
+      
+      const updatedPet = await storage.getPet(pet.id);
+      const { petPersonalities } = await import("@shared/schema");
+      
+      // Generate a personality message based on pet's personality
+      const personality = pet.personality || "loyal";
+      const messages: Record<string, string[]> = {
+        loyal: ["Your pet nuzzles against you lovingly.", "Your pet follows your every move with devotion."],
+        playful: ["Your pet bounces around excitedly!", "Your pet wants to play more!"],
+        fierce: ["Your pet growls affectionately.", "Your pet looks at you with fierce loyalty."],
+        calm: ["Your pet rests peacefully beside you.", "Your pet closes its eyes contentedly."],
+        mysterious: ["Your pet gazes at you with knowing eyes.", "Your pet seems to understand something deep."],
+      };
+      
+      const message = messages[personality][Math.floor(Math.random() * messages[personality].length)];
+      
+      res.json({ 
+        pet: updatedPet, 
+        message,
+        bondLevel: newBond,
+        statBonus,
+      });
+    } catch (error) {
+      console.error("Failed to bond with pet:", error);
+      res.status(500).json({ error: "Failed to bond with pet" });
+    }
+  });
+
+  // Set pet personality
+  app.patch("/api/pets/:id/personality", async (req, res) => {
+    try {
+      const { accountId, personality } = req.body;
+      
+      const session = activeSessions.get(accountId);
+      if (!session) {
+        return res.status(401).json({ error: "Active session required" });
+      }
+      
+      const { petPersonalities } = await import("@shared/schema");
+      if (!petPersonalities.includes(personality)) {
+        return res.status(400).json({ error: "Invalid personality" });
+      }
+      
+      const pet = await storage.getPet(req.params.id);
+      if (!pet) {
+        return res.status(404).json({ error: "Pet not found" });
+      }
+      
+      if (pet.accountId !== accountId) {
+        return res.status(403).json({ error: "This is not your pet" });
+      }
+      
+      await storage.updatePet(pet.id, { personality });
+      const updatedPet = await storage.getPet(pet.id);
+      
+      res.json({ pet: updatedPet });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to set personality" });
+    }
+  });
+
   app.patch("/api/pets/:id", async (req, res) => {
     try {
       const { name, tier, exp, stats } = req.body;
