@@ -5,13 +5,9 @@
   "license": "MIT",
   "scripts": {
     "dev": "NODE_ENV=development tsx server/index.ts",
-<<<<<<< HEAD
     "build": "tsx script/build.ts",
     "build:frontend": "vite build",
     "build:backend": "tsx script/build.ts",
-=======
-    "build": "vite build -c vite.config.static.ts",
->>>>>>> 195f7565ea4aabc7d29dd2bcf70a25a12cf775c3
     "start": "NODE_ENV=production node dist/index.cjs",
     "start:backend": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
