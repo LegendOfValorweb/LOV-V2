@@ -1,0 +1,439 @@
+LEGACY OF VALOR – V2 FULL LAUNCH BLUEPRINT
+1. PLAYER PROGRESSION & RANK
+• Character Visibility: Player characters are always visible in the world, combat, PvP, bases, and social areas
+• Customization: Full character customization (body, face, hair, colors, cosmetics, titles)
+• Race Selection: Chosen at game start, permanently affects affinities, bonuses, visuals, and progression paths
+Playable / Core Races
+• Human – Balanced growth, adaptable builds
+• Elf – High elemental/magic affinity, speed bonuses
+• Dwarf – High defense, crafting and mining bonuses
+• Orc – Strength and vitality focused, combat bonuses
+• Beastfolk – Speed, crit, hunting and gathering bonuses
+• Mystic / Nature – Nature magic, regeneration, pet synergy
+• Fae – Luck, trick mechanics, illusion bonuses
+• Elemental – Strong elemental affinity matching chosen element
+• Undead – Curse resistance, death-related bonuses
+• Demon – High risk/high reward power scaling
+• Draconic / Dragonborn – Elemental breath, stat scaling with rank
+• Celestial / Angel – Support, buffs, light affinity
+• Aquatic / Merfolk – Water affinity, fishing and coastal bonuses
+• Ancient / Power Tier
+• Giant – Massive strength and defense scaling
+• Titan – Extreme endgame race, rare unlock conditions
+• Race Impact: Influences stat growth, elemental bonds, available skills, cosmetic options, and base visuals
+2. COMBAT SYSTEM
+• Ranks: 1 (Novice) → 15 (Mythical Legend)
+• Unlocks: Pets, gear, skills, events, quests, resources, crafting, cosmetic access, trading, PvP rewards, Mystic Tower floors
+• Rank Requirements: PVP wins, Mystic Tower progression, campaign/story milestones, power level thresholds
+• Rewards: Resources, exclusive pets/gear, titles, rank-based bonuses
+• Leaderboard Impact: PVP wins/losses affect leaderboards; rank unaffected by death
+• Progression Scaling: Harder each rank; max rank = Mythical Legend (all content unlocked, V3 content reserved for future)
+2. COMBAT SYSTEM
+• Modes: Hybrid (Attack, Defend, Trick, Dodge)
+• Cooldown & Resource Management: Scales with skill/item rarity, rank, power
+• Elemental & Pet Synergy: Dual bonds ×2 damage, elemental counters, pets provide buffs/extra actions/special skills, gear elements stack (up to 5)
+• Hidden / Poker Abilities: One-time use, visible once triggered, influenced by pets/AI/allies, rank/item restricted
+• Team/Guild Combat: One fighter at a time, buffs/debuffs affect team, strategy chat enabled, no shared cooldown/resources
+• Death & Consequences: 
+• PvP: Resource/item drop possible, affects wins/losses leaderboard, respawn at base
+• PvE: Stat penalties/debuffs possible, respawn at base
+3. PETS & AI ASSISTANTS
+• Ownership: Unlimited, 1 active in battle
+• Bonding & Growth: Feeding, playing, fighting increases love → faster growth
+• Combat: PvP and PvE, skill synergy, elemental bonuses
+• Training: Soul Gins for pets (replaces Soul Shards and Focused Shards), Beak Coins for birds, fish can be fed to pets to gain abilities
+• Merge Mechanics: Max evolution stage, stats combine, reset to egg, evolves back, repeatable infinitely
+• AI Personalities: Player-defined personality/voice, evolves based on bond, actions, and story progression
+• Pet Skins: Reflect type; pets assist in all areas when bond is high
+4. BASES / HOMES
+• Layouts & Themes: Fortified castle, expandable, fixed layouts, rooms: crafting, storage, training, resource zones
+• Defenses: Traps, guards, turrets, magical wards, pets, guild-provided defenses
+• Resource Generation: Passive generation, boosts from pets, NPCs, guild level, visitors
+• Crafting/Training: Auto-crafting, auto-level, auto-upgrade added to remove excessive tapping; boosted by pets/NPCs/player rank, time/cooldowns scale with skill/item rarity
+• Storage: Max capacity scales with level and storage rooms, specialized storage for resources/pets/gear/runestones/$Valor, owner-only access, auto-sort and quick access, savings vault
+• Cosmetic/Trophy Display: Skins, cosmetics, and titles visible; limited by rank/level, visible to all visitors, level increases capacity
+• Events & Raids: NPC raids scale with Mystic Tower progression, temporary boss attacks, weekly Hero/Joker events, hidden one-time surprises
+• Visitor Mechanics: Friends/guild-only visits, 80% visibility for safety, visitors can assist in construction
+• Guild Bonuses: Extra defenses, NPC guards, resource boosts, crafting/training speed, cosmetic prestige markers; active only while in guild, scales with guild level
+5. EXPLORATION & ZONES
+• World Structure: Single connected fantasy realm based on the official world map
+• Capital City (Hub): Shops, blacksmith, guild hall, fast travel, safe zone respawn
+Integrated Zones (Map-Based):
+• Mystic Tower (Arcane Tower): Solo-only progression, 100 floors × 100 levels, rank-gated
+• Mountain Caverns: Dungeons & bosses, gear and rune farming
+• Ancient Ruins: Treasure dungeons, relics, rare items
+• Research Lab: Tech & magic research, skill upgrades, experimentation
+• Pet Training Grounds: Pet leveling, bonding, evolution
+• Ruby Mines: Ruby and resource extraction, contested nodes
+• Enchanted Forest: Exploration, random encounters, events
+• Battle Arena: Structured PvP modes and rankings
+• Crystal Lake: Mystical encounters, water-based resources
+• Coastal Village: Fishing, quests, aquatic content
+• Hell Zone (Battle Royale): Deadly survival PvP/PvE hybrid, high risk/high reward
+• Fast Travel Gates: Unlockable by rank and progression
+• Zone Rules: PvP enabled/disabled depending on zone, risk/reward scaling
+• Dynamic Events: Random and admin-triggered events tied to specific zones
+• Player Encounters: Possible when players occupy same zone
+• World Structure: Zone-based; random and scripted events
+• Mounts: Cosmetic only
+• Hunting/Gathering: Death/collection/capture possible; efficiency scales with strength/level; pets/skills improve speed
+• Resource Contesting: Multiple players on same node → highest damage gets resources; others safe
+• Player Encounters: Possible PvP outside arena, high-risk
+6. ECONOMY & TRADING
+• Player Trading: Direct, mutual agreement, all items/pets tradable
+• Auction House: Admin-queued items, 8-hour bidding, highest bidder wins
+• Shops & Guild Shops: Fixed amounts; guild-exclusive items available
+• Real-World Currency ($Valor): Fully integrated, used to buy in-game packs, cannot bypass progression
+• Anti-Cheat System: Fully coded and implemented to prevent exploits
+• Anti-Exploit Rules: Cannot use items, skills, or actions beyond unlocked abilities or rank/level
+7. ACHIEVEMENTS & COLLECTIONS
+• Coverage: First-time actions, random/scaled challenges
+• Scaling: Rank/difficulty-based, max 100,000 achievements
+• Rewards: Resources, items, pets, cosmetics, buffs, story content unlocks
+8. HIDDEN MECHANICS & EVENTS
+• One-Time Surprises: Traps, buffs/curses, rare items/skills, special NPC encounters, scaling with rank/skill/timing
+• Weekly Hero & Joker: 
+• Hero: Find Joker → reward
+• Joker: Sabotage without detection → reward
+• Random Hidden Mechanics: Encourage exploration, observation, strategy, and social gameplay
+9. UI & QUALITY-OF-LIFE FEATURES
+• Auto-Loot / Auto-Gather: Efficient collection of drops/resources
+• Hotkeys / Quick Menus: Fast access to actions, skills, and items
+• World Map / Zone Selection: Select zones, see events, PvP areas, and resource nodes
+• Notifications & Alerts: For events, PvP challenges, skill/pet/crafting cooldowns, rare spawns, and story triggers
+10. ENDGAME & MAX RANK
+• Max Rank: Mythical Legend
+• Requirements: Complete all levels, V2 story, Mystic Tower top floors, all milestones
+• Rewards: Quintillion+ power, top-tier pets with mythical lores, best gear/cosmetics, unlock V3 content, prestige/leaderboard recognition
+11. NOTES ON FUTURE EXPANSIONS (V3)
+• New Mystic Towers, endgame content, rare mechanics, events, and story progression reserved for V3 update
+• Allows continuous progression and engagement beyond V2
+✅ Outcome: V2 is fully-featured, balanced, strategic, and development-ready, including all systems from V1 plus comprehensive expansions across combat, pets, bases, economy, exploration, hidden mechanics, QoL features, skins/cosmetics visibility, $Valor packs, auto-level/upgrade, and anti-cheat enforcement.
+V2 COMBAT RESOLUTION – TURN‑BY‑TURN LOGIC (DEV‑READY)
+This defines exactly how a battle is resolved, from matchmaking → hidden mechanics → damage math → victory. Designed for PvE, PvP, Guild fights, Pet PvP, and Hell Zone.
+1. COMBAT INITIALIZATION
+1.1 Battle Types
+• PvE: Player vs NPC / Boss
+• PvP: 1v1, Duo, Team/Guild (1 fighter at a time)
+• Pet PvP: Up to 3 pets per side, turn‑based raid‑style
+• Hell Zone: Mixed PvP/PvE, high‑risk
+1.2 Pre‑Battle Phase (Poker Phase)
+Executed before Turn 1.
+Each participant may have:
+• 0–N Hidden Mechanics (secret skills, traps, curses, blessings)
+• 1 One‑Time Surprise (if equipped)
+Rules:
+• Hidden effects are not visible until triggered
+• Once triggered → fully revealed
+• Cannot be changed mid‑battle
+Examples:
+• One‑time revive at 0 HP
+• Forced dodge on first lethal hit
+• Damage reflection on first attack
+2. TURN ORDER CALCULATION
+2.1 Initiative Formula
+Initiative = SPD × (1 + RankModifier) × Random(0.9 – 1.1) 
+• Highest initiative acts first
+• Re‑calculated only if a speed‑altering effect occurs
+2.2 Guild / Team Battles
+• Only 1 active fighter per team
+• When a fighter dies: 
+• Next member enters immediately
+• Winner keeps current HP, cooldowns, buffs
+3. PLAYER TURN STRUCTURE
+Each turn follows this strict order:
+STEP 1 – Start‑of‑Turn Triggers
+• Damage over time
+• Regeneration
+• Curse countdowns
+• Pet assist procs
+STEP 2 – Action Selection
+Player chooses one:
+A. ATTACK
+• Basic attack OR
+• Skill OR
+• Item use
+B. DEFEND
+• Shield block
+• Pet guard
+• Brace (reduced damage)
+C. TRICK (Poker / Mind Game)
+• Chance‑based
+• Influenced by INT + LCK
+• Examples: 
+• Fake attack
+• Steal buff
+• Force cooldown
+D. DODGE
+• SPD‑based
+• Success chance scales with rank
+4. HIT & EVADE CHECKS
+4.1 Dodge Check
+DodgeChance = (SPD / (EnemySPD + SPD)) × RankScaler 
+If successful → attack misses entirely
+4.2 Trick Resolution
+TrickSuccess = (INT + LCK) vs (EnemyINT + EnemyLCK) 
+Success → effect applied Failure → wasted action
+5. DAMAGE CALCULATION (QUINTILLION SAFE)
+5.1 Base Damage
+BaseDamage = (STR or SkillPower) × SkillMultiplier 
+5.2 Defense Reduction
+ReducedDamage = BaseDamage × (BaseDamage / (BaseDamage + DEF)) 
+5.3 Elemental Resolution
+Apply in order:
+• Dual Bond (player + pet + gear + weapon same element)
+• ×2 damage
+• Full Element Stack (5 same elements)
+• ×5 damage
+• Element Counter
+• Damage reduced or negated
+• Pet Death Rule
+• If pet dies → bond bonuses disabled
+5.4 Critical / Luck Roll
+CritChance = LCK × RankModifier CritDamage = ×1.5 – ×3 (rarity‑based) 
+6. PET ASSIST SYSTEM
+Pets may trigger once per turn:
+Possible actions:
+• Extra hit
+• Buff ally
+• Heal
+• Shield
+• Trigger hidden skill
+Chance scales with:
+• Pet level
+• Bond level
+• Rank
+7. COOLDOWNS & RESOURCES
+7.1 Cooldown Scaling
+• Low rarity / high power → long cooldown
+• High rarity / high rank → low or zero cooldown
+7.2 No Shared Cooldowns
+• Each fighter tracks cooldowns independently
+8. DEATH & REVIVAL LOGIC
+8.1 On Death (HP ≤ 0)
+Check in order:
+• One‑time revive effect
+• Pet sacrifice revive
+• Guild assist (if applicable)
+If none → death confirmed
+8.2 Death Outcomes
+PvP
+• Item/resource drop possible
+• Win/loss recorded
+• Respawn at base or Capital City
+PvE
+• Stat penalty / curse possible
+• No leaderboard impact
+9. VICTORY CONDITIONS
+Battle ends when:
+• All enemy fighters defeated
+• All enemy pets defeated (Pet PvP)
+Rewards distributed immediately:
+• Resources
+• Rank points
+• Leaderboard updates
+• Hidden achievement checks
+10. ANTI‑EXPLOIT ENFORCEMENT
+• Skill/rank usage validated every turn
+• No stat injection beyond caps
+• Hidden mechanics server‑verified
+11. WHY THIS SYSTEM WORKS
+✔ Skill > raw stats ✔ Poker‑style mind games ✔ No button mashing (auto systems supported) ✔ Fair PvP despite quintillion scaling ✔ Endless depth for V3 expansion
+This combat logic is ready to be coded directly into backend + frontend.
+V2 STAT & DAMAGE SCALING CURVES (QUINTILLION-SAFE)
+This defines how stats grow, how damage scales, and how the game remains fair from Rank 1 → Mythical Legend.
+All formulas are designed to:
+• Avoid stat overflow
+• Prevent one-shot dominance
+• Keep strategy relevant at all tiers
+1. CORE STAT LIST
+Player & Pet Stats:
+• STR (Strength)
+• DEF (Defense)
+• INT (Intelligence)
+• VIT (HP pool)
+• SPD (Speed)
+• LCK (Luck)
+Elemental Power handled separately.
+2. RANK POWER TIERS
+Rank TierRank RangePower BandBeginner1–31 – 10,000Intermediate4–610K – 10MAdvanced7–910M – 10BMastery10–1210B – 10TLegendary13–1510T – 9 Quintillion 
+Power = aggregate stat + gear + pet contribution.
+3. BASE STAT GROWTH FORMULA
+BaseStat = (Rank^2.2) × RaceModifier × TrainingModifier 
+RaceModifier: 0.9 – 1.2 TrainingModifier: 1.0 – 5.0
+This creates accelerating but controlled growth.
+4. HP (VIT) SCALING
+HP = VIT × 12 × RankScaler RankScaler = 1 + (Rank / 10) 
+Prevents instant kills while allowing burst windows.
+5. DAMAGE SCALING (ANTI-ONE-SHOT)
+Damage is logarithmic at high values.
+EffectiveDamage = RawDamage × ( RawDamage / (RawDamage + TargetHP × 0.15) ) 
+Results:
+• Low power fights feel punchy
+• High power fights require multiple turns
+6. DEFENSE DIMINISHING RETURNS
+DamageAfterDEF = Incoming × ( Incoming / (Incoming + DEF × 1.25) ) 
+DEF never reaches immunity.
+7. SPEED & TURN CONTROL
+SPD advantage caps at ±35% initiative swing.
+InitiativeBonus = min( (SPDdiff / EnemySPD), 0.35 ) 
+No infinite speed builds.
+8. LUCK SCALING (POKER SYSTEM)
+Luck influences:
+• Critical chance
+• Trick success
+• Hidden mechanic discovery
+LuckEffect = log10(LCK + 10) 
+High LCK helps — never guarantees.
+9. ELEMENTAL POWER SCALING
+Element damage uses multipliers, not raw stats.
+ConditionMultiplierDual Bond×2Full 5-stack×5Countered×0.5 – 0Immunity0 
+Keeps element strategy dominant without stat bloat.
+10. PET SCALING
+Pets scale slightly behind players to prevent dominance.
+PetStat = PlayerStat × (0.6 – 0.9 based on bond & rarity) 
+Merged pets increase ceiling, not speed.
+11. SKILL POWER SCALING
+SkillPower = Base × RarityMultiplier × RankFactor RarityMultiplierCommon1.0Rare1.4Epic2.0Legendary3.0Mythic5.0 
+RankFactor = 1 + (Rank / 8)
+12. COOLDOWN SCALING
+Cooldown = BaseCD / ( RankFactor × SkillMastery ) 
+At max rank + mastery → zero cooldown possible.
+13. WHY THIS SCALING HOLDS
+✔ Quintillion-safe ✔ PvP viable at all ranks ✔ No stat walls ✔ Rewards preparation, not grinding ✔ Perfect base for V3 inflation
+This document finalizes V2’s mathematical backbone.
+Enemy Tier Scaling (Zone-Based)
+This section defines how enemies scale by world zone, not by player level alone. Zones create predictable difficulty bands so players feel progression when moving across the map.
+Core Rule
+Enemy Power = Base Tier Stats × Zone Multiplier × Enemy Archetype Modifier
+This prevents rubber-banding and keeps early zones relevant but farmable.
+Zone Tiers
+Tier 1 – Starter Zones (Capital Outskirts, Early Forests)
+• HP: x1.0–1.3
+• Damage: x1.0–1.2
+• AI Complexity: Basic
+• Mechanics: Auto-attacks, slow abilities
+• Purpose: Learning, confidence building
+Tier 2 – Mid Zones (Enchanted Forest, Coastal Village)
+• HP: x1.5–2.0
+• Damage: x1.3–1.7
+• AI Complexity: Reactive
+• Mechanics: Dodges, simple combos, status effects
+• Purpose: Gear checks, elemental understanding
+Tier 3 – Advanced Zones (Mountain Caverns, Ancient Ruins)
+• HP: x2.3–3.0
+• Damage: x1.8–2.4
+• AI Complexity: Tactical
+• Mechanics: Shields, phases, interrupts
+• Purpose: Build optimization, pet synergy
+Tier 4 – Endgame Zones (Mystic Tower, Research Lab)
+• HP: x3.5–5.0
+• Damage: x2.5–3.5
+• AI Complexity: Adaptive
+• Mechanics: Counters, debuffs, environment hazards
+• Purpose: Skill expression, late-game mastery
+Tier 5 – Hell Zone (No Mercy Area)
+• HP: x6.0–10.0+
+• Damage: x4.0–6.0+
+• AI Complexity: Punishing
+• Mechanics: One-shot threats, permadeath loops (respawn-tax), anti-heal
+• Purpose: Prestige, leaderboards, mythic drops
+Enemy Archetype Modifiers
+• Minion: HP x0.6 | Damage x0.7 | Fast spawn
+• Elite: HP x1.8 | Damage x1.6 | Special mechanics
+• Champion: HP x3.0 | Damage x2.2 | Phase-based fights
+• Boss: HP x8.0+ | Damage x3.5+ | Arena mechanics
+Archetypes stack after zone scaling.
+Anti-Overlevel Protection
+If Player Power exceeds Zone Power by >40%:
+• Enemy HP +20%
+• Enemy Damage +10%
+• Drop quality reduced slightly
+This preserves farming without letting zones become meaningless.
+Why This Works
+• Zones feel distinct and memorable
+• Auto-level & auto-combat stay fair
+• PvE difficulty stays stable even with power creep
+• PvP remains unaffected (separate scaling layer)
+This system locks in fair challenge, clear progression, and long-term balance.
+
+Legend Of Valor — AI Story Guide Blueprint
+1. Purpose
+The AI interface serves as:
+• Tutorial guide for new players
+• Storyline manager to keep players within main lore
+• Companion and friend
+• Compliance enforcer to prevent exploits or story-breaking behavior
+2. Core Functionalities
+2.1 Tutorial System
+• Step-by-step onboarding per player rank
+• Voice + text options
+• Adaptive difficulty and explanation based on player skill and engagement
+• Optional hand-holding that reduces as rank increases
+2.2 Storyline Management
+• Tracks current quest, campaign, and event progress
+• Controls narrative branching and prevents skipping content prematurely
+• Provides context-aware hints without revealing secrets unless triggered
+• Offers lore explanations for zones, enemies, and items
+• Integrates Main Storyline Lore: 
+• 🌌 Legends of Valor — Main Storyline 
+• Aether Core, Valor Shards, The Void Covenant
+• 🗺️ ACT I – The Awakening: Capital City intro, initial shards, first adventures, shadow figure monitoring player
+• 🔥 ACT II – The Fractured Realms: regional tragedies, rising Void Covenant threat, guild wars, lore-driven PvP
+• 🌑 ACT III – The Hell Zone: final shard, Eclipse Sovereign, collapsing regions, mythic/tempered pet evolutions, large-scale PvP and dungeon warfare
+• 🌟 ACT IV – The Convergence War: living event, shard collection, guild convergence battles, Mystic Tower unlocking, player choices impacting world outcome
+2.3 Companion Behavior
+• Customizable personality and voice (friendly, pervy, sarcastic, serious)
+• Can give advice, warnings, or playful commentary
+• Reacts dynamically to player's performance, choices, and in-game events
+2.4 Rule Enforcement / Anti-Cheat
+• Prevents players from performing actions not unlocked or beyond power threshold
+• Monitors quest completion sequences to prevent skipping or breaking story
+• Integrates with combat, PvP, and auto systems to ensure fair play
+• Locks story progression if players attempt to bypass main lore arcs
+2.5 Interactive Abilities
+• Optional hints for hidden mechanics (poker-style triggers, secret skills)
+• Can simulate NPC or enemy behavior for practice in tutorial mode
+• Tracks player choices to dynamically adjust story path or dialogue
+• Records events for replay or review by player
+2.6 Customization & Scaling
+• Player defines AI personality and engagement level
+• Behavior scales with player rank and story progression
+• AI interactions can reward or penalize certain behaviors (e.g., overusing hints reduces XP gain slightly)
+2.7 Integration Points
+• Linked to quest system, zone maps, event scaling, and combat mechanics
+• Updates dynamically based on player pet bonds, gear, and stats
+• Interfaces with world map to highlight lore locations or story triggers
+3. Story & Lore Structure
+• Main Storyline: As detailed above
+• Side Lore: Optional stories for pets, events, and hidden locations
+• Branch Management: Branching stories controlled to prevent premature content access
+• Replay Logic: Previous story arcs can be revisited, but cannot yield rank-altering rewards again
+4. AI Command Rules
+• Must not allow players to bypass story checkpoints.
+• Must dynamically scale tutorial assistance based on player performance.
+• Must provide clear hints without revealing full solutions unless part of secret trigger mechanics.
+• Must interact differently based on player-selected personality and voice.
+• Must integrate with in-game notifications, world map, events, and combat systems.
+5. Anti-Exploit Safeguards
+• Entry snapshot for scaling hints and rewards
+• Validation against race, rank, skill, and unlocked areas
+• Logs all AI interactions to server for review
+• Prevents granting skill/item/quest rewards prematurely
+• Prevents skipping any Main Storyline act until previous act completed
+6. Output & Logging
+• Records tutorial completion
+• Logs story interactions and choices
+• Tracks hints provided and consumed
+• Integrates into player progression stats for rank calculation
+7. Next Steps
+• Define AI personalities with behavior tree nodes
+• Link AI decision logic to combat, event, and quest systems
+• Implement UI/UX prompts for AI interaction
+• Assign lore chapters and triggers for all major zones
+
+Static portrait for player avaters
+Give admin access to all player accounts and features of the game
+Server size max 32
+2 players per race, so if 2 players select a race, no one else can get that race
+Check for bugs
