@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Heart, Package, ShoppingBag, LogOut, Swords, Calendar, 
-  Sparkles, Zap, Clover, Flame, ArrowUp, Plus, Minus, Target, ScrollText, Trophy, Coins, GitMerge, ArrowLeftRight
+  Sparkles, Zap, Clover, Flame, ArrowUp, Plus, Minus, Target, ScrollText, Trophy, Coins, GitMerge, ArrowLeftRight, Palette
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
@@ -85,6 +85,8 @@ export default function Pets() {
   const [rebirthDialog, setRebirthDialog] = useState<Pet | null>(null);
   const [isRebirthing, setIsRebirthing] = useState(false);
   const [personalityDialog, setPersonalityDialog] = useState<Pet | null>(null);
+  const [skinDialog, setSkinDialog] = useState<Pet | null>(null);
+  const [isSettingSkin, setIsSettingSkin] = useState(false);
 
   const { data: playerPets = [], isLoading: petsLoading, refetch: refetchPets } = useQuery<Pet[]>({
     queryKey: ["/api/accounts", account?.id, "pets"],
@@ -94,6 +96,20 @@ export default function Pets() {
       return res.json();
     },
     enabled: !!account?.id,
+  });
+
+  interface PetSkin {
+    id: string;
+    name: string;
+    cost: number;
+  }
+
+  const { data: petSkins = [] } = useQuery<PetSkin[]>({
+    queryKey: ["/api/pet-skins"],
+    queryFn: async () => {
+      const res = await fetch("/api/pet-skins");
+      return res.json();
+    },
   });
 
   const petsByTier = useMemo(() => {
@@ -424,6 +440,35 @@ export default function Pets() {
     }
   };
 
+  const handleSetSkin = async (pet: Pet, skin: string) => {
+    if (!account) return;
+    setIsSettingSkin(true);
+    try {
+      const res = await apiRequest("PATCH", `/api/pets/${pet.id}/skin`, { 
+        accountId: account.id, 
+        skin 
+      });
+      const data = await res.json();
+      
+      await refetchPets();
+      await refetchAccount();
+      
+      toast({
+        title: "Skin Applied!",
+        description: data.message,
+      });
+      setSkinDialog(null);
+    } catch (error: any) {
+      toast({
+        title: "Failed",
+        description: error.message || "Could not set skin.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSettingSkin(false);
+    }
+  };
+
   if (!account || account.role !== "player") {
     navigate("/");
     return null;
@@ -535,8 +580,17 @@ export default function Pets() {
               size="sm"
               variant="ghost"
               onClick={() => setPersonalityDialog(pet)}
+              title="Personality"
             >
               <Sparkles className="w-3 h-3" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setSkinDialog(pet)}
+              title="Change Skin"
+            >
+              <Palette className="w-3 h-3" />
             </Button>
             {tier === "mythic" && (
               <Button
@@ -1055,6 +1109,58 @@ export default function Pets() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setPersonalityDialog(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!skinDialog} onOpenChange={() => setSkinDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-serif flex items-center gap-2">
+              <Palette className="w-5 h-5" />
+              Skins for {skinDialog?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Choose a cosmetic skin for your pet. Some skins cost gold to apply.
+            </DialogDescription>
+          </DialogHeader>
+          {skinDialog && (
+            <div className="space-y-4 py-4">
+              <div className="flex items-center justify-between p-3 rounded-md bg-yellow-500/10 border border-yellow-500/20">
+                <span className="text-sm font-medium flex items-center gap-2">
+                  <Coins className="w-4 h-4 text-yellow-500" />
+                  Your Gold
+                </span>
+                <span className="font-mono font-bold text-yellow-500">{(account?.gold || 0).toLocaleString()}</span>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Current Skin: <span className="capitalize font-medium">{(skinDialog as any).skin || "default"}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {petSkins.map(skin => {
+                  const isCurrentSkin = (skinDialog as any).skin === skin.id || (!((skinDialog as any).skin) && skin.id === "default");
+                  const canAfford = skin.cost === 0 || (account?.gold || 0) >= skin.cost || isCurrentSkin;
+                  return (
+                    <Button
+                      key={skin.id}
+                      variant={isCurrentSkin ? "default" : "outline"}
+                      className="flex flex-col items-center py-3 h-auto"
+                      disabled={isSettingSkin || (!canAfford && !isCurrentSkin)}
+                      onClick={() => handleSetSkin(skinDialog, skin.id)}
+                    >
+                      <span className="font-medium">{skin.name}</span>
+                      {skin.cost > 0 && !isCurrentSkin && (
+                        <span className="text-xs text-yellow-500">{skin.cost.toLocaleString()} gold</span>
+                      )}
+                      {isCurrentSkin && <span className="text-xs text-green-400">Equipped</span>}
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSkinDialog(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -2351,6 +2351,62 @@ export async function registerRoutes(
     }
   });
 
+  // Pet skins
+  const PET_SKINS = [
+    { id: "default", name: "Default", cost: 0 },
+    { id: "golden", name: "Golden Aura", cost: 10000 },
+    { id: "shadow", name: "Shadow Shroud", cost: 25000 },
+    { id: "crystalline", name: "Crystalline", cost: 50000 },
+    { id: "flame", name: "Flame Essence", cost: 75000 },
+    { id: "mythic", name: "Mythic Radiance", cost: 150000 },
+  ];
+
+  app.get("/api/pet-skins", (_req, res) => {
+    res.json(PET_SKINS);
+  });
+
+  app.patch("/api/pets/:id/skin", async (req, res) => {
+    try {
+      const { accountId, skin } = req.body;
+      
+      const session = activeSessions.get(accountId);
+      if (!session) {
+        return res.status(401).json({ error: "Active session required" });
+      }
+      
+      const skinData = PET_SKINS.find(s => s.id === skin);
+      if (!skinData) {
+        return res.status(400).json({ error: "Invalid skin" });
+      }
+      
+      const pet = await storage.getPet(req.params.id);
+      if (!pet) {
+        return res.status(404).json({ error: "Pet not found" });
+      }
+      
+      if (pet.accountId !== accountId) {
+        return res.status(403).json({ error: "This is not your pet" });
+      }
+
+      // Check if player already has this skin (free switch) or needs to buy
+      const currentSkin = (pet as any).skin || "default";
+      if (currentSkin !== skin && skinData.cost > 0) {
+        const account = await storage.getAccount(accountId);
+        if (!account || account.gold < skinData.cost) {
+          return res.status(400).json({ error: `Need ${skinData.cost.toLocaleString()} gold for this skin` });
+        }
+        await storage.updateAccount(accountId, { gold: account.gold - skinData.cost });
+      }
+      
+      await storage.updatePet(pet.id, { skin });
+      const updatedPet = await storage.getPet(pet.id);
+      
+      res.json({ pet: updatedPet, message: `Skin changed to ${skinData.name}!` });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to set skin" });
+    }
+  });
+
   app.patch("/api/pets/:id", async (req, res) => {
     try {
       const { name, tier, exp, stats } = req.body;
@@ -6163,6 +6219,64 @@ export async function registerRoutes(
   
   app.get("/api/bird-food", (_req, res) => {
     res.json(BIRD_FOOD);
+  });
+
+  // Bird skins
+  const BIRD_SKINS = [
+    { id: "default", name: "Default", cost: 0 },
+    { id: "arctic", name: "Arctic Plumage", cost: 5000 },
+    { id: "tropical", name: "Tropical Feathers", cost: 15000 },
+    { id: "storm", name: "Storm Wings", cost: 35000 },
+    { id: "phoenix", name: "Phoenix Flames", cost: 100000 },
+    { id: "celestial", name: "Celestial Glow", cost: 200000 },
+  ];
+
+  app.get("/api/bird-skins", (_req, res) => {
+    res.json(BIRD_SKINS);
+  });
+
+  app.patch("/api/birds/:birdId/skin", async (req, res) => {
+    try {
+      const { accountId, skin } = req.body;
+      
+      const session = activeSessions.get(accountId);
+      if (!session) {
+        return res.status(401).json({ error: "Active session required" });
+      }
+      
+      const skinData = BIRD_SKINS.find(s => s.id === skin);
+      if (!skinData) {
+        return res.status(400).json({ error: "Invalid skin" });
+      }
+      
+      const { birds } = await import("@shared/schema");
+      const [bird] = await db.select().from(birds).where(eq(birds.id, req.params.birdId));
+      if (!bird) {
+        return res.status(404).json({ error: "Bird not found" });
+      }
+      
+      if (bird.accountId !== accountId) {
+        return res.status(403).json({ error: "This is not your bird" });
+      }
+
+      // Check if player already has this skin (free switch) or needs to buy
+      const currentSkin = (bird as any).skin || "default";
+      if (currentSkin !== skin && skinData.cost > 0) {
+        const account = await storage.getAccount(accountId);
+        if (!account || account.gold < skinData.cost) {
+          return res.status(400).json({ error: `Need ${skinData.cost.toLocaleString()} gold for this skin` });
+        }
+        await storage.updateAccount(accountId, { gold: account.gold - skinData.cost });
+      }
+      
+      await db.update(birds).set({ skin }).where(eq(birds.id, bird.id));
+      const [updatedBird] = await db.select().from(birds).where(eq(birds.id, bird.id));
+      
+      res.json({ bird: updatedBird, message: `Skin changed to ${skinData.name}!` });
+    } catch (error) {
+      console.error("Bird skin error:", error);
+      res.status(500).json({ error: "Failed to set skin" });
+    }
   });
   
   app.post("/api/birds/:birdId/feed", async (req, res) => {

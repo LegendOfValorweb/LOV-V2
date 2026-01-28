@@ -278,6 +278,7 @@ export const pets = pgTable("pets", {
   bondLevel: integer("bond_level").notNull().default(0),
   rebirthCount: integer("rebirth_count").notNull().default(0),
   personality: text("personality").$type<PetPersonality>().default("loyal"),
+  skin: text("skin").default("default"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -308,6 +309,7 @@ export const birds = pgTable("birds", {
   name: text("name").notNull(),
   tier: text("tier").notNull().$type<BirdTier>().default("hatchling"),
   stats: jsonb("stats").notNull().default({ Def: 1, Spd: 1 }).$type<BirdStats>(),
+  skin: text("skin").default("default"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
