@@ -171,10 +171,16 @@ export default function Birds() {
               Bird Aviary
             </h1>
           </div>
-          <Badge variant="outline" className="text-purple-400 border-purple-500/50">
-            <Coins className="w-3 h-3 mr-1" />
-            {account.focusedShards?.toLocaleString() || 0} Focus Shards
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-sky-400 border-sky-500/50">
+              <Bird className="w-3 h-3 mr-1" />
+              {account.beakCoins?.toLocaleString() || 0} Beak Coins
+            </Badge>
+            <Badge variant="outline" className="text-purple-400 border-purple-500/50">
+              <Coins className="w-3 h-3 mr-1" />
+              {account.focusedShards?.toLocaleString() || 0} Focus Shards
+            </Badge>
+          </div>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-6">
@@ -311,18 +317,21 @@ export default function Birds() {
                 Feed {feedingBird?.name}
               </DialogTitle>
               <DialogDescription>
-                Buy food with gold to boost your bird's stats.
+                Buy food with Beak Coins to boost your bird's stats.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 rounded-md bg-yellow-500/10 border border-yellow-500/20">
-                <span className="text-sm font-medium">Your Gold</span>
-                <span className="font-mono font-bold text-yellow-500">{(account?.gold || 0).toLocaleString()}</span>
+              <div className="flex items-center justify-between p-3 rounded-md bg-sky-500/10 border border-sky-500/20">
+                <span className="text-sm font-medium flex items-center gap-2">
+                  <Bird className="w-4 h-4 text-sky-400" />
+                  Beak Coins
+                </span>
+                <span className="font-mono font-bold text-sky-400">{(account?.beakCoins || 0).toLocaleString()}</span>
               </div>
 
               <div className="space-y-2">
                 {birdFood.map((food) => {
-                  const canAfford = (account?.gold || 0) >= food.price;
+                  const canAfford = (account?.beakCoins || 0) >= food.price;
                   return (
                     <div
                       key={food.id}
@@ -343,8 +352,8 @@ export default function Birds() {
                             {food.spdBoost > 0 && <span className="text-green-400">+{food.spdBoost} SPD</span>}
                           </div>
                         </div>
-                        <Badge variant="outline" className="text-yellow-500">
-                          <Coins className="w-3 h-3 mr-1" />
+                        <Badge variant="outline" className="text-sky-400">
+                          <Bird className="w-3 h-3 mr-1" />
                           {food.price.toLocaleString()}
                         </Badge>
                       </div>
@@ -365,7 +374,7 @@ export default function Birds() {
                 disabled={feedMutation.isPending || !selectedFood}
               >
                 {feedMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                {selectedFood ? `Feed (${selectedFood.price.toLocaleString()} Gold)` : "Select Food"}
+                {selectedFood ? `Feed (${selectedFood.price.toLocaleString()} Beak Coins)` : "Select Food"}
               </Button>
             </DialogFooter>
           </DialogContent>

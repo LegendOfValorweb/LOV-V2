@@ -6183,8 +6183,8 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Food not found" });
       }
       
-      if (account.gold < food.price) {
-        return res.status(400).json({ error: `Need ${food.price} gold (have ${account.gold})` });
+      if (account.beakCoins < food.price) {
+        return res.status(400).json({ error: `Need ${food.price} Beak Coins (have ${account.beakCoins})` });
       }
       
       // Get the bird
@@ -6204,11 +6204,11 @@ export async function registerRoutes(
         Spd: currentStats.Spd + food.spdBoost,
       };
       
-      // Use transaction-like approach: update bird stats first, then gold
-      // If bird update fails, gold is not deducted
+      // Use transaction-like approach: update bird stats first, then beakCoins
+      // If bird update fails, beakCoins is not deducted
       try {
         await db.update(birds).set({ stats: newStats }).where(eq(birds.id, bird.id));
-        await storage.updateAccount(accountId, { gold: account.gold - food.price });
+        await storage.updateAccount(accountId, { beakCoins: account.beakCoins - food.price });
       } catch (updateError) {
         console.error("Bird feeding update error:", updateError);
         return res.status(500).json({ error: "Failed to update bird stats" });
