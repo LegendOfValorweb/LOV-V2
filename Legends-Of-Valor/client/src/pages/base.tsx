@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,9 +8,19 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Castle, Hammer, Package, Dumbbell, Shield, Sparkles,
-  Coins, ArrowUp, Lock, Home
+  Coins, ArrowUp, Lock, Home, Palette, Trophy
 } from "lucide-react";
 import { useGame } from "@/lib/game-context";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface BaseRoom {
   id: string;
@@ -131,10 +142,26 @@ const baseRooms: BaseRoom[] = [
   },
 ];
 
+interface BaseSkin {
+  id: string;
+  name: string;
+  cost: number;
+}
+
+interface TrophyData {
+  id: string;
+  name: string;
+  description: string;
+}
+
 export default function Base() {
   const [, navigate] = useLocation();
-  const { account } = useGame();
-  const [currentTier] = useState(1);
+  const { account, refetch: refetchAccount } = useGame();
+  const { toast } = useToast();
+  const [skinDialog, setSkinDialog] = useState(false);
+  const [trophyDialog, setTrophyDialog] = useState(false);
+  const [isUpgrading, setIsUpgrading] = useState(false);
+  const [isSettingSkin, setIsSettingSkin] = useState(false);
   const [roomLevels, setRoomLevels] = useState<Record<string, number>>({
     storage: 1,
     rest: 1,
@@ -144,11 +171,30 @@ export default function Base() {
     defenses: 1,
   });
 
+  const { data: baseSkins = [] } = useQuery<BaseSkin[]>({
+    queryKey: ["/api/base-skins"],
+    queryFn: async () => {
+      const res = await fetch("/api/base-skins");
+      return res.json();
+    },
+  });
+
+  const { data: trophyData } = useQuery<{ earned: TrophyData[], available: TrophyData[] }>({
+    queryKey: ["/api/accounts", account?.id, "trophies"],
+    queryFn: async () => {
+      if (!account?.id) return { earned: [], available: [] };
+      const res = await fetch(`/api/accounts/${account.id}/trophies`);
+      return res.json();
+    },
+    enabled: !!account?.id,
+  });
+
   if (!account) {
     navigate("/");
     return null;
   }
 
+  const currentTier = (account as any).baseTier || 1;
   const currentTierData = baseTiers[currentTier - 1];
   const availableRooms = baseRooms.filter((room) => 
     currentTierData.rooms.includes(room.id)
@@ -164,6 +210,54 @@ export default function Base() {
       [roomId]: currentLevel + 1,
     }));
   };
+
+  const handleUpgradeBase = async () => {
+    if (!account) return;
+    setIsUpgrading(true);
+    try {
+      const res = await apiRequest("POST", `/api/accounts/${account.id}/upgrade-base`, {});
+      const data = await res.json();
+      toast({
+        title: "Base Upgraded!",
+        description: data.message,
+      });
+      refetchAccount();
+    } catch (error: any) {
+      toast({
+        title: "Upgrade Failed",
+        description: error.message || "Could not upgrade base",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpgrading(false);
+    }
+  };
+
+  const handleSetSkin = async (skin: string) => {
+    if (!account) return;
+    setIsSettingSkin(true);
+    try {
+      const res = await apiRequest("PATCH", `/api/accounts/${account.id}/base-skin`, { skin });
+      const data = await res.json();
+      toast({
+        title: "Skin Applied!",
+        description: data.message,
+      });
+      refetchAccount();
+      setSkinDialog(false);
+    } catch (error: any) {
+      toast({
+        title: "Failed",
+        description: error.message || "Could not set skin",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSettingSkin(false);
+    }
+  };
+
+  const tierCosts = [0, 50000, 200000, 1000000, 10000000];
+  const nextTierCost = currentTier < 5 ? tierCosts[currentTier] : 0;
 
   return (
     <div className="min-h-screen relative">
@@ -204,14 +298,37 @@ export default function Base() {
                   <Castle className="w-24 h-24 text-muted-foreground/30" />
                 </div>
                 
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">
-                    Upgrade to Tier {Math.min(currentTier + 1, 5)}
-                  </span>
-                  <Button disabled={currentTier >= 5}>
-                    <ArrowUp className="w-4 h-4 mr-2" />
-                    Upgrade Base
-                  </Button>
+                <div className="flex justify-between items-center flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">
+                      {currentTier < 5 ? `Upgrade to Tier ${currentTier + 1}: ${nextTierCost.toLocaleString()} gold` : "Maximum tier reached"}
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setSkinDialog(true)}
+                    >
+                      <Palette className="w-4 h-4 mr-1" />
+                      Skins
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setTrophyDialog(true)}
+                    >
+                      <Trophy className="w-4 h-4 mr-1" />
+                      Trophies ({(account as any).trophies?.length || 0})
+                    </Button>
+                    <Button 
+                      disabled={currentTier >= 5 || account.gold < nextTierCost || isUpgrading}
+                      onClick={handleUpgradeBase}
+                    >
+                      <ArrowUp className="w-4 h-4 mr-2" />
+                      {isUpgrading ? "Upgrading..." : "Upgrade Base"}
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -366,10 +483,112 @@ export default function Base() {
                   <span className="text-muted-foreground">Rooms Unlocked</span>
                   <span>{currentTierData.rooms.length} / 6</span>
                 </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Current Skin</span>
+                  <span className="capitalize">{(account as any).baseSkin || "default"}</span>
+                </div>
               </CardContent>
             </Card>
           </div>
         </div>
+
+        <Dialog open={skinDialog} onOpenChange={setSkinDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Palette className="w-5 h-5" />
+                Base Skins
+              </DialogTitle>
+              <DialogDescription>
+                Choose a cosmetic skin for your base. Some skins cost gold.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="flex items-center justify-between p-3 rounded-md bg-yellow-500/10 border border-yellow-500/20">
+                <span className="text-sm font-medium flex items-center gap-2">
+                  <Coins className="w-4 h-4 text-yellow-500" />
+                  Your Gold
+                </span>
+                <span className="font-mono font-bold text-yellow-500">{(account?.gold || 0).toLocaleString()}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {baseSkins.map(skin => {
+                  const isCurrentSkin = (account as any).baseSkin === skin.id || (!((account as any).baseSkin) && skin.id === "default");
+                  const canAfford = skin.cost === 0 || (account?.gold || 0) >= skin.cost || isCurrentSkin;
+                  return (
+                    <Button
+                      key={skin.id}
+                      variant={isCurrentSkin ? "default" : "outline"}
+                      className="flex flex-col items-center py-3 h-auto"
+                      disabled={isSettingSkin || (!canAfford && !isCurrentSkin)}
+                      onClick={() => handleSetSkin(skin.id)}
+                    >
+                      <span className="font-medium">{skin.name}</span>
+                      {skin.cost > 0 && !isCurrentSkin && (
+                        <span className="text-xs text-yellow-500">{skin.cost.toLocaleString()} gold</span>
+                      )}
+                      {isCurrentSkin && <span className="text-xs text-green-400">Equipped</span>}
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSkinDialog(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={trophyDialog} onOpenChange={setTrophyDialog}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-yellow-500" />
+                Trophies ({trophyData?.earned.length || 0} / {trophyData?.available.length || 0})
+              </DialogTitle>
+              <DialogDescription>
+                Earn trophies by completing achievements. They're visible to visitors!
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4 max-h-96 overflow-y-auto">
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-green-400">Earned Trophies</h4>
+                {trophyData?.earned.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No trophies earned yet</p>
+                ) : (
+                  <div className="grid gap-2">
+                    {trophyData?.earned.map(trophy => (
+                      <div key={trophy.id} className="p-3 rounded-lg bg-green-500/10 border border-green-500/30">
+                        <div className="flex items-center gap-2">
+                          <Trophy className="w-4 h-4 text-yellow-500" />
+                          <span className="font-medium">{trophy.name}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">{trophy.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-muted-foreground">Available Trophies</h4>
+                <div className="grid gap-2">
+                  {trophyData?.available.filter(t => !trophyData.earned.find(e => e.id === t.id)).map(trophy => (
+                    <div key={trophy.id} className="p-3 rounded-lg bg-secondary/30 border border-secondary/50 opacity-60">
+                      <div className="flex items-center gap-2">
+                        <Lock className="w-4 h-4 text-muted-foreground" />
+                        <span className="font-medium">{trophy.name}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">{trophy.description}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setTrophyDialog(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         </div>
       </div>
     </div>

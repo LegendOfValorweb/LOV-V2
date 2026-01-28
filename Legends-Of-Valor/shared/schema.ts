@@ -161,6 +161,10 @@ export const accounts = pgTable("accounts", {
   deathCount: integer("death_count").notNull().default(0),
   reviveTokens: integer("revive_tokens").notNull().default(1), // One-time revives
   respawnLocation: text("respawn_location").notNull().default("base"), // Where to respawn
+  // V2: Base system
+  baseTier: integer("base_tier").notNull().default(1), // Current base tier (1-5)
+  baseSkin: text("base_skin").default("default"), // Cosmetic base skin
+  trophies: text("trophies").array().default(sql`ARRAY[]::text[]`), // Earned trophies
 });
 
 export const inventoryItems = pgTable("inventory_items", {

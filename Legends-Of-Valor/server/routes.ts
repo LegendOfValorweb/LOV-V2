@@ -731,6 +731,156 @@ export async function registerRoutes(
     }
   });
 
+  // Base skins
+  const BASE_SKINS = [
+    { id: "default", name: "Default", cost: 0 },
+    { id: "autumn", name: "Autumn Leaves", cost: 50000 },
+    { id: "winter", name: "Winter Frost", cost: 100000 },
+    { id: "spring", name: "Spring Bloom", cost: 100000 },
+    { id: "summer", name: "Summer Sun", cost: 100000 },
+    { id: "dark", name: "Dark Fortress", cost: 250000 },
+    { id: "golden", name: "Golden Palace", cost: 500000 },
+    { id: "mythic", name: "Mythic Realm", cost: 1000000 },
+  ];
+
+  // Trophy definitions
+  const TROPHIES = [
+    { id: "first_win", name: "First Victory", description: "Win your first battle" },
+    { id: "rank_expert", name: "Expert Adventurer", description: "Reach Expert rank" },
+    { id: "rank_master", name: "Master Warrior", description: "Reach Master rank" },
+    { id: "rank_legend", name: "Living Legend", description: "Reach Legendary Hero rank" },
+    { id: "gold_millionaire", name: "Millionaire", description: "Accumulate 1,000,000 gold" },
+    { id: "gold_billionaire", name: "Billionaire", description: "Accumulate 1,000,000,000 gold" },
+    { id: "pet_mythic", name: "Mythic Tamer", description: "Evolve a pet to mythic tier" },
+    { id: "base_fortress", name: "Fortress Builder", description: "Upgrade base to tier 5" },
+    { id: "tower_floor_10", name: "Tower Climber", description: "Reach Mystic Tower floor 10" },
+    { id: "tower_floor_50", name: "Tower Master", description: "Reach Mystic Tower floor 50" },
+    { id: "wins_100", name: "Centurion", description: "Win 100 battles" },
+    { id: "wins_1000", name: "Champion", description: "Win 1000 battles" },
+    { id: "story_act2", name: "Fractured Realms", description: "Complete Act 1" },
+    { id: "story_act3", name: "Hell Seeker", description: "Complete Act 2" },
+    { id: "story_act4", name: "Convergence", description: "Complete Act 3" },
+  ];
+
+  app.get("/api/base-skins", (_req, res) => {
+    res.json(BASE_SKINS);
+  });
+
+  app.get("/api/trophies", (_req, res) => {
+    res.json(TROPHIES);
+  });
+
+  app.patch("/api/accounts/:id/base-skin", async (req, res) => {
+    try {
+      const { skin } = req.body;
+      const accountId = req.params.id;
+      
+      const session = activeSessions.get(accountId);
+      if (!session) {
+        return res.status(401).json({ error: "Active session required" });
+      }
+      
+      const skinData = BASE_SKINS.find(s => s.id === skin);
+      if (!skinData) {
+        return res.status(400).json({ error: "Invalid skin" });
+      }
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+
+      // Check if player already has this skin (free switch) or needs to buy
+      if (account.baseSkin !== skin && skinData.cost > 0) {
+        if (account.gold < skinData.cost) {
+          return res.status(400).json({ error: `Need ${skinData.cost.toLocaleString()} gold for this skin` });
+        }
+        await storage.updateAccount(accountId, { 
+          gold: account.gold - skinData.cost,
+          baseSkin: skin 
+        });
+      } else {
+        await storage.updateAccount(accountId, { baseSkin: skin });
+      }
+      
+      const updatedAccount = await storage.getAccount(accountId);
+      res.json({ account: updatedAccount, message: `Base skin changed to ${skinData.name}!` });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to set base skin" });
+    }
+  });
+
+  app.post("/api/accounts/:id/upgrade-base", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      
+      const session = activeSessions.get(accountId);
+      if (!session) {
+        return res.status(401).json({ error: "Active session required" });
+      }
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+
+      const currentTier = account.baseTier || 1;
+      if (currentTier >= 5) {
+        return res.status(400).json({ error: "Base already at maximum tier" });
+      }
+
+      // Tier upgrade costs
+      const tierCosts = [0, 50000, 200000, 1000000, 10000000]; // Cost to upgrade TO each tier
+      const upgradeCost = tierCosts[currentTier]; // Cost to go to next tier
+
+      if (account.gold < upgradeCost) {
+        return res.status(400).json({ error: `Need ${upgradeCost.toLocaleString()} gold to upgrade` });
+      }
+
+      const newTier = currentTier + 1;
+      await storage.updateAccount(accountId, { 
+        gold: account.gold - upgradeCost,
+        baseTier: newTier 
+      });
+
+      // Grant trophy for reaching tier 5
+      if (newTier === 5 && !account.trophies?.includes("base_fortress")) {
+        const updatedTrophies = [...(account.trophies || []), "base_fortress"];
+        await storage.updateAccount(accountId, { trophies: updatedTrophies });
+      }
+      
+      const updatedAccount = await storage.getAccount(accountId);
+      const tierNames = ["", "Humble Camp", "Wooden Lodge", "Stone Keep", "Grand Manor", "Fortress Castle"];
+      res.json({ 
+        account: updatedAccount, 
+        message: `Base upgraded to ${tierNames[newTier]}!` 
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to upgrade base" });
+    }
+  });
+
+  app.get("/api/accounts/:id/trophies", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.id);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const earnedTrophies = (account.trophies || []).map(trophyId => {
+        const trophy = TROPHIES.find(t => t.id === trophyId);
+        return trophy || { id: trophyId, name: trophyId, description: "Unknown trophy" };
+      });
+      
+      res.json({ 
+        earned: earnedTrophies,
+        available: TROPHIES
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get trophies" });
+    }
+  });
+
   // Admin: Fix oversized resource values for an account
   app.post("/api/admin/accounts/:id/cap-resources", async (req, res) => {
     try {
