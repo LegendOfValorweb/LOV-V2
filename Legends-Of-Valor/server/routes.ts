@@ -5923,6 +5923,172 @@ export async function registerRoutes(
   
   // ==================== GUILD LEVEL UP ROUTES ====================
   
+  // ==================== GUILD SHOP SYSTEM ====================
+  
+  const GUILD_SHOP_ITEMS = [
+    { id: "guild_potion_hp", name: "Guild HP Potion", description: "Restores 500 HP", price: { gold: 500 }, discount: 0.25 },
+    { id: "guild_potion_str", name: "Guild Strength Elixir", description: "+10 STR for 1 hour", price: { gold: 1000 }, discount: 0.3 },
+    { id: "guild_training_boost", name: "Training Boost", description: "+50% training XP", price: { gold: 2000, rubies: 5 }, discount: 0.25 },
+    { id: "guild_pet_treat", name: "Premium Pet Treat", description: "+20 pet bonding", price: { soulShards: 10 }, discount: 0.35 },
+    { id: "guild_skill_scroll", name: "Skill Scroll", description: "Random skill unlock", price: { gold: 10000, rubies: 50 }, discount: 0.2 },
+    { id: "guild_revival_token", name: "Revival Token", description: "Instant revival on death", price: { rubies: 100 }, discount: 0.3 },
+    { id: "guild_xp_boost", name: "XP Multiplier", description: "2x XP for 1 hour", price: { gold: 5000 }, discount: 0.25 },
+    { id: "guild_loot_boost", name: "Loot Boost", description: "+50% loot drops", price: { gold: 3000 }, discount: 0.25 },
+  ];
+
+  app.get("/api/guilds/:guildId/shop", async (req, res) => {
+    try {
+      const guild = await storage.getGuild(req.params.guildId);
+      if (!guild) {
+        return res.status(404).json({ error: "Guild not found" });
+      }
+      
+      const guildLevel = guild.level || 1;
+      const unlockedItems = GUILD_SHOP_ITEMS.slice(0, Math.min(2 + guildLevel, GUILD_SHOP_ITEMS.length));
+      
+      res.json({
+        items: unlockedItems,
+        guildLevel,
+        bank: guild.bank,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get guild shop" });
+    }
+  });
+
+  app.post("/api/guilds/:guildId/shop/buy", async (req, res) => {
+    try {
+      const schema = z.object({
+        accountId: z.string(),
+        itemId: z.string(),
+      });
+      const { accountId, itemId } = schema.parse(req.body);
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const member = await storage.getGuildMember(accountId);
+      if (!member || member.guildId !== req.params.guildId) {
+        return res.status(403).json({ error: "Not a member of this guild" });
+      }
+      
+      const guild = await storage.getGuild(req.params.guildId);
+      if (!guild) {
+        return res.status(404).json({ error: "Guild not found" });
+      }
+      
+      const item = GUILD_SHOP_ITEMS.find(i => i.id === itemId);
+      if (!item) {
+        return res.status(404).json({ error: "Item not found" });
+      }
+      
+      const guildLevel = guild.level || 1;
+      const unlockedItems = GUILD_SHOP_ITEMS.slice(0, Math.min(2 + guildLevel, GUILD_SHOP_ITEMS.length));
+      if (!unlockedItems.find(i => i.id === itemId)) {
+        return res.status(403).json({ error: "Item not unlocked at guild level" });
+      }
+      
+      const discountedPrice = {
+        gold: Math.floor((item.price.gold || 0) * (1 - item.discount)),
+        rubies: Math.floor((item.price.rubies || 0) * (1 - item.discount)),
+        soulShards: Math.floor((item.price.soulShards || 0) * (1 - item.discount)),
+      };
+      
+      if ((account.gold || 0) < discountedPrice.gold) {
+        return res.status(400).json({ error: "Not enough gold" });
+      }
+      if ((account.rubies || 0) < discountedPrice.rubies) {
+        return res.status(400).json({ error: "Not enough rubies" });
+      }
+      if ((account.soulShards || 0) < discountedPrice.soulShards) {
+        return res.status(400).json({ error: "Not enough soul shards" });
+      }
+      
+      await storage.updateAccount(accountId, {
+        gold: (account.gold || 0) - discountedPrice.gold,
+        rubies: (account.rubies || 0) - discountedPrice.rubies,
+        soulShards: (account.soulShards || 0) - discountedPrice.soulShards,
+      });
+      
+      await storage.createActivityFeed({
+        type: "guild_shop_purchase",
+        message: `${account.username} purchased ${item.name} from ${guild.name}'s shop!`,
+        metadata: { guildId: guild.id, accountId, itemId, price: discountedPrice },
+      });
+      
+      res.json({
+        success: true,
+        item: item.name,
+        pricePaid: discountedPrice,
+        message: `Purchased ${item.name} with ${Math.round(item.discount * 100)}% guild discount!`,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to purchase item" });
+    }
+  });
+
+  // ==================== VALOR CURRENCY PACKS ====================
+
+  const VALOR_PACKS = [
+    { id: "valor_starter", name: "Starter Pack", valorTokens: 100, priceUSD: 0.99, bonus: 0 },
+    { id: "valor_small", name: "Small Pack", valorTokens: 500, priceUSD: 4.99, bonus: 0.05 },
+    { id: "valor_medium", name: "Medium Pack", valorTokens: 1200, priceUSD: 9.99, bonus: 0.1 },
+    { id: "valor_large", name: "Large Pack", valorTokens: 3000, priceUSD: 24.99, bonus: 0.15 },
+    { id: "valor_mega", name: "Mega Pack", valorTokens: 7500, priceUSD: 49.99, bonus: 0.2 },
+    { id: "valor_ultimate", name: "Ultimate Pack", valorTokens: 20000, priceUSD: 99.99, bonus: 0.25 },
+  ];
+
+  app.get("/api/shop/valor-packs", (_req, res) => {
+    res.json(VALOR_PACKS.map(pack => ({
+      ...pack,
+      totalTokens: Math.floor(pack.valorTokens * (1 + pack.bonus)),
+      bonusPercent: Math.round(pack.bonus * 100),
+    })));
+  });
+
+  app.post("/api/shop/valor-packs/purchase", async (req, res) => {
+    try {
+      const schema = z.object({
+        accountId: z.string(),
+        packId: z.string(),
+      });
+      const { accountId, packId } = schema.parse(req.body);
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const pack = VALOR_PACKS.find(p => p.id === packId);
+      if (!pack) {
+        return res.status(404).json({ error: "Pack not found" });
+      }
+      
+      const totalTokens = Math.floor(pack.valorTokens * (1 + pack.bonus));
+      
+      await storage.updateAccount(accountId, {
+        valorTokens: (account.valorTokens || 0) + totalTokens,
+      });
+      
+      await storage.createActivityFeed({
+        type: "valor_purchase",
+        message: `${account.username} purchased ${pack.name} (+${totalTokens} Valor Tokens)!`,
+        metadata: { accountId, packId, tokens: totalTokens },
+      });
+      
+      res.json({
+        success: true,
+        pack: pack.name,
+        tokensAdded: totalTokens,
+        message: `Added ${totalTokens.toLocaleString()} Valor Tokens to your account!`,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to process purchase" });
+    }
+  });
+
   // ==================== AI CHAT SYSTEM ====================
   const { chatWithGameAI, getPlayerStoryline, getPendingAdminRequests, resolveAdminRequest, generateWelcomeIntro, setGuidePersonality, getTutorialContent, getStoryAct } = await import("./game-ai");
   const { initializeNPCAccounts, autoAcceptNPCChallenge, isNPCAccount, startNPCProgressionLoop } = await import("./npc-accounts");

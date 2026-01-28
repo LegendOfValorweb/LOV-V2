@@ -240,7 +240,7 @@ export class DatabaseStorage implements IStorage {
     return account || undefined;
   }
 
-  async updateAccount(id: string, data: Partial<Pick<Account, "gold" | "rubies" | "soulShards" | "focusedShards" | "trainingPoints" | "petExp" | "runes" | "pets" | "stats" | "equipped" | "rank" | "wins" | "losses" | "baseTier" | "baseSkin" | "trophies" | "soulGins" | "beakCoins">>): Promise<Account | undefined> {
+  async updateAccount(id: string, data: Partial<Pick<Account, "gold" | "rubies" | "soulShards" | "focusedShards" | "trainingPoints" | "petExp" | "runes" | "pets" | "stats" | "equipped" | "rank" | "wins" | "losses" | "baseTier" | "baseSkin" | "trophies" | "soulGins" | "beakCoins" | "valorTokens">>): Promise<Account | undefined> {
     const cap = (val: number | undefined) => val !== undefined ? Math.min(val, Number.MAX_SAFE_INTEGER) : undefined;
     const cappedData = {
       ...data,
@@ -251,6 +251,7 @@ export class DatabaseStorage implements IStorage {
       trainingPoints: cap(data.trainingPoints),
       petExp: cap(data.petExp),
       runes: cap(data.runes),
+      valorTokens: cap(data.valorTokens),
     };
     // Remove undefined values
     Object.keys(cappedData).forEach(key => cappedData[key as keyof typeof cappedData] === undefined && delete cappedData[key as keyof typeof cappedData]);
