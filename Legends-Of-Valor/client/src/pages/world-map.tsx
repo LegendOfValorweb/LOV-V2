@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,9 +10,19 @@ import {
   Castle, Mountain, Skull, FlaskConical, Sword, Swords,
   Trees, Gem, Fish, Shield, Flame, Map, Home, Lock,
   Package, ShoppingBag, Users, LogOut, MessageCircle,
-  Crown, Coins, Heart
+  Crown, Coins, Heart, Target, Zap
 } from "lucide-react";
 import { useGame } from "@/lib/game-context";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface Zone {
   id: string;
@@ -54,7 +65,7 @@ const zones: Zone[] = [
     name: "Mystic Tower",
     description: "A towering spire filled with increasingly powerful enemies. 100 floors await.",
     icon: <Sword className="w-6 h-6" />,
-    difficulty: "medium",
+    difficulty: "hard",
     pvpEnabled: false,
     activities: ["NPC Battles", "Boss Fights", "Loot Drops"],
     coordinates: { x: 50, y: 20 },
@@ -86,7 +97,7 @@ const zones: Zone[] = [
     name: "Research Lab",
     description: "Where scholars study the arcane arts and craft powerful items.",
     icon: <FlaskConical className="w-6 h-6" />,
-    difficulty: "starter",
+    difficulty: "medium",
     pvpEnabled: false,
     activities: ["Crafting", "Enchanting", "Skill Research"],
     coordinates: { x: 35, y: 70 },
@@ -130,7 +141,7 @@ const zones: Zone[] = [
     name: "Battle Arena",
     description: "Prove your worth against other players in sanctioned combat.",
     icon: <Sword className="w-6 h-6" />,
-    difficulty: "medium",
+    difficulty: "hard",
     pvpEnabled: true,
     activities: ["PvP Duels", "Tournaments", "Rankings"],
     coordinates: { x: 65, y: 35 },
@@ -190,10 +201,37 @@ const difficultyColors: Record<string, string> = {
   hell: "bg-red-500/20 text-red-400 border-red-500/30",
 };
 
+const HUNTABLE_ZONES = new Set([
+  "mountain-caverns", "ancient-ruins", "enchanted-forest", "crystal-lake",
+  "coastal-village", "ruby-mines", "battle-arena", "research-lab",
+  "pet-training", "hell-zone", "mystic-tower"
+]);
+
 export default function WorldMap() {
   const [, navigate] = useLocation();
-  const { account, logout } = useGame();
+  const { account, logout, setAccount } = useGame();
+  const { toast } = useToast();
   const [selectedZone, setSelectedZone] = useState<Zone | null>(null);
+  const [battleDialog, setBattleDialog] = useState(false);
+  const [isBattling, setIsBattling] = useState(false);
+  const [currentEnemy, setCurrentEnemy] = useState<any>(null);
+  const [battleResult, setBattleResult] = useState<any>(null);
+
+  const { data: zoneDifficulties } = useQuery<any>({
+    queryKey: ["/api/zone-difficulties"],
+    queryFn: async () => {
+      const res = await fetch("/api/zone-difficulties");
+      return res.json();
+    },
+  });
+
+  const { data: enemyArchetypes } = useQuery<any>({
+    queryKey: ["/api/enemy-archetypes"],
+    queryFn: async () => {
+      const res = await fetch("/api/enemy-archetypes");
+      return res.json();
+    },
+  });
 
   if (!account) {
     navigate("/");
@@ -207,6 +245,82 @@ export default function WorldMap() {
   const handleEnterZone = (zone: Zone) => {
     if (zone.route) {
       navigate(zone.route);
+    }
+  };
+
+  const handleHuntInZone = async (zone: Zone) => {
+    if (!account) return;
+    setBattleDialog(true);
+    setBattleResult(null);
+    
+    try {
+      const res = await fetch(`/api/zones/${zone.id.replace(/-/g, "_")}/generate-enemy?accountId=${account.id}`);
+      const data = await res.json();
+      
+      if (res.ok) {
+        setCurrentEnemy(data);
+      } else {
+        toast({
+          title: "Cannot Hunt",
+          description: data.error || "Failed to find enemies",
+          variant: "destructive",
+        });
+        setBattleDialog(false);
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to find enemies in this zone",
+        variant: "destructive",
+      });
+      setBattleDialog(false);
+    }
+  };
+
+  const handleBattle = async () => {
+    if (!account || !selectedZone || !currentEnemy) return;
+    setIsBattling(true);
+    
+    try {
+      const res = await apiRequest("POST", `/api/zones/${selectedZone.id.replace(/-/g, "_")}/battle`, {
+        accountId: account.id,
+      });
+      const data = await res.json();
+      setBattleResult(data);
+      
+      if (data.result === "victory") {
+        toast({
+          title: "Victory!",
+          description: `Defeated ${data.enemy.name}! Earned ${data.rewards.gold} gold.`,
+        });
+        // Refresh account
+        const accRes = await fetch(`/api/accounts/${account.id}`);
+        if (accRes.ok) {
+          setAccount(await accRes.json());
+        }
+      } else {
+        toast({
+          title: "Defeat",
+          description: data.message,
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Battle Error",
+        description: error.message || "Battle failed",
+        variant: "destructive",
+      });
+    } finally {
+      setIsBattling(false);
+    }
+  };
+
+  const handleFightAgain = async () => {
+    if (selectedZone) {
+      setBattleResult(null);
+      setCurrentEnemy(null);
+      await handleHuntInZone(selectedZone);
     }
   };
 
@@ -374,13 +488,25 @@ export default function WorldMap() {
                       </div>
                     </div>
                     
-                    <Button 
-                      className="w-full" 
-                      onClick={() => handleEnterZone(selectedZone)}
-                      disabled={!selectedZone.route}
-                    >
-                      {selectedZone.route ? "Travel Here" : "Coming Soon"}
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button 
+                        className="flex-1" 
+                        onClick={() => handleEnterZone(selectedZone)}
+                        disabled={!selectedZone.route}
+                      >
+                        {selectedZone.route ? "Travel Here" : "Coming Soon"}
+                      </Button>
+                      {HUNTABLE_ZONES.has(selectedZone.id) && (
+                        <Button 
+                          variant="destructive"
+                          className="flex-1"
+                          onClick={() => handleHuntInZone(selectedZone)}
+                        >
+                          <Target className="w-4 h-4 mr-2" />
+                          Hunt
+                        </Button>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               ) : (
@@ -428,6 +554,137 @@ export default function WorldMap() {
             </div>
           </div>
         </div>
+
+        <Dialog open={battleDialog} onOpenChange={(open) => { setBattleDialog(open); if (!open) { setCurrentEnemy(null); setBattleResult(null); } }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Swords className="w-5 h-5 text-red-500" />
+                {battleResult ? (battleResult.result === "victory" ? "Victory!" : "Defeat") : "Zone Battle"}
+              </DialogTitle>
+              <DialogDescription>
+                {selectedZone?.name} - {selectedZone?.difficulty.toUpperCase()} Difficulty
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {!battleResult && currentEnemy && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-semibold">{currentEnemy.name}</h3>
+                      <Badge variant="destructive">{currentEnemy.archetype}</Badge>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">STR:</span>
+                        <span className="ml-1 font-mono">{currentEnemy.stats?.Str}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">DEF:</span>
+                        <span className="ml-1 font-mono">{currentEnemy.stats?.Def}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">SPD:</span>
+                        <span className="ml-1 font-mono">{currentEnemy.stats?.Spd}</span>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex items-center gap-4 text-sm">
+                      <div className="flex items-center gap-1">
+                        <Heart className="w-4 h-4 text-red-500" />
+                        <span>{currentEnemy.hp} HP</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Coins className="w-4 h-4 text-yellow-500" />
+                        <span>{currentEnemy.rewards?.gold} gold</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                    <h4 className="font-medium mb-2">Your Stats</h4>
+                    <div className="grid grid-cols-3 gap-2 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">STR:</span>
+                        <span className="ml-1 font-mono">{account?.stats?.Str || 10}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">DEF:</span>
+                        <span className="ml-1 font-mono">{account?.stats?.Def || 10}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">SPD:</span>
+                        <span className="ml-1 font-mono">{account?.stats?.Spd || 10}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button 
+                    className="w-full" 
+                    variant="destructive"
+                    onClick={handleBattle}
+                    disabled={isBattling}
+                  >
+                    {isBattling ? (
+                      <>
+                        <Zap className="w-4 h-4 mr-2 animate-pulse" />
+                        Fighting...
+                      </>
+                    ) : (
+                      <>
+                        <Sword className="w-4 h-4 mr-2" />
+                        Attack!
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              {battleResult && (
+                <div className="space-y-4">
+                  <div className={`p-4 rounded-lg ${battleResult.result === "victory" ? "bg-green-500/10 border border-green-500/30" : "bg-red-500/10 border border-red-500/30"}`}>
+                    <p className="font-medium text-lg mb-2">{battleResult.message}</p>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Damage Dealt:</span>
+                        <span className="ml-1 font-mono text-green-400">{battleResult.damageDealt}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Damage Taken:</span>
+                        <span className="ml-1 font-mono text-red-400">{battleResult.damageTaken}</span>
+                      </div>
+                    </div>
+                    {battleResult.result === "victory" && battleResult.rewards && (
+                      <div className="mt-3 p-2 rounded bg-yellow-500/10 border border-yellow-500/30">
+                        <p className="text-sm font-medium flex items-center gap-2">
+                          <Coins className="w-4 h-4 text-yellow-500" />
+                          Rewards: {battleResult.rewards.gold} gold
+                          {battleResult.rewards.rubies > 0 && `, ${battleResult.rewards.rubies} rubies`}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button onClick={handleFightAgain} className="flex-1" variant="destructive">
+                      <Target className="w-4 h-4 mr-2" />
+                      Hunt Again
+                    </Button>
+                    <Button onClick={() => { setBattleDialog(false); setBattleResult(null); setCurrentEnemy(null); }} variant="outline" className="flex-1">
+                      Leave
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {!currentEnemy && !battleResult && (
+                <div className="text-center py-8">
+                  <Target className="w-12 h-12 mx-auto mb-4 text-muted-foreground animate-pulse" />
+                  <p className="text-muted-foreground">Searching for enemies...</p>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

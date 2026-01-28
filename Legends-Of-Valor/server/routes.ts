@@ -6765,5 +6765,271 @@ export async function registerRoutes(
     }
   });
 
+  // ========== ENEMY SCALING SYSTEM ==========
+  const ZONE_DIFFICULTIES = {
+    starter: { tier: 1, name: "Starter", minRank: 0, powerRange: [1, 1000], rewardMultiplier: 1 },
+    easy: { tier: 2, name: "Easy", minRank: 3, powerRange: [1000, 100000], rewardMultiplier: 1.5 },
+    medium: { tier: 3, name: "Medium", minRank: 6, powerRange: [100000, 10000000], rewardMultiplier: 2 },
+    hard: { tier: 4, name: "Hard", minRank: 10, powerRange: [10000000, 1000000000], rewardMultiplier: 3 },
+    hell: { tier: 5, name: "Hell", minRank: 13, powerRange: [1000000000, Number.MAX_SAFE_INTEGER], rewardMultiplier: 5 },
+  };
+
+  const ENEMY_ARCHETYPES = {
+    minion: { 
+      name: "Minion", 
+      statMultiplier: 0.6, 
+      hpMultiplier: 0.5, 
+      goldMultiplier: 0.5, 
+      expMultiplier: 0.5,
+      spawnWeight: 60,
+      description: "Weak fodder enemies, easy to defeat"
+    },
+    elite: { 
+      name: "Elite", 
+      statMultiplier: 1.0, 
+      hpMultiplier: 1.0, 
+      goldMultiplier: 1.5, 
+      expMultiplier: 1.5,
+      spawnWeight: 25,
+      description: "Standard enemies with balanced stats"
+    },
+    champion: { 
+      name: "Champion", 
+      statMultiplier: 1.5, 
+      hpMultiplier: 2.0, 
+      goldMultiplier: 3.0, 
+      expMultiplier: 3.0,
+      spawnWeight: 12,
+      description: "Tough enemies with high rewards"
+    },
+    boss: { 
+      name: "Boss", 
+      statMultiplier: 2.5, 
+      hpMultiplier: 5.0, 
+      goldMultiplier: 10.0, 
+      expMultiplier: 10.0,
+      spawnWeight: 3,
+      description: "Powerful enemies guarding zone secrets"
+    },
+  };
+
+  const ZONE_ENEMY_CONFIG: Record<string, { difficulty: keyof typeof ZONE_DIFFICULTIES, enemies: string[] }> = {
+    capital_city: { difficulty: "starter", enemies: ["Training Dummy", "Sparring Partner"] },
+    mountain_caverns: { difficulty: "easy", enemies: ["Cave Bat", "Rock Golem", "Mine Spider"] },
+    ancient_ruins: { difficulty: "medium", enemies: ["Cursed Spirit", "Stone Guardian", "Ruin Wraith"] },
+    enchanted_forest: { difficulty: "easy", enemies: ["Forest Wolf", "Wild Boar", "Treant"] },
+    crystal_lake: { difficulty: "starter", enemies: ["Lake Spirit", "Water Elemental"] },
+    coastal_village: { difficulty: "easy", enemies: ["Pirate", "Sea Serpent", "Crab Beast"] },
+    ruby_mines: { difficulty: "medium", enemies: ["Gem Golem", "Mine Crawler", "Crystal Beast"] },
+    battle_arena: { difficulty: "hard", enemies: ["Gladiator", "Arena Champion", "Beast Master"] },
+    research_lab: { difficulty: "medium", enemies: ["Mutant", "Failed Experiment", "Lab Guardian"] },
+    pet_training: { difficulty: "starter", enemies: ["Wild Pet", "Feral Beast"] },
+    hell_zone: { difficulty: "hell", enemies: ["Demon Soldier", "Hellfire Elemental", "Abyssal Horror", "Demon Lord"] },
+    mystic_tower: { difficulty: "hard", enemies: ["Tower Guardian", "Arcane Sentinel", "Floor Boss"] },
+  };
+
+  function getRandomArchetype(): keyof typeof ENEMY_ARCHETYPES {
+    const totalWeight = Object.values(ENEMY_ARCHETYPES).reduce((sum, a) => sum + a.spawnWeight, 0);
+    let random = Math.random() * totalWeight;
+    for (const [key, archetype] of Object.entries(ENEMY_ARCHETYPES)) {
+      random -= archetype.spawnWeight;
+      if (random <= 0) return key as keyof typeof ENEMY_ARCHETYPES;
+    }
+    return "minion";
+  }
+
+  function generateZoneEnemy(zoneId: string, playerPower: number, playerRankIndex: number) {
+    const zoneConfig = ZONE_ENEMY_CONFIG[zoneId] || ZONE_ENEMY_CONFIG["capital_city"];
+    const difficultyConfig = ZONE_DIFFICULTIES[zoneConfig.difficulty];
+    
+    // Anti-overlevel protection: if player is too weak for zone, scale down
+    const [minPower, maxPower] = difficultyConfig.powerRange;
+    const effectivePower = Math.min(playerPower, maxPower);
+    const scaledPower = Math.max(minPower, Math.min(effectivePower, maxPower));
+    
+    const archetype = getRandomArchetype();
+    const archetypeConfig = ENEMY_ARCHETYPES[archetype];
+    const enemyName = zoneConfig.enemies[Math.floor(Math.random() * zoneConfig.enemies.length)];
+    
+    const baseStat = Math.floor(scaledPower * 0.01);
+    const stats = {
+      Str: Math.floor(baseStat * archetypeConfig.statMultiplier * (0.8 + Math.random() * 0.4)),
+      Def: Math.floor(baseStat * 0.8 * archetypeConfig.statMultiplier * (0.8 + Math.random() * 0.4)),
+      Spd: Math.floor(baseStat * 0.6 * archetypeConfig.statMultiplier * (0.8 + Math.random() * 0.4)),
+      Int: Math.floor(baseStat * 0.5 * archetypeConfig.statMultiplier * (0.8 + Math.random() * 0.4)),
+      Luck: Math.floor(baseStat * 0.3 * archetypeConfig.statMultiplier * (0.8 + Math.random() * 0.4)),
+    };
+    
+    const hp = Math.floor(scaledPower * 0.1 * archetypeConfig.hpMultiplier);
+    const baseGold = Math.floor(50 + scaledPower * 0.001) * difficultyConfig.rewardMultiplier;
+    const baseExp = Math.floor(10 + scaledPower * 0.0005) * difficultyConfig.rewardMultiplier;
+    
+    return {
+      name: `${archetypeConfig.name} ${enemyName}`,
+      archetype,
+      archetypeConfig,
+      zone: zoneId,
+      difficulty: zoneConfig.difficulty,
+      difficultyTier: difficultyConfig.tier,
+      stats,
+      hp,
+      maxHp: hp,
+      rewards: {
+        gold: Math.floor(baseGold * archetypeConfig.goldMultiplier),
+        exp: Math.floor(baseExp * archetypeConfig.expMultiplier),
+        rubies: archetype === "boss" ? Math.floor(scaledPower * 0.0001) : 0,
+      },
+      canDrop: archetype === "champion" || archetype === "boss",
+      power: scaledPower,
+    };
+  }
+
+  app.get("/api/zone-difficulties", (_req, res) => {
+    res.json(ZONE_DIFFICULTIES);
+  });
+
+  app.get("/api/enemy-archetypes", (_req, res) => {
+    res.json(ENEMY_ARCHETYPES);
+  });
+
+  app.get("/api/zones/:zoneId/enemy-config", (req, res) => {
+    const zoneId = req.params.zoneId;
+    const config = ZONE_ENEMY_CONFIG[zoneId];
+    if (!config) {
+      return res.status(404).json({ error: "Zone not found" });
+    }
+    const difficulty = ZONE_DIFFICULTIES[config.difficulty];
+    res.json({
+      zone: zoneId,
+      difficulty: config.difficulty,
+      difficultyTier: difficulty.tier,
+      difficultyName: difficulty.name,
+      minRank: playerRanks[difficulty.minRank],
+      powerRange: difficulty.powerRange,
+      rewardMultiplier: difficulty.rewardMultiplier,
+      enemies: config.enemies,
+    });
+  });
+
+  app.get("/api/zones/:zoneId/generate-enemy", async (req, res) => {
+    try {
+      const zoneId = req.params.zoneId;
+      const accountId = req.query.accountId as string;
+      
+      if (!accountId) {
+        return res.status(400).json({ error: "Account ID required" });
+      }
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const playerPower = (account.stats?.Str || 10) + (account.stats?.Def || 10) + 
+                          (account.stats?.Spd || 10) + (account.stats?.Int || 10);
+      const playerRankIndex = playerRanks.indexOf(account.rank);
+      
+      // Check if player meets minimum rank for zone
+      const zoneConfig = ZONE_ENEMY_CONFIG[zoneId];
+      if (zoneConfig) {
+        const difficulty = ZONE_DIFFICULTIES[zoneConfig.difficulty];
+        if (playerRankIndex < difficulty.minRank) {
+          return res.status(403).json({ 
+            error: "Rank too low for this zone",
+            requiredRank: playerRanks[difficulty.minRank],
+            currentRank: account.rank,
+          });
+        }
+      }
+      
+      const enemy = generateZoneEnemy(zoneId, playerPower, playerRankIndex);
+      res.json(enemy);
+    } catch (error) {
+      console.error("Generate enemy error:", error);
+      res.status(500).json({ error: "Failed to generate enemy" });
+    }
+  });
+
+  app.post("/api/zones/:zoneId/battle", async (req, res) => {
+    try {
+      const zoneId = req.params.zoneId;
+      const { accountId } = req.body;
+      
+      if (!accountId) {
+        return res.status(400).json({ error: "Account ID required" });
+      }
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      if (account.isDead) {
+        return res.status(400).json({ error: "Cannot battle while dead" });
+      }
+      
+      const playerPower = (account.stats?.Str || 10) + (account.stats?.Def || 10) + 
+                          (account.stats?.Spd || 10) + (account.stats?.Int || 10);
+      const playerRankIndex = playerRanks.indexOf(account.rank);
+      
+      // Rank check - same as generate-enemy
+      const zoneConfig = ZONE_ENEMY_CONFIG[zoneId];
+      if (zoneConfig) {
+        const difficulty = ZONE_DIFFICULTIES[zoneConfig.difficulty];
+        if (playerRankIndex < difficulty.minRank) {
+          return res.status(403).json({ 
+            error: "Rank too low for this zone",
+            requiredRank: playerRanks[difficulty.minRank],
+            currentRank: account.rank,
+          });
+        }
+      }
+      
+      const enemy = generateZoneEnemy(zoneId, playerPower, playerRankIndex);
+      
+      // Simple battle simulation
+      const playerAttack = (account.stats?.Str || 10) + Math.floor(Math.random() * 20);
+      const enemyAttack = enemy.stats.Str + Math.floor(Math.random() * 10);
+      const playerDefense = (account.stats?.Def || 10);
+      const enemyDefense = enemy.stats.Def;
+      
+      const damageToEnemy = Math.max(1, playerAttack - enemyDefense * 0.5);
+      const damageToPlayer = Math.max(1, enemyAttack - playerDefense * 0.5);
+      
+      // Determine winner based on stats advantage
+      const playerAdvantage = playerPower / (enemy.power || 1);
+      const won = playerAdvantage > 0.5 && Math.random() < Math.min(0.9, playerAdvantage * 0.6);
+      
+      if (won) {
+        const newGold = account.gold + enemy.rewards.gold;
+        const newRubies = (account.rubies || 0) + enemy.rewards.rubies;
+        await storage.updateAccountGold(accountId, newGold);
+        if (enemy.rewards.rubies > 0) {
+          await storage.updateAccountResources(accountId, { rubies: newRubies });
+        }
+        
+        res.json({
+          result: "victory",
+          enemy,
+          rewards: enemy.rewards,
+          damageDealt: Math.floor(damageToEnemy),
+          damageTaken: Math.floor(damageToPlayer * 0.3),
+          message: `Defeated ${enemy.name}! Earned ${enemy.rewards.gold} gold.`,
+        });
+      } else {
+        res.json({
+          result: "defeat",
+          enemy,
+          damageDealt: Math.floor(damageToEnemy * 0.5),
+          damageTaken: Math.floor(damageToPlayer),
+          message: `Defeated by ${enemy.name}. Try again or find weaker enemies.`,
+        });
+      }
+    } catch (error) {
+      console.error("Zone battle error:", error);
+      res.status(500).json({ error: "Failed to process battle" });
+    }
+  });
+
   return httpServer;
 }
