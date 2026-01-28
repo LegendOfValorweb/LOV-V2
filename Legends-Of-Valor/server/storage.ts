@@ -13,8 +13,8 @@ export interface IStorage {
   updateAccountRank(id: string, rank: PlayerRank): Promise<Account | undefined>;
   updateAccountWins(id: string, wins: number): Promise<Account | undefined>;
   updateAccountLosses(id: string, losses: number): Promise<Account | undefined>;
-  updateAccountResources(id: string, data: Partial<Pick<Account, "rubies" | "soulShards" | "focusedShards" | "pets">>): Promise<Account | undefined>;
-  updateAccount(id: string, data: Partial<Pick<Account, "gold" | "rubies" | "soulShards" | "focusedShards" | "trainingPoints" | "petExp" | "runes" | "pets" | "stats" | "equipped" | "rank" | "wins" | "losses">>): Promise<Account | undefined>;
+  updateAccountResources(id: string, data: Partial<Pick<Account, "rubies" | "soulShards" | "focusedShards" | "pets" | "soulGins" | "beakCoins">>): Promise<Account | undefined>;
+  updateAccount(id: string, data: Partial<Pick<Account, "gold" | "rubies" | "soulShards" | "focusedShards" | "trainingPoints" | "petExp" | "runes" | "pets" | "stats" | "equipped" | "rank" | "wins" | "losses" | "baseTier" | "baseSkin" | "trophies" | "soulGins" | "beakCoins">>): Promise<Account | undefined>;
   capAccountResources(id: string): Promise<void>;
   
   getInventoryByAccount(accountId: string): Promise<InventoryItem[]>;
@@ -49,7 +49,7 @@ export interface IStorage {
   getPet(id: string): Promise<Pet | undefined>;
   getPetsByAccount(accountId: string): Promise<Pet[]>;
   getAllPets(): Promise<Pet[]>;
-  updatePet(id: string, data: Partial<Pick<Pet, "name" | "tier" | "exp" | "stats" | "element" | "elements" | "accountId">>): Promise<Pet | undefined>;
+  updatePet(id: string, data: Partial<Pick<Pet, "name" | "tier" | "exp" | "stats" | "element" | "elements" | "accountId" | "bondLevel" | "rebirthCount" | "personality" | "skin">>): Promise<Pet | undefined>;
   deletePet(id: string): Promise<void>;
   
   updateLastActive(id: string): Promise<void>;
@@ -231,7 +231,7 @@ export class DatabaseStorage implements IStorage {
     return account || undefined;
   }
 
-  async updateAccountResources(id: string, data: Partial<Pick<Account, "rubies" | "soulShards" | "focusedShards" | "pets">>): Promise<Account | undefined> {
+  async updateAccountResources(id: string, data: Partial<Pick<Account, "rubies" | "soulShards" | "focusedShards" | "pets" | "soulGins" | "beakCoins">>): Promise<Account | undefined> {
     const [account] = await db
       .update(accounts)
       .set(data)
@@ -240,7 +240,7 @@ export class DatabaseStorage implements IStorage {
     return account || undefined;
   }
 
-  async updateAccount(id: string, data: Partial<Pick<Account, "gold" | "rubies" | "soulShards" | "focusedShards" | "trainingPoints" | "petExp" | "runes" | "pets" | "stats" | "equipped" | "rank" | "wins" | "losses">>): Promise<Account | undefined> {
+  async updateAccount(id: string, data: Partial<Pick<Account, "gold" | "rubies" | "soulShards" | "focusedShards" | "trainingPoints" | "petExp" | "runes" | "pets" | "stats" | "equipped" | "rank" | "wins" | "losses" | "baseTier" | "baseSkin" | "trophies" | "soulGins" | "beakCoins">>): Promise<Account | undefined> {
     const cap = (val: number | undefined) => val !== undefined ? Math.min(val, Number.MAX_SAFE_INTEGER) : undefined;
     const cappedData = {
       ...data,
@@ -432,7 +432,7 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(pets);
   }
 
-  async updatePet(id: string, data: Partial<Pick<Pet, "name" | "tier" | "exp" | "stats" | "element" | "elements" | "accountId">>): Promise<Pet | undefined> {
+  async updatePet(id: string, data: Partial<Pick<Pet, "name" | "tier" | "exp" | "stats" | "element" | "elements" | "accountId" | "bondLevel" | "rebirthCount" | "personality" | "skin">>): Promise<Pet | undefined> {
     const [pet] = await db.update(pets).set(data).where(eq(pets.id, id)).returning();
     return pet || undefined;
   }

@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Castle, Hammer, Package, Dumbbell, Shield, Sparkles,
-  Coins, ArrowUp, Lock, Home, Palette, Trophy
+  Coins, ArrowUp, Lock, Home, Palette, Trophy, Swords, Users, Calendar
 } from "lucide-react";
 import { useGame } from "@/lib/game-context";
 import { useToast } from "@/hooks/use-toast";
@@ -156,8 +156,19 @@ interface TrophyData {
 
 export default function Base() {
   const [, navigate] = useLocation();
-  const { account, refetch: refetchAccount } = useGame();
+  const { account, setAccount } = useGame();
   const { toast } = useToast();
+  
+  const refetchAccount = async () => {
+    if (!account?.id) return;
+    try {
+      const res = await fetch(`/api/accounts/${account.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAccount(data);
+      }
+    } catch (e) {}
+  };
   const [skinDialog, setSkinDialog] = useState(false);
   const [trophyDialog, setTrophyDialog] = useState(false);
   const [isUpgrading, setIsUpgrading] = useState(false);
@@ -188,6 +199,54 @@ export default function Base() {
     },
     enabled: !!account?.id,
   });
+
+  const { data: raidEvents = [] } = useQuery<any[]>({
+    queryKey: ["/api/base-raids"],
+    queryFn: async () => {
+      const res = await fetch("/api/base-raids");
+      return res.json();
+    },
+  });
+
+  const { data: weeklyEvent } = useQuery<{ active: any, allEvents: any[], nextEventIn: number }>({
+    queryKey: ["/api/weekly-events"],
+    queryFn: async () => {
+      const res = await fetch("/api/weekly-events");
+      return res.json();
+    },
+  });
+
+  const [isRaiding, setIsRaiding] = useState(false);
+  const [raidResult, setRaidResult] = useState<any>(null);
+  const [visitDialog, setVisitDialog] = useState(false);
+  const [visitingPlayer, setVisitingPlayer] = useState("");
+  const [visitorData, setVisitorData] = useState<any>(null);
+  const [isLoadingVisit, setIsLoadingVisit] = useState(false);
+
+  const { data: onlinePlayers = [] } = useQuery<any[]>({
+    queryKey: ["/api/online-players"],
+    queryFn: async () => {
+      const res = await fetch("/api/online-players");
+      return res.json();
+    },
+  });
+
+  const handleVisitBase = async (playerId: string) => {
+    setIsLoadingVisit(true);
+    try {
+      const res = await fetch(`/api/accounts/${playerId}/visitors?visitorId=${account?.id}`);
+      const data = await res.json();
+      setVisitorData(data);
+    } catch (error) {
+      toast({
+        title: "Visit Failed",
+        description: "Could not load base data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingVisit(false);
+    }
+  };
 
   if (!account) {
     navigate("/");
@@ -253,6 +312,31 @@ export default function Base() {
       });
     } finally {
       setIsSettingSkin(false);
+    }
+  };
+
+  const handleTriggerRaid = async () => {
+    if (!account) return;
+    setIsRaiding(true);
+    setRaidResult(null);
+    try {
+      const res = await apiRequest("POST", `/api/accounts/${account.id}/trigger-raid`, {});
+      const data = await res.json();
+      setRaidResult(data);
+      toast({
+        title: data.result === "victory" ? "Raid Defended!" : data.result === "defeat" ? "Raid Failed!" : "No Raid",
+        description: data.message,
+        variant: data.result === "defeat" ? "destructive" : "default",
+      });
+      refetchAccount();
+    } catch (error: any) {
+      toast({
+        title: "Raid Error",
+        description: error.message || "Could not trigger raid",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRaiding(false);
     }
   };
 
@@ -337,7 +421,8 @@ export default function Base() {
               <TabsList className="w-full">
                 <TabsTrigger value="rooms" className="flex-1">Rooms</TabsTrigger>
                 <TabsTrigger value="defenses" className="flex-1">Defenses</TabsTrigger>
-                <TabsTrigger value="automation" className="flex-1">Automation</TabsTrigger>
+                <TabsTrigger value="raids" className="flex-1">Raids</TabsTrigger>
+                <TabsTrigger value="events" className="flex-1">Events</TabsTrigger>
               </TabsList>
               
               <TabsContent value="rooms" className="mt-4">
@@ -422,6 +507,116 @@ export default function Base() {
                           <Lock className="w-3 h-3 mr-1" /> Tier 4
                         </Button>
                       </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="raids" className="mt-4">
+                <Card>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-serif text-lg font-semibold flex items-center gap-2">
+                        <Swords className="w-5 h-5 text-red-500" />
+                        NPC Raids
+                      </h3>
+                      <Button 
+                        onClick={handleTriggerRaid} 
+                        disabled={isRaiding}
+                        variant="destructive"
+                      >
+                        {isRaiding ? "Defending..." : "Trigger Raid"}
+                      </Button>
+                    </div>
+                    
+                    {raidResult && (
+                      <div className={`p-4 rounded-lg mb-4 ${raidResult.result === "victory" ? "bg-green-500/10 border border-green-500/30" : "bg-red-500/10 border border-red-500/30"}`}>
+                        <p className="font-medium">{raidResult.message}</p>
+                        {raidResult.rewards && (
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Rewards: {raidResult.rewards.gold.toLocaleString()} gold, {raidResult.rewards.exp} exp
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="space-y-3">
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Raids scale with your Mystic Tower progress. Higher floors unlock harder raids with better rewards.
+                      </p>
+                      {raidEvents.map((raid: any) => (
+                        <div key={raid.id} className="p-3 rounded-lg bg-secondary/50 flex justify-between items-center">
+                          <div>
+                            <p className="font-medium">{raid.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Unlocks at Tower Floor {raid.minTowerFloor} | Difficulty: {"⭐".repeat(raid.difficulty)}
+                            </p>
+                          </div>
+                          <div className="text-right text-sm">
+                            <p className="text-yellow-500">{raid.rewards.gold.toLocaleString()} gold</p>
+                            <p className="text-blue-500">{raid.rewards.exp} exp</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="events" className="mt-4">
+                <Card>
+                  <CardContent className="p-6">
+                    <h3 className="font-serif text-lg font-semibold flex items-center gap-2 mb-4">
+                      <Calendar className="w-5 h-5 text-purple-500" />
+                      Weekly Events
+                    </h3>
+                    
+                    {weeklyEvent?.active && (
+                      <div className={`p-4 rounded-lg mb-4 ${weeklyEvent.active.type === "hero" ? "bg-yellow-500/10 border border-yellow-500/30" : "bg-purple-500/10 border border-purple-500/30"}`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Badge variant={weeklyEvent.active.type === "hero" ? "default" : "secondary"}>
+                            {weeklyEvent.active.type === "hero" ? "Hero Event" : "Joker Event"}
+                          </Badge>
+                          <span className="font-semibold">{weeklyEvent.active.name}</span>
+                        </div>
+                        <p className="text-sm">{weeklyEvent.active.description}</p>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Next event in: {Math.floor(weeklyEvent.nextEventIn / (1000 * 60 * 60 * 24))} days
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-medium text-muted-foreground">All Weekly Events</h4>
+                      {weeklyEvent?.allEvents?.map((event: any) => (
+                        <div 
+                          key={event.id} 
+                          className={`p-3 rounded-lg bg-secondary/50 ${event.id === weeklyEvent.active?.id ? "ring-2 ring-primary" : ""}`}
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge variant={event.type === "hero" ? "default" : "outline"} className="text-xs">
+                              {event.type === "hero" ? "Hero" : "Joker"}
+                            </Badge>
+                            <span className="font-medium">{event.name}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">{event.description}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Users className="w-4 h-4 text-blue-500" />
+                          <span className="font-medium">Visitor System</span>
+                        </div>
+                        <Button size="sm" variant="outline" onClick={() => setVisitDialog(true)}>
+                          Visit Player Base
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Visit other players' bases to see their trophies (80% visible). Upgrade your base to impress visitors!
+                      </p>
                     </div>
                   </CardContent>
                 </Card>
@@ -586,6 +781,101 @@ export default function Base() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setTrophyDialog(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={visitDialog} onOpenChange={(open) => { setVisitDialog(open); if (!open) setVisitorData(null); }}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-blue-500" />
+                Visit Player Base
+              </DialogTitle>
+              <DialogDescription>
+                Select a player to visit their base and see their trophies (80% visibility).
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {!visitorData ? (
+                <>
+                  <p className="text-sm text-muted-foreground">Online Players:</p>
+                  <div className="grid gap-2 max-h-60 overflow-y-auto">
+                    {onlinePlayers.filter((p: any) => p.id !== account?.id).length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No other players online</p>
+                    ) : (
+                      onlinePlayers.filter((p: any) => p.id !== account?.id).map((player: any) => (
+                        <Button
+                          key={player.id}
+                          variant="outline"
+                          className="justify-between"
+                          onClick={() => handleVisitBase(player.id)}
+                          disabled={isLoadingVisit}
+                        >
+                          <span>{player.username}</span>
+                          <Badge variant="outline">{player.rank}</Badge>
+                        </Button>
+                      ))
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-lg bg-gradient-to-r from-primary/10 to-secondary/10 border">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-semibold text-lg">{visitorData.ownerName}'s Base</h3>
+                      <Badge>{visitorData.ownerRank}</Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Race:</span>
+                        <span className="ml-2 capitalize">{visitorData.ownerRace}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Base Tier:</span>
+                        <span className="ml-2">{visitorData.baseTier}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Base Skin:</span>
+                        <span className="ml-2 capitalize">{visitorData.baseSkin}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Total Trophies:</span>
+                        <span className="ml-2">{visitorData.trophyCount}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-medium flex items-center gap-2">
+                        <Trophy className="w-4 h-4 text-yellow-500" />
+                        Visible Trophies
+                      </h4>
+                      <span className="text-xs text-muted-foreground">{visitorData.visibilityNote}</span>
+                    </div>
+                    {visitorData.trophies?.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No trophies visible</p>
+                    ) : (
+                      <div className="grid gap-2 max-h-40 overflow-y-auto">
+                        {visitorData.trophies?.map((trophyId: string) => (
+                          <div key={trophyId} className="p-2 rounded bg-yellow-500/10 border border-yellow-500/30 flex items-center gap-2">
+                            <Trophy className="w-4 h-4 text-yellow-500" />
+                            <span className="text-sm capitalize">{trophyId.replace(/_/g, " ")}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <Button variant="outline" onClick={() => setVisitorData(null)} className="w-full">
+                    Back to Player List
+                  </Button>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setVisitDialog(false); setVisitorData(null); }}>Close</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

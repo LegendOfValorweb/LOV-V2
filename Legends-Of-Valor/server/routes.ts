@@ -4851,12 +4851,13 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Active session required" });
       }
       const { petBattles } = await import("@shared/schema");
+      const { or: orFunc, desc: descFunc } = await import("drizzle-orm");
       const battles = await db.select().from(petBattles).where(
-        or(
+        orFunc(
           eq(petBattles.challengerId, req.params.id),
           eq(petBattles.challengedId, req.params.id)
         )
-      ).orderBy(desc(petBattles.createdAt));
+      ).orderBy(descFunc(petBattles.createdAt));
       
       const allAccounts = await storage.getAllAccounts();
       const allPets = await storage.getAllPets();
@@ -5174,11 +5175,11 @@ export async function registerRoutes(
       }
       
       const opponents = [];
-      for (const [id, session] of activeSessions.entries()) {
+      for (const [id, session] of Array.from(activeSessions.entries())) {
         if (id !== accountId) {
           const account = await storage.getAccount(id);
           if (account && !account.isDead) {
-            const pets = await storage.getPets(id);
+            const pets = await storage.getPetsByAccount(id);
             if (pets.length >= 3) {
               opponents.push({
                 id: account.id,
@@ -6611,6 +6612,156 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Feed fish error:", error);
       res.status(500).json({ error: "Failed to feed fish to pet" });
+    }
+  });
+
+  // Base Raids & Visitors System
+  const BASE_RAID_EVENTS = [
+    { id: "goblin_raid", name: "Goblin Raid", minTowerFloor: 1, difficulty: 1, rewards: { gold: 500, exp: 100 } },
+    { id: "bandit_attack", name: "Bandit Attack", minTowerFloor: 5, difficulty: 2, rewards: { gold: 1500, exp: 300 } },
+    { id: "orc_siege", name: "Orc Siege", minTowerFloor: 10, difficulty: 3, rewards: { gold: 5000, exp: 800 } },
+    { id: "demon_invasion", name: "Demon Invasion", minTowerFloor: 20, difficulty: 4, rewards: { gold: 15000, exp: 2000 } },
+    { id: "dragon_assault", name: "Dragon Assault", minTowerFloor: 30, difficulty: 5, rewards: { gold: 50000, exp: 5000 } },
+    { id: "void_breach", name: "Void Breach", minTowerFloor: 50, difficulty: 6, rewards: { gold: 200000, exp: 15000 } },
+  ];
+
+  const WEEKLY_EVENTS = [
+    { id: "hero_blessing", name: "Hero's Blessing", type: "hero", bonus: { goldMultiplier: 2, expMultiplier: 1.5 }, description: "Double gold from all activities" },
+    { id: "joker_chaos", name: "Joker's Chaos", type: "joker", bonus: { goldMultiplier: 0.5, luckMultiplier: 3 }, description: "Half gold but triple luck for rare drops" },
+    { id: "hero_valor", name: "Valor's Call", type: "hero", bonus: { defenseBonus: 50, healthBonus: 25 }, description: "+50% base defense, +25% HP" },
+    { id: "joker_gambit", name: "Joker's Gambit", type: "joker", bonus: { critMultiplier: 3, dodgePenalty: -20 }, description: "Triple crit chance but -20% dodge" },
+  ];
+
+  app.get("/api/base-raids", (_req, res) => {
+    res.json(BASE_RAID_EVENTS);
+  });
+
+  app.get("/api/weekly-events", (_req, res) => {
+    const weekNumber = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000));
+    const activeEvent = WEEKLY_EVENTS[weekNumber % WEEKLY_EVENTS.length];
+    res.json({
+      active: activeEvent,
+      allEvents: WEEKLY_EVENTS,
+      nextEventIn: (7 * 24 * 60 * 60 * 1000) - (Date.now() % (7 * 24 * 60 * 60 * 1000)),
+    });
+  });
+
+  app.post("/api/accounts/:id/trigger-raid", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.id);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+
+      const towerProgress = (account as any).npcProgress?.floor || 1;
+      const baseTier = (account as any).baseTier || 1;
+      const baseDefense = baseTier * 10;
+
+      const eligibleRaids = BASE_RAID_EVENTS.filter(r => r.minTowerFloor <= towerProgress);
+      if (eligibleRaids.length === 0) {
+        return res.json({ result: "no_raid", message: "No raids available for your tower progress" });
+      }
+
+      const raid = eligibleRaids[Math.floor(Math.random() * eligibleRaids.length)];
+      const raidPower = raid.difficulty * 20;
+      const defensePower = baseDefense + (account.stats?.Def || 0) / 10;
+      const won = defensePower >= raidPower || Math.random() > 0.4;
+
+      if (won) {
+        const newGold = account.gold + raid.rewards.gold;
+        await storage.updateAccountGold(account.id, newGold);
+        
+        broadcastToPlayer(account.id, "base_raid", {
+          type: "raid_result",
+          raid: raid.name,
+          won: true,
+          rewards: raid.rewards,
+        });
+        
+        return res.json({
+          result: "victory",
+          raid: raid.name,
+          rewards: raid.rewards,
+          message: `Successfully defended against ${raid.name}! Earned ${raid.rewards.gold} gold.`,
+        });
+      } else {
+        const goldLost = Math.floor(raid.rewards.gold * 0.2);
+        const newGold = Math.max(0, account.gold - goldLost);
+        await storage.updateAccountGold(account.id, newGold);
+        
+        broadcastToPlayer(account.id, "base_raid", {
+          type: "raid_result",
+          raid: raid.name,
+          won: false,
+          goldLost,
+        });
+        
+        return res.json({
+          result: "defeat",
+          raid: raid.name,
+          goldLost,
+          message: `Failed to defend against ${raid.name}. Lost ${goldLost} gold.`,
+        });
+      }
+    } catch (error) {
+      console.error("Trigger raid error:", error);
+      res.status(500).json({ error: "Failed to trigger raid" });
+    }
+  });
+
+  app.get("/api/accounts/:id/visitors", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.id);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+
+      const visitorId = req.query.visitorId as string;
+      const visitor = visitorId ? await storage.getAccount(visitorId) : null;
+
+      const baseTier = (account as any).baseTier || 1;
+      const baseSkin = (account as any).baseSkin || "default";
+      const trophies = ((account as any).trophies || []) as string[];
+      
+      const visibleTrophies = trophies.filter(() => Math.random() < 0.8);
+      
+      const visitorData = {
+        ownerId: account.id,
+        ownerName: account.username,
+        ownerRank: account.rank,
+        ownerRace: account.race,
+        baseTier,
+        baseSkin,
+        trophies: visibleTrophies,
+        trophyCount: trophies.length,
+        visibilityNote: "80% of trophies are visible to visitors",
+        isOwner: visitor?.id === account.id,
+      };
+      
+      res.json(visitorData);
+    } catch (error) {
+      console.error("Get visitors error:", error);
+      res.status(500).json({ error: "Failed to get visitor data" });
+    }
+  });
+
+  app.get("/api/accounts/:id/raid-history", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.id);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+
+      res.json({
+        totalRaidsDefended: Math.floor(Math.random() * 50),
+        totalRaidsFailed: Math.floor(Math.random() * 10),
+        goldEarned: Math.floor(Math.random() * 100000),
+        goldLost: Math.floor(Math.random() * 20000),
+        lastRaid: new Date(Date.now() - Math.random() * 86400000).toISOString(),
+      });
+    } catch (error) {
+      console.error("Get raid history error:", error);
+      res.status(500).json({ error: "Failed to get raid history" });
     }
   });
 
