@@ -34,8 +34,73 @@ export type Item = z.infer<typeof itemSchema>;
 export const accountRoles = ["player", "admin"] as const;
 export type AccountRole = typeof accountRoles[number];
 
-export const playerRanks = ["Novice", "Apprentice", "Journeyman", "Expert", "Master", "Grandmaster", "Legend", "Elite"] as const;
+// V2: Expanded 15-rank system with quintillion-safe power scaling
+export const playerRanks = [
+  "Novice",           // Rank 1 - Beginner tier (1-10K power)
+  "Apprentice",       // Rank 2
+  "Initiate",         // Rank 3
+  "Journeyman",       // Rank 4 - Intermediate tier (10K-10M power)
+  "Adept",            // Rank 5
+  "Expert",           // Rank 6
+  "Master",           // Rank 7 - Advanced tier (10M-10B power)
+  "Grandmaster",      // Rank 8
+  "Champion",         // Rank 9
+  "Overlord",         // Rank 10 - Mastery tier (10B-10T power)
+  "Sovereign",        // Rank 11
+  "Ascendant",        // Rank 12
+  "Legend",           // Rank 13 - Legendary tier (10T-9Q power)
+  "Mythic",           // Rank 14
+  "Mythical Legend",  // Rank 15 - Max rank
+] as const;
 export type PlayerRank = typeof playerRanks[number];
+
+// V2: 14 Playable Races with stat modifiers
+export const playerRaces = [
+  "human",      // Balanced growth, adaptable builds
+  "elf",        // High elemental/magic affinity, speed bonuses
+  "dwarf",      // High defense, crafting and mining bonuses
+  "orc",        // Strength and vitality focused, combat bonuses
+  "beastfolk",  // Speed, crit, hunting and gathering bonuses
+  "mystic",     // Nature magic, regeneration, pet synergy
+  "fae",        // Luck, trick mechanics, illusion bonuses
+  "elemental",  // Strong elemental affinity matching chosen element
+  "undead",     // Curse resistance, death-related bonuses
+  "demon",      // High risk/high reward power scaling
+  "draconic",   // Elemental breath, stat scaling with rank
+  "celestial",  // Support, buffs, light affinity
+  "aquatic",    // Water affinity, fishing and coastal bonuses
+  "titan",      // Massive strength and defense scaling (rare unlock)
+] as const;
+export type PlayerRace = typeof playerRaces[number];
+
+export const playerGenders = ["male", "female"] as const;
+export type PlayerGender = typeof playerGenders[number];
+
+// Race stat modifiers (affects base stat growth)
+export const raceModifiers: Record<PlayerRace, {
+  Str: number;
+  Def: number;
+  Spd: number;
+  Int: number;
+  Luck: number;
+  description: string;
+  element?: string;
+}> = {
+  human: { Str: 1.0, Def: 1.0, Spd: 1.0, Int: 1.0, Luck: 1.0, description: "Balanced growth, adaptable builds" },
+  elf: { Str: 0.9, Def: 0.85, Spd: 1.15, Int: 1.2, Luck: 1.0, description: "High elemental/magic affinity, speed bonuses", element: "Nature" },
+  dwarf: { Str: 1.1, Def: 1.2, Spd: 0.85, Int: 0.95, Luck: 1.0, description: "High defense, crafting and mining bonuses", element: "Earth" },
+  orc: { Str: 1.2, Def: 1.1, Spd: 0.95, Int: 0.85, Luck: 0.9, description: "Strength and vitality focused, combat bonuses" },
+  beastfolk: { Str: 1.0, Def: 0.9, Spd: 1.2, Int: 0.9, Luck: 1.1, description: "Speed, crit, hunting and gathering bonuses" },
+  mystic: { Str: 0.85, Def: 0.9, Spd: 1.0, Int: 1.15, Luck: 1.1, description: "Nature magic, regeneration, pet synergy", element: "Nature" },
+  fae: { Str: 0.8, Def: 0.85, Spd: 1.1, Int: 1.1, Luck: 1.2, description: "Luck, trick mechanics, illusion bonuses", element: "Light" },
+  elemental: { Str: 1.0, Def: 1.0, Spd: 1.0, Int: 1.15, Luck: 0.95, description: "Strong elemental affinity matching chosen element" },
+  undead: { Str: 1.05, Def: 1.1, Spd: 0.9, Int: 1.0, Luck: 0.95, description: "Curse resistance, death-related bonuses", element: "Dark" },
+  demon: { Str: 1.15, Def: 0.9, Spd: 1.05, Int: 1.1, Luck: 0.85, description: "High risk/high reward power scaling", element: "Dark" },
+  draconic: { Str: 1.15, Def: 1.1, Spd: 0.95, Int: 1.0, Luck: 0.9, description: "Elemental breath, stat scaling with rank", element: "Fire" },
+  celestial: { Str: 0.9, Def: 1.0, Spd: 1.0, Int: 1.15, Luck: 1.05, description: "Support, buffs, light affinity", element: "Light" },
+  aquatic: { Str: 0.95, Def: 1.0, Spd: 1.1, Int: 1.0, Luck: 1.05, description: "Water affinity, fishing and coastal bonuses", element: "Water" },
+  titan: { Str: 1.2, Def: 1.2, Spd: 0.8, Int: 0.9, Luck: 0.9, description: "Massive strength and defense scaling (rare unlock)", element: "Earth" },
+};
 
 export const playerStatsSchema = z.object({
   Str: z.number().default(10),
@@ -62,6 +127,10 @@ export const accounts = pgTable("accounts", {
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   role: text("role").notNull().$type<AccountRole>(),
+  // V2: Race and gender selection (permanent, max 2 players per race)
+  race: text("race").$type<PlayerRace>(),
+  gender: text("gender").$type<PlayerGender>(),
+  portrait: text("portrait"), // Static portrait identifier
   gold: bigint("gold", { mode: "number" }).notNull().default(10000),
   rubies: bigint("rubies", { mode: "number" }).notNull().default(0),
   soulShards: bigint("soul_shards", { mode: "number" }).notNull().default(0),
@@ -69,6 +138,10 @@ export const accounts = pgTable("accounts", {
   trainingPoints: bigint("training_points", { mode: "number" }).notNull().default(0),
   petExp: bigint("pet_exp", { mode: "number" }).notNull().default(0),
   runes: bigint("runes", { mode: "number" }).notNull().default(0),
+  // V2: New currencies
+  soulGins: bigint("soul_gins", { mode: "number" }).notNull().default(0), // For pet training
+  beakCoins: bigint("beak_coins", { mode: "number" }).notNull().default(0), // For bird training
+  valorTokens: bigint("valor_tokens", { mode: "number" }).notNull().default(0), // Premium currency ($Valor)
   pets: jsonb("pets").notNull().default([]).$type<string[]>(),
   rank: text("rank").notNull().default("Novice").$type<PlayerRank>(),
   wins: integer("wins").notNull().default(0),
@@ -79,6 +152,9 @@ export const accounts = pgTable("accounts", {
   npcLevel: integer("npc_level").notNull().default(1),
   equippedPetId: varchar("equipped_pet_id"),
   lastActive: timestamp("last_active").defaultNow(),
+  // V2: Story progression tracking
+  storyAct: integer("story_act").notNull().default(1), // Current story act (1-4)
+  storyCheckpoint: text("story_checkpoint"), // Current story checkpoint
 });
 
 export const inventoryItems = pgTable("inventory_items", {

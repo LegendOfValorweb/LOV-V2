@@ -2,13 +2,16 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, petElements, type GuildBank } from "@shared/schema";
+import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, petElements, type GuildBank, playerRaces, playerGenders, raceModifiers, accounts } from "@shared/schema";
 import { z } from "zod";
-import type { Account, Event, Challenge } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import type { Account, Event, Challenge, PlayerRace, PlayerGender } from "@shared/schema";
+import { eq, sql } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
-const MAX_PLAYERS = 20;
+// V2: Max 32 players per server
+const MAX_PLAYERS = 32;
+// V2: Max 2 players per race
+const MAX_PLAYERS_PER_RACE = 2;
 const SESSION_TIMEOUT = 5 * 60 * 1000; // 5 minutes of inactivity
 const SLEEP_TIMEOUT = 10 * 60 * 1000; // 10 minutes of inactivity to sleep the app
 
@@ -159,15 +162,55 @@ export async function registerRoutes(
     });
   });
 
+  // V2: Get available races (with player counts)
+  app.get("/api/races/availability", async (req, res) => {
+    try {
+      // Count players per race
+      const raceCounts = await db.select({
+        race: accounts.race,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(accounts)
+      .where(sql`${accounts.race} IS NOT NULL AND ${accounts.role} = 'player'`)
+      .groupBy(accounts.race);
+
+      const availability: Record<string, { count: number; available: boolean; maxPlayers: number }> = {};
+      
+      for (const race of playerRaces) {
+        const raceData = raceCounts.find(r => r.race === race);
+        const count = raceData?.count || 0;
+        availability[race] = {
+          count,
+          available: count < MAX_PLAYERS_PER_RACE,
+          maxPlayers: MAX_PLAYERS_PER_RACE,
+        };
+      }
+
+      res.json({
+        races: playerRaces,
+        genders: playerGenders,
+        raceModifiers,
+        availability,
+        maxPlayersPerRace: MAX_PLAYERS_PER_RACE,
+      });
+    } catch (error) {
+      console.error("Error getting race availability:", error);
+      res.status(500).json({ error: "Failed to get race availability" });
+    }
+  });
+
   app.post("/api/accounts/login", async (req, res) => {
     try {
       const loginSchema = z.object({
         username: z.string(),
         password: z.string(),
         role: z.enum(["player", "admin"]),
+        // V2: Race and gender for new player accounts
+        race: z.enum(playerRaces).optional(),
+        gender: z.enum(playerGenders).optional(),
       });
       
-      const { username, password, role } = loginSchema.parse(req.body);
+      const { username, password, role, race, gender } = loginSchema.parse(req.body);
       
       cleanupInactiveSessions();
       
@@ -208,6 +251,46 @@ export async function registerRoutes(
           maxPlayers: MAX_PLAYERS,
         });
       }
+
+      // V2: Validate race selection for new player accounts
+      if (role === "player") {
+        if (!race || !gender) {
+          return res.status(400).json({ 
+            error: "Race and gender required",
+            message: "Please select a race and gender for your character.",
+          });
+        }
+
+        // Check if the selected race is still available (max 2 per race)
+        const raceCount = await db.select({
+          count: sql<number>`count(*)::int`,
+        })
+        .from(accounts)
+        .where(sql`${accounts.race} = ${race} AND ${accounts.role} = 'player'`);
+
+        if (raceCount[0]?.count >= MAX_PLAYERS_PER_RACE) {
+          return res.status(409).json({ 
+            error: "Race unavailable",
+            message: `The ${race} race already has ${MAX_PLAYERS_PER_RACE} players. Please choose another race.`,
+          });
+        }
+      }
+
+      // V2: Calculate race-based starting stats
+      const baseStats = { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 };
+      let startingStats = baseStats;
+      
+      if (role === "player" && race) {
+        const modifier = raceModifiers[race];
+        startingStats = {
+          Str: Math.round(baseStats.Str * modifier.Str),
+          Def: Math.round(baseStats.Def * modifier.Def),
+          Spd: Math.round(baseStats.Spd * modifier.Spd),
+          Int: Math.round(baseStats.Int * modifier.Int),
+          Luck: Math.round(baseStats.Luck * modifier.Luck),
+          Pot: 0,
+        };
+      }
       
       const hashedPassword = await bcrypt.hash(password, 10);
       const account = await storage.createAccount({
@@ -215,6 +298,10 @@ export async function registerRoutes(
         password: hashedPassword,
         role,
         gold: role === "player" ? 10000 : 0,
+        race: role === "player" ? race : undefined,
+        gender: role === "player" ? gender : undefined,
+        portrait: role === "player" ? `${race}_${gender}_default` : undefined,
+        stats: startingStats,
       });
       
       activeSessions.set(account.id, {

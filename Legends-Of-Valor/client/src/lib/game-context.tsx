@@ -23,7 +23,7 @@ interface GameContextType {
   spendGold: (amount: number) => boolean;
   addGold: (amount: number) => void;
   logout: () => void;
-  login: (username: string, password: string, role: "player" | "admin") => Promise<{ account: Account | null; error?: string }>;
+  login: (username: string, password: string, role: "player" | "admin", race?: string, gender?: string) => Promise<{ account: Account | null; error?: string; needsRaceSelection?: boolean }>;
   refreshInventory: () => Promise<void>;
 }
 
@@ -95,41 +95,78 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = useCallback(async (username: string, _password: string, role: "player" | "admin") => {
-    const savedAccount = localStorage.getItem(ACCOUNT_STORAGE_PREFIX + username);
-    let acc: Account;
+  const login = useCallback(async (username: string, _password: string, role: "player" | "admin", race?: string, gender?: string) => {
+    try {
+      // Try API login first
+      const response = await fetch("/api/accounts/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password: _password, role, race, gender }),
+      });
 
-    if (savedAccount) {
-      acc = JSON.parse(savedAccount);
-    } else {
-      acc = {
-        id: Math.floor(Math.random() * 1000000).toString(),
-        username,
-        password: _password,
-        role,
-        gold: 10000,
-        rubies: 0,
-        soulShards: 0,
-        focusedShards: 0,
-        trainingPoints: 100,
-        petExp: 0,
-        runes: 0,
-        pets: [],
-        rank: "Novice",
-        wins: 0,
-        losses: 0,
-        stats: { Str: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 },
-        equipped: { weapon: null, armor: null, accessory1: null, accessory2: null },
-        npcFloor: 1,
-        npcLevel: 1,
-        equippedPetId: null,
-        lastActive: new Date()
-      } as Account;
+      if (response.ok) {
+        const acc = await response.json();
+        setAccount(acc);
+        localStorage.setItem(SESSION_KEY, JSON.stringify({ username: acc.username }));
+        localStorage.setItem(ACCOUNT_STORAGE_PREFIX + acc.username, JSON.stringify(acc));
+        syncToGlobal(acc);
+        return { account: acc };
+      }
+
+      const errorData = await response.json();
+      
+      // Check if race/gender is required for new account
+      if (response.status === 400 && errorData.error === "Race and gender required") {
+        return { account: null, needsRaceSelection: true };
+      }
+
+      return { account: null, error: errorData.message || errorData.error || "Login failed" };
+    } catch (error) {
+      // Fallback to localStorage for offline/static mode
+      console.log("API unavailable, using localStorage fallback");
+      const savedAccount = localStorage.getItem(ACCOUNT_STORAGE_PREFIX + username);
+      let acc: Account;
+
+      if (savedAccount) {
+        acc = JSON.parse(savedAccount);
+      } else {
+        acc = {
+          id: Math.floor(Math.random() * 1000000).toString(),
+          username,
+          password: _password,
+          role,
+          race: null,
+          gender: null,
+          portrait: null,
+          gold: 10000,
+          rubies: 0,
+          soulShards: 0,
+          focusedShards: 0,
+          trainingPoints: 100,
+          petExp: 0,
+          runes: 0,
+          soulGins: 0,
+          beakCoins: 0,
+          valorTokens: 0,
+          pets: [],
+          rank: "Novice",
+          wins: 0,
+          losses: 0,
+          stats: { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 },
+          equipped: { weapon: null, armor: null, accessory1: null, accessory2: null },
+          npcFloor: 1,
+          npcLevel: 1,
+          equippedPetId: null,
+          lastActive: new Date(),
+          storyAct: 1,
+          storyCheckpoint: null,
+        } as Account;
+      }
+
+      setAccount(acc);
+      loadAccountData(username);
+      return { account: acc };
     }
-
-    setAccount(acc);
-    loadAccountData(username);
-    return { account: acc };
   }, [setAccount]);
 
   const logout = useCallback(() => {
