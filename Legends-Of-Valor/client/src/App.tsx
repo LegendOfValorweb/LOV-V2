@@ -24,6 +24,7 @@ import Birds from "@/pages/birds";
 import Fishing from "@/pages/fishing";
 import WorldMap from "@/pages/world-map";
 import Base from "@/pages/base";
+import PetArena from "@/pages/pet-arena";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -46,6 +47,7 @@ function Router() {
       <Route path="/fishing" component={Fishing} />
       <Route path="/world-map" component={WorldMap} />
       <Route path="/base" component={Base} />
+      <Route path="/pet-arena" component={PetArena} />
       <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>

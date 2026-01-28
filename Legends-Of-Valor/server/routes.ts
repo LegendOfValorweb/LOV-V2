@@ -4449,6 +4449,364 @@ export async function registerRoutes(
   });
 
   // =============================================
+  // PET PVP BATTLES (3v3 TURN-BASED)
+  // =============================================
+  
+  // Get player's pet battle challenges (pending, active, completed)
+  app.get("/api/accounts/:id/pet-battles", async (req, res) => {
+    try {
+      const session = activeSessions.get(req.params.id);
+      if (!session) {
+        return res.status(401).json({ error: "Active session required" });
+      }
+      const { petBattles } = await import("@shared/schema");
+      const battles = await db.select().from(petBattles).where(
+        or(
+          eq(petBattles.challengerId, req.params.id),
+          eq(petBattles.challengedId, req.params.id)
+        )
+      ).orderBy(desc(petBattles.createdAt));
+      
+      const allAccounts = await storage.getAllAccounts();
+      const allPets = await storage.getAllPets();
+      
+      const battlesWithDetails = battles.map(battle => {
+        const challenger = allAccounts.find(a => a.id === battle.challengerId);
+        const challenged = allAccounts.find(a => a.id === battle.challengedId);
+        
+        const challengerPetDetails = battle.challengerPets.map(petId => 
+          allPets.find(p => p.id === petId)
+        ).filter(Boolean);
+        
+        const challengedPetDetails = battle.challengedPets.map(petId => 
+          allPets.find(p => p.id === petId)
+        ).filter(Boolean);
+        
+        return {
+          ...battle,
+          challengerName: challenger?.username || "Unknown",
+          challengedName: challenged?.username || "Unknown",
+          challengerPetDetails,
+          challengedPetDetails,
+        };
+      });
+      
+      res.json(battlesWithDetails);
+    } catch (error) {
+      console.error("Failed to fetch pet battles:", error);
+      res.status(500).json({ error: "Failed to fetch pet battles" });
+    }
+  });
+  
+  // Challenge another player to a pet battle (3v3)
+  app.post("/api/pet-battles/challenge", async (req, res) => {
+    try {
+      const challengeSchema = z.object({
+        challengerId: z.string(),
+        challengedId: z.string(),
+        challengerPets: z.array(z.string()).length(3),
+        goldWager: z.number().min(0).default(0),
+      });
+      const { challengerId, challengedId, challengerPets, goldWager } = challengeSchema.parse(req.body);
+      
+      const session = activeSessions.get(challengerId);
+      if (!session) {
+        return res.status(401).json({ error: "Active session required" });
+      }
+      
+      const challenger = await storage.getAccount(challengerId);
+      const challenged = await storage.getAccount(challengedId);
+      
+      if (!challenger || !challenged) {
+        return res.status(404).json({ error: "Player not found" });
+      }
+      
+      if (challenger.isDead) {
+        return res.status(400).json({ error: "Cannot challenge while dead" });
+      }
+      
+      if (goldWager > challenger.gold) {
+        return res.status(400).json({ error: "Not enough gold for wager" });
+      }
+      
+      // Verify challenger owns the pets
+      const allPets = await storage.getAllPets();
+      for (const petId of challengerPets) {
+        const pet = allPets.find(p => p.id === petId && p.accountId === challengerId);
+        if (!pet) {
+          return res.status(400).json({ error: "You don't own one of the selected pets" });
+        }
+      }
+      
+      const { petBattles } = await import("@shared/schema");
+      const [battle] = await db.insert(petBattles).values({
+        challengerId,
+        challengedId,
+        challengerPets,
+        goldWager,
+        status: "pending",
+      }).returning();
+      
+      // Notify challenged player
+      broadcastToPlayer(challengedId, "petBattleChallenge", {
+        battle,
+        challengerName: challenger.username,
+        goldWager,
+      });
+      
+      res.json(battle);
+    } catch (error) {
+      console.error("Failed to create pet battle:", error);
+      res.status(500).json({ error: "Failed to create pet battle challenge" });
+    }
+  });
+  
+  // Respond to a pet battle challenge (accept or decline)
+  app.patch("/api/pet-battles/:battleId/respond", async (req, res) => {
+    try {
+      const responseSchema = z.object({
+        accountId: z.string(),
+        accept: z.boolean(),
+        challengedPets: z.array(z.string()).optional(),
+      });
+      const { accountId, accept, challengedPets } = responseSchema.parse(req.body);
+      
+      const session = activeSessions.get(accountId);
+      if (!session) {
+        return res.status(401).json({ error: "Active session required" });
+      }
+      
+      const { petBattles } = await import("@shared/schema");
+      const [battle] = await db.select().from(petBattles).where(eq(petBattles.id, req.params.battleId));
+      
+      if (!battle) {
+        return res.status(404).json({ error: "Battle not found" });
+      }
+      
+      if (battle.challengedId !== accountId) {
+        return res.status(403).json({ error: "You are not the challenged player" });
+      }
+      
+      if (battle.status !== "pending") {
+        return res.status(400).json({ error: "Battle is not pending" });
+      }
+      
+      if (accept) {
+        if (!challengedPets || challengedPets.length !== 3) {
+          return res.status(400).json({ error: "Must select exactly 3 pets" });
+        }
+        
+        // Verify challenged player owns the pets
+        const allPets = await storage.getAllPets();
+        for (const petId of challengedPets) {
+          const pet = allPets.find(p => p.id === petId && p.accountId === accountId);
+          if (!pet) {
+            return res.status(400).json({ error: "You don't own one of the selected pets" });
+          }
+        }
+        
+        const challenged = await storage.getAccount(accountId);
+        if (battle.goldWager > (challenged?.gold || 0)) {
+          return res.status(400).json({ error: "Not enough gold for wager" });
+        }
+        
+        const [updated] = await db.update(petBattles)
+          .set({
+            status: "in_progress",
+            challengedPets,
+            currentRound: 1,
+          })
+          .where(eq(petBattles.id, battle.id))
+          .returning();
+        
+        // Notify challenger
+        broadcastToPlayer(battle.challengerId, "petBattleStarted", {
+          battle: updated,
+        });
+        
+        res.json(updated);
+      } else {
+        const [updated] = await db.update(petBattles)
+          .set({ status: "declined" })
+          .where(eq(petBattles.id, battle.id))
+          .returning();
+        
+        broadcastToPlayer(battle.challengerId, "petBattleDeclined", { battleId: battle.id });
+        res.json(updated);
+      }
+    } catch (error) {
+      console.error("Failed to respond to pet battle:", error);
+      res.status(500).json({ error: "Failed to respond to pet battle" });
+    }
+  });
+  
+  // Fight a round in pet battle (3v3 - one pet per round)
+  app.post("/api/pet-battles/:battleId/fight", async (req, res) => {
+    try {
+      const { accountId } = req.body;
+      
+      const session = activeSessions.get(accountId);
+      if (!session) {
+        return res.status(401).json({ error: "Active session required" });
+      }
+      
+      const { petBattles, pets } = await import("@shared/schema");
+      const [battle] = await db.select().from(petBattles).where(eq(petBattles.id, req.params.battleId));
+      
+      if (!battle) {
+        return res.status(404).json({ error: "Battle not found" });
+      }
+      
+      if (battle.status !== "in_progress") {
+        return res.status(400).json({ error: "Battle is not in progress" });
+      }
+      
+      // Only challenger can initiate the fight round
+      if (battle.challengerId !== accountId) {
+        return res.status(403).json({ error: "Only challenger can initiate fight rounds" });
+      }
+      
+      const currentRound = battle.currentRound;
+      if (currentRound > 3) {
+        return res.status(400).json({ error: "Battle is already complete" });
+      }
+      
+      // Get the pets for this round (index = currentRound - 1)
+      const roundIndex = currentRound - 1;
+      const challengerPetId = battle.challengerPets[roundIndex];
+      const challengedPetId = battle.challengedPets[roundIndex];
+      
+      const allPets = await db.select().from(pets);
+      const challengerPet = allPets.find(p => p.id === challengerPetId);
+      const challengedPet = allPets.find(p => p.id === challengedPetId);
+      
+      if (!challengerPet || !challengedPet) {
+        return res.status(400).json({ error: "One of the pets no longer exists" });
+      }
+      
+      // Calculate pet battle power
+      const getPetPower = (pet: typeof challengerPet) => {
+        const stats = pet.stats as { Str: number; Spd: number; Luck: number; ElementalPower: number };
+        return (stats.Str || 1) * 2 + (stats.Spd || 1) * 1.5 + (stats.Luck || 1) * 0.5 + (stats.ElementalPower || 1) * 3;
+      };
+      
+      const challengerPower = getPetPower(challengerPet);
+      const challengedPower = getPetPower(challengedPet);
+      
+      // Add some randomness (±20%)
+      const challengerRoll = challengerPower * (0.8 + Math.random() * 0.4);
+      const challengedRoll = challengedPower * (0.8 + Math.random() * 0.4);
+      
+      const roundWinner = challengerRoll >= challengedRoll ? "challenger" : "challenged";
+      
+      let newChallengerWins = battle.challengerWins;
+      let newChallengedWins = battle.challengedWins;
+      
+      if (roundWinner === "challenger") {
+        newChallengerWins += 1;
+      } else {
+        newChallengedWins += 1;
+      }
+      
+      const nextRound = currentRound + 1;
+      const battleComplete = nextRound > 3;
+      
+      let winnerId: string | undefined;
+      if (battleComplete) {
+        winnerId = newChallengerWins > newChallengedWins 
+          ? battle.challengerId 
+          : (newChallengerWins < newChallengedWins ? battle.challengedId : undefined);
+      }
+      
+      const updateData: any = {
+        currentRound: nextRound,
+        challengerWins: newChallengerWins,
+        challengedWins: newChallengedWins,
+      };
+      
+      if (battleComplete) {
+        updateData.status = "completed";
+        updateData.completedAt = new Date();
+        if (winnerId) {
+          updateData.winnerId = winnerId;
+        }
+        
+        // Handle gold wager transfer
+        if (battle.goldWager > 0 && winnerId) {
+          const loserId = winnerId === battle.challengerId ? battle.challengedId : battle.challengerId;
+          const loser = await storage.getAccount(loserId);
+          const winner = await storage.getAccount(winnerId);
+          
+          if (loser && winner) {
+            const actualWager = Math.min(battle.goldWager, loser.gold);
+            await storage.updateAccount(loserId, { gold: loser.gold - actualWager });
+            await storage.updateAccount(winnerId, { gold: winner.gold + actualWager });
+          }
+        }
+      }
+      
+      const [updated] = await db.update(petBattles)
+        .set(updateData)
+        .where(eq(petBattles.id, battle.id))
+        .returning();
+      
+      const roundResult = {
+        battle: updated,
+        round: currentRound,
+        challengerPet: { name: challengerPet.name, tier: challengerPet.tier, power: challengerPower },
+        challengedPet: { name: challengedPet.name, tier: challengedPet.tier, power: challengedPower },
+        roundWinner,
+        battleComplete,
+        winnerId,
+        message: battleComplete 
+          ? (winnerId ? `Pet battle complete! Winner: ${winnerId === battle.challengerId ? 'Challenger' : 'Challenged'}` : "Pet battle ended in a tie!")
+          : `Round ${currentRound} complete! ${roundWinner === 'challenger' ? 'Challenger' : 'Challenged'} wins!`,
+      };
+      
+      // Notify both players
+      broadcastToPlayer(battle.challengerId, "petBattleRoundResult", roundResult);
+      broadcastToPlayer(battle.challengedId, "petBattleRoundResult", roundResult);
+      
+      res.json(roundResult);
+    } catch (error) {
+      console.error("Failed to fight pet battle round:", error);
+      res.status(500).json({ error: "Failed to fight pet battle round" });
+    }
+  });
+  
+  // Get available opponents for pet battles
+  app.get("/api/pet-battles/opponents", async (req, res) => {
+    try {
+      const { accountId } = req.query;
+      if (!accountId || !activeSessions.has(accountId as string)) {
+        return res.status(401).json({ error: "Active session required" });
+      }
+      
+      const opponents = [];
+      for (const [id, session] of activeSessions.entries()) {
+        if (id !== accountId) {
+          const account = await storage.getAccount(id);
+          if (account && !account.isDead) {
+            const pets = await storage.getPets(id);
+            if (pets.length >= 3) {
+              opponents.push({
+                id: account.id,
+                username: account.username,
+                rank: account.rank,
+                petCount: pets.length,
+              });
+            }
+          }
+        }
+      }
+      
+      res.json(opponents);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get opponents" });
+    }
+  });
+
+  // =============================================
   // SKILL AUCTION SYSTEM ROUTES
   // =============================================
 

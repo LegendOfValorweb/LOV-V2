@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { 
-  Castle, Mountain, Skull, FlaskConical, Sword, 
+  Castle, Mountain, Skull, FlaskConical, Sword, Swords,
   Trees, Gem, Fish, Shield, Flame, Map, Home, Lock,
   Package, ShoppingBag, Users, LogOut, MessageCircle,
   Crown, Coins, Heart
@@ -135,6 +135,17 @@ const zones: Zone[] = [
     activities: ["PvP Duels", "Tournaments", "Rankings"],
     coordinates: { x: 65, y: 35 },
     route: "/leaderboard",
+  },
+  {
+    id: "pet-arena",
+    name: "Pet Arena",
+    description: "Challenge other players to 3v3 pet battles. Train your pets and prove dominance!",
+    icon: <Swords className="w-6 h-6" />,
+    difficulty: "medium",
+    pvpEnabled: true,
+    activities: ["Pet PvP", "3v3 Battles", "Wagers"],
+    coordinates: { x: 75, y: 45 },
+    route: "/pet-arena",
   },
   {
     id: "crystal-lake",

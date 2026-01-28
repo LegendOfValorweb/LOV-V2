@@ -697,6 +697,43 @@ export const insertGuildBattleSchema = createInsertSchema(guildBattles).omit({ i
 export type InsertGuildBattle = z.infer<typeof insertGuildBattleSchema>;
 export type GuildBattle = typeof guildBattles.$inferSelect;
 
+// ==================== PET PVP BATTLES (3v3) ====================
+export const petBattleStatuses = ["pending", "accepted", "in_progress", "completed", "declined"] as const;
+export type PetBattleStatus = typeof petBattleStatuses[number];
+
+export const petBattles = pgTable("pet_battles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  challengerId: varchar("challenger_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
+  challengedId: varchar("challenged_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
+  status: text("status").notNull().$type<PetBattleStatus>().default("pending"),
+  challengerPets: text("challenger_pets").array().notNull().default(sql`ARRAY[]::text[]`),
+  challengedPets: text("challenged_pets").array().notNull().default(sql`ARRAY[]::text[]`),
+  currentRound: integer("current_round").notNull().default(1),
+  challengerWins: integer("challenger_wins").notNull().default(0),
+  challengedWins: integer("challenged_wins").notNull().default(0),
+  winnerId: varchar("winner_id"),
+  goldWager: integer("gold_wager").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const petBattlesRelations = relations(petBattles, ({ one }) => ({
+  challenger: one(accounts, {
+    fields: [petBattles.challengerId],
+    references: [accounts.id],
+    relationName: "challenger",
+  }),
+  challenged: one(accounts, {
+    fields: [petBattles.challengedId],
+    references: [accounts.id],
+    relationName: "challenged",
+  }),
+}));
+
+export const insertPetBattleSchema = createInsertSchema(petBattles).omit({ id: true, createdAt: true });
+export type InsertPetBattle = z.infer<typeof insertPetBattleSchema>;
+export type PetBattle = typeof petBattles.$inferSelect;
+
 // ==================== PLAYER TRADING SYSTEM ====================
 export const tradeStatuses = ["pending", "accepted", "completed", "cancelled", "expired"] as const;
 export type TradeStatus = typeof tradeStatuses[number];
