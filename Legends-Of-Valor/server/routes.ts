@@ -5009,7 +5009,7 @@ export async function registerRoutes(
   // ==================== GUILD LEVEL UP ROUTES ====================
   
   // ==================== AI CHAT SYSTEM ====================
-  const { chatWithGameAI, getPlayerStoryline, getPendingAdminRequests, resolveAdminRequest, generateWelcomeIntro } = await import("./game-ai");
+  const { chatWithGameAI, getPlayerStoryline, getPendingAdminRequests, resolveAdminRequest, generateWelcomeIntro, setGuidePersonality, getTutorialContent, getStoryAct } = await import("./game-ai");
   const { initializeNPCAccounts, autoAcceptNPCChallenge, isNPCAccount, startNPCProgressionLoop } = await import("./npc-accounts");
   
   // Initialize NPC accounts on startup
@@ -5065,6 +5065,101 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Welcome intro error:", error);
       res.status(500).json({ error: "Failed to generate welcome" });
+    }
+  });
+  
+  // Set guide personality for player - requires active session
+  app.post("/api/ai/personality/:accountId", async (req, res) => {
+    try {
+      const { accountId } = req.params;
+      const session = activeSessions.get(accountId);
+      if (!session) {
+        return res.status(401).json({ error: "Active session required" });
+      }
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(401).json({ error: "Invalid account" });
+      }
+      const schema = z.object({
+        personality: z.enum(["friendly", "sarcastic", "serious", "mysterious"]),
+      });
+      const { personality } = schema.parse(req.body);
+      const success = await setGuidePersonality(accountId, personality);
+      if (success) {
+        res.json({ success: true, personality });
+      } else {
+        res.status(400).json({ error: "Invalid personality" });
+      }
+    } catch (error) {
+      console.error("Set personality error:", error);
+      res.status(500).json({ error: "Failed to set personality" });
+    }
+  });
+  
+  // Get tutorial content for player - requires active session
+  app.get("/api/ai/tutorial/:accountId/:topic", async (req, res) => {
+    try {
+      const { accountId, topic } = req.params;
+      const session = activeSessions.get(accountId);
+      if (!session) {
+        return res.status(401).json({ error: "Active session required" });
+      }
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(401).json({ error: "Invalid account" });
+      }
+      const content = await getTutorialContent(accountId, topic);
+      res.json({ content });
+    } catch (error) {
+      console.error("Tutorial error:", error);
+      res.status(500).json({ error: "Failed to get tutorial" });
+    }
+  });
+  
+  // Mark tutorial as completed - requires active session
+  app.post("/api/ai/tutorial/:accountId/complete", async (req, res) => {
+    try {
+      const { accountId } = req.params;
+      const session = activeSessions.get(accountId);
+      if (!session) {
+        return res.status(401).json({ error: "Active session required" });
+      }
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(401).json({ error: "Invalid account" });
+      }
+      const { updatePlayerStoryline } = await import("./game-ai");
+      await updatePlayerStoryline(accountId, { tutorialCompleted: true } as any);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Complete tutorial error:", error);
+      res.status(500).json({ error: "Failed to complete tutorial" });
+    }
+  });
+  
+  // Get story act info for player - requires active session
+  app.get("/api/ai/story-act/:accountId", async (req, res) => {
+    try {
+      const { accountId } = req.params;
+      const session = activeSessions.get(accountId);
+      if (!session) {
+        return res.status(401).json({ error: "Active session required" });
+      }
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(401).json({ error: "Invalid account" });
+      }
+      const storyAct = getStoryAct(account.npcFloor);
+      const storyline = await getPlayerStoryline(accountId);
+      res.json({
+        ...storyAct,
+        chapter: storyline.currentChapter,
+        personality: storyline.guidePersonality || "friendly",
+        tutorialCompleted: storyline.tutorialCompleted || false,
+      });
+    } catch (error) {
+      console.error("Story act error:", error);
+      res.status(500).json({ error: "Failed to get story act" });
     }
   });
   

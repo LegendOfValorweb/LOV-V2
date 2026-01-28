@@ -9,6 +9,33 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
+const PERSONALITY_MODIFIERS: Record<string, string> = {
+  friendly: `Your personality is FRIENDLY and encouraging. You speak warmly, use positive language, and celebrate player achievements enthusiastically. You're like a supportive mentor who believes in the player.`,
+  sarcastic: `Your personality is SARCASTIC and witty. You make dry jokes, use irony, and tease players playfully (never meanly). You're like a clever rogue who finds humor in everything.`,
+  serious: `Your personality is SERIOUS and dignified. You speak formally, focus on strategy and lore, and treat quests with gravity. You're like an ancient sage who values honor above all.`,
+  mysterious: `Your personality is MYSTERIOUS and cryptic. You speak in riddles, hint at secrets, and leave players curious. You're like an oracle who knows more than they reveal.`,
+};
+
+const TUTORIAL_PROMPTS: Record<string, string> = {
+  newPlayer: `The player is brand new. Guide them through:
+1. Explain they can visit the World Map to explore zones
+2. Suggest visiting the Shop in Capital City for gear
+3. Mention the Mystic Tower for combat progression
+4. Tell them about pets and the Pet Training Grounds
+5. Explain their Base where they can upgrade rooms`,
+  combatIntro: `The player needs combat guidance. Explain:
+- Attack deals damage based on STR
+- Defend reduces incoming damage
+- Trick has a chance to stun or confuse
+- Dodge attempts to avoid the attack entirely
+- Elements stack: 2 matching = 2x damage, 3+ = 5x damage`,
+  storyProgress: `Help the player understand their story progress:
+- Act I (Awakening): Floors 1-15, discovering the world
+- Act II (Fractured Realms): Floors 16-35, the Void Covenant rises
+- Act III (Hell Zone): Floors 36-50, the final battle approaches
+- Act IV (Convergence War): Endgame content`,
+};
+
 const GAME_SYSTEM_PROMPT = `You are the Game Master AI for "Legends of Valor", an epic fantasy RPG. Your role is to:
 
 1. **Manage Player Storylines**: Each player has a unique adventure. Create immersive, personalized storylines based on their actions, progress, and choices. Track their journey through chapters.
@@ -206,6 +233,49 @@ function parseAIResponse(response: string): AIResponse {
   return { message: cleanMessage, rewardRequests, adminRequests };
 }
 
+// Get current story act based on floor progress
+export function getStoryAct(npcFloor: number): { act: number; name: string; description: string } {
+  if (npcFloor <= 15) return { act: 1, name: "The Awakening", description: "Rising adventurer discovering the world" };
+  if (npcFloor <= 35) return { act: 2, name: "The Fractured Realms", description: "The Void Covenant rises" };
+  if (npcFloor <= 50) return { act: 3, name: "The Hell Zone", description: "The final battle approaches" };
+  return { act: 4, name: "The Convergence War", description: "Endgame - face your destiny" };
+}
+
+// Update player's guide personality
+export async function setGuidePersonality(accountId: string, personality: string): Promise<boolean> {
+  const validPersonalities = ["friendly", "sarcastic", "serious", "mysterious"];
+  if (!validPersonalities.includes(personality)) return false;
+  
+  await updatePlayerStoryline(accountId, { guidePersonality: personality } as any);
+  return true;
+}
+
+// Get tutorial content for new players
+export async function getTutorialContent(accountId: string, topic: string): Promise<string> {
+  const account = await storage.getAccount(accountId);
+  if (!account) return "Welcome, adventurer!";
+  
+  const tutorialPrompt = TUTORIAL_PROMPTS[topic] || TUTORIAL_PROMPTS.newPlayer;
+  const storyline = await getPlayerStoryline(accountId);
+  const personality = PERSONALITY_MODIFIERS[storyline.guidePersonality || "friendly"];
+  
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: GAME_SYSTEM_PROMPT + "\n\n" + personality },
+        { role: "user", content: `${tutorialPrompt}\n\nPlayer name: ${account.username}` }
+      ],
+      max_tokens: 400,
+      temperature: 0.7,
+    });
+    return response.choices[0]?.message?.content || "Let me guide you through the basics...";
+  } catch (error) {
+    console.error("Tutorial error:", error);
+    return "Welcome! Visit the World Map to explore zones. The Shop has gear, and the Mystic Tower offers combat challenges.";
+  }
+}
+
 // Main chat function
 export async function chatWithGameAI(
   accountId: string,
@@ -219,6 +289,8 @@ export async function chatWithGameAI(
     
     const storyline = await getPlayerStoryline(accountId);
     const conversationHistory = storyline.conversationHistory as ChatMessage[];
+    const personality = PERSONALITY_MODIFIERS[storyline.guidePersonality || "friendly"];
+    const storyAct = getStoryAct(account.npcFloor);
     
     // Build context about player
     const playerContext = `
@@ -227,7 +299,10 @@ Rank: ${account.rank}
 NPC Tower Progress: Floor ${account.npcFloor}, Level ${account.npcLevel}
 Gold: ${account.gold.toLocaleString()}
 Wins: ${account.wins}, Losses: ${account.losses}
+Current Story Act: ${storyAct.act} - ${storyAct.name}
 Current Story Chapter: ${storyline.currentChapter}
+
+${personality}
 `;
     
     // Build messages for API
