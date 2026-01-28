@@ -300,7 +300,7 @@ export async function registerRoutes(
         gold: role === "player" ? 10000 : 0,
         race: role === "player" ? race : undefined,
         gender: role === "player" ? gender : undefined,
-        portrait: role === "player" ? `${race}_${gender}_default` : undefined,
+        portrait: role === "player" ? `${race}_${gender}` : undefined,
         stats: startingStats,
       });
       

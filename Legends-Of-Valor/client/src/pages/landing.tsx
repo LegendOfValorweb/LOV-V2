@@ -169,6 +169,8 @@ export default function Landing() {
                   const isSelected = selectedRace === race;
                   const isDisabled = !avail?.available;
 
+                  const portraitPath = `/portraits/${race}_${selectedGender}.png`;
+                  
                   return (
                     <Card
                       key={race}
@@ -178,17 +180,28 @@ export default function Landing() {
                       onClick={() => !isDisabled && setSelectedRace(race)}
                     >
                       <CardHeader className="pb-2">
-                        <div className="flex justify-between items-start">
-                          <CardTitle className="font-serif text-lg">
-                            {raceDisplayNames[race] || race}
-                          </CardTitle>
-                          <Badge variant={avail?.available ? "secondary" : "destructive"}>
-                            {avail?.count || 0}/{avail?.maxPlayers || 2}
-                          </Badge>
+                        <div className="flex gap-3">
+                          <div className="w-16 h-16 rounded-lg overflow-hidden border border-border flex-shrink-0">
+                            <img 
+                              src={portraitPath} 
+                              alt={`${raceDisplayNames[race]} ${selectedGender}`}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex justify-between items-start">
+                              <CardTitle className="font-serif text-lg">
+                                {raceDisplayNames[race] || race}
+                              </CardTitle>
+                              <Badge variant={avail?.available ? "secondary" : "destructive"}>
+                                {avail?.count || 0}/{avail?.maxPlayers || 2}
+                              </Badge>
+                            </div>
+                            <CardDescription className="text-xs mt-1">
+                              {info?.description}
+                            </CardDescription>
+                          </div>
                         </div>
-                        <CardDescription className="text-xs">
-                          {info?.description}
-                        </CardDescription>
                       </CardHeader>
                       <CardContent className="pt-0">
                         <div className="grid grid-cols-5 gap-1 text-xs">
