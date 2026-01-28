@@ -7531,6 +7531,514 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== UI & QOL FEATURES ====================
+
+  const playerSettings: Map<string, { autoGather: boolean; autoLoot: boolean; notifications: { combat: boolean; trade: boolean; guild: boolean; achievements: boolean; events: boolean } }> = new Map();
+
+  app.get("/api/accounts/:id/settings", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      const settings = playerSettings.get(accountId) || {
+        autoGather: false,
+        autoLoot: true,
+        notifications: { combat: true, trade: true, guild: true, achievements: true, events: true },
+      };
+      res.json(settings);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get settings" });
+    }
+  });
+
+  app.post("/api/accounts/:id/settings", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      const schema = z.object({
+        autoGather: z.boolean().optional(),
+        autoLoot: z.boolean().optional(),
+        notifications: z.object({
+          combat: z.boolean().optional(),
+          trade: z.boolean().optional(),
+          guild: z.boolean().optional(),
+          achievements: z.boolean().optional(),
+          events: z.boolean().optional(),
+        }).optional(),
+      });
+      const updates = schema.parse(req.body);
+      
+      const current = playerSettings.get(accountId) || {
+        autoGather: false,
+        autoLoot: true,
+        notifications: { combat: true, trade: true, guild: true, achievements: true, events: true },
+      };
+      
+      const merged = {
+        ...current,
+        ...updates,
+        notifications: { ...current.notifications, ...updates.notifications },
+      };
+      
+      playerSettings.set(accountId, merged);
+      res.json({ success: true, settings: merged });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update settings" });
+    }
+  });
+
+  app.post("/api/accounts/:id/auto-gather", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      const { zoneId } = z.object({ zoneId: z.string() }).parse(req.body);
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const settings = playerSettings.get(accountId);
+      if (!settings?.autoGather) {
+        return res.status(400).json({ error: "Auto-gather not enabled" });
+      }
+      
+      const zone = GATHERABLE_ZONES.find(z => z.id === zoneId);
+      if (!zone) {
+        return res.status(400).json({ error: "Zone not gatherable" });
+      }
+      
+      const stats = account.stats || { Int: 10 };
+      const rankIndex = playerRanks.indexOf(account.rank);
+      const efficiency = Math.floor((stats.Int || 10) * (1 + rankIndex * 0.1));
+      
+      const resources: { type: string; amount: number }[] = [];
+      const gathers = Math.min(5, Math.floor(efficiency / 20) + 1);
+      
+      for (let i = 0; i < gathers; i++) {
+        for (const res of zone.resources) {
+          if (Math.random() < res.chance) {
+            const amount = Math.floor(Math.random() * (res.maxAmount - res.minAmount + 1)) + res.minAmount;
+            resources.push({ type: res.type, amount: Math.floor(amount * efficiency / 10) });
+          }
+        }
+      }
+      
+      const totalGold = resources.reduce((sum, r) => sum + r.amount * 10, 0);
+      if (totalGold > 0) {
+        await storage.updateAccountGold(accountId, account.gold + totalGold);
+      }
+      
+      res.json({
+        success: true,
+        resources,
+        goldEarned: totalGold,
+        gatherCount: gathers,
+        efficiency,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Auto-gather failed" });
+    }
+  });
+
+  app.post("/api/accounts/:id/auto-loot", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const settings = playerSettings.get(accountId);
+      if (!settings?.autoLoot) {
+        return res.status(400).json({ error: "Auto-loot not enabled" });
+      }
+      
+      const rankIndex = playerRanks.indexOf(account.rank);
+      const lootMultiplier = 1 + (rankIndex * 0.05);
+      const baseGold = Math.floor(Math.random() * 500 + 100);
+      const goldLooted = Math.floor(baseGold * lootMultiplier);
+      
+      const items: { name: string; rarity: string }[] = [];
+      if (Math.random() < 0.1) {
+        items.push({ name: "Common Material", rarity: "common" });
+      }
+      if (Math.random() < 0.03) {
+        items.push({ name: "Uncommon Material", rarity: "uncommon" });
+      }
+      if (Math.random() < 0.01) {
+        items.push({ name: "Rare Material", rarity: "rare" });
+      }
+      
+      await storage.updateAccountGold(accountId, account.gold + goldLooted);
+      
+      res.json({
+        success: true,
+        goldLooted,
+        items,
+        message: `Auto-looted ${goldLooted} gold${items.length > 0 ? ` and ${items.length} item(s)` : ''}!`,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Auto-loot failed" });
+    }
+  });
+
+  // ==================== EXPANDED MYSTIC TOWER (100 FLOORS × 100 LEVELS) ====================
+
+  const TOWER_CONFIG = {
+    totalFloors: 100,
+    levelsPerFloor: 100,
+    totalBattles: 10000,
+    rankGates: [
+      { floor: 1, minRank: 0 },
+      { floor: 10, minRank: 2 },
+      { floor: 25, minRank: 4 },
+      { floor: 50, minRank: 7 },
+      { floor: 75, minRank: 10 },
+      { floor: 100, minRank: 13 },
+    ],
+    floorBosses: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+    rewards: {
+      perLevel: { gold: 100, exp: 50 },
+      perFloor: { gold: 5000, rubies: 10, soulShards: 5 },
+      bossFloor: { gold: 50000, rubies: 100, soulShards: 50 },
+      completion: { gold: 1000000, rubies: 5000, soulShards: 1000, title: "Tower Master" },
+    },
+  };
+
+  app.get("/api/tower/config", (_req, res) => {
+    res.json(TOWER_CONFIG);
+  });
+
+  app.get("/api/accounts/:id/tower-progress", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.id);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const floor = account.npcFloor || 1;
+      const level = account.npcLevel || 1;
+      const totalBattles = (floor - 1) * 100 + level;
+      const percentComplete = (totalBattles / TOWER_CONFIG.totalBattles) * 100;
+      
+      const rankIndex = playerRanks.indexOf(account.rank);
+      const nextGate = TOWER_CONFIG.rankGates.find(g => g.floor > floor && g.minRank > rankIndex);
+      
+      res.json({
+        currentFloor: floor,
+        currentLevel: level,
+        totalBattles,
+        percentComplete: percentComplete.toFixed(2),
+        nextGate,
+        isCompleted: floor >= 100 && level >= 100,
+        canProgress: !nextGate || rankIndex >= nextGate.minRank,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get tower progress" });
+    }
+  });
+
+  const towerCompletions: Set<string> = new Set();
+
+  app.post("/api/accounts/:id/tower-battle", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.id);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const floor = account.npcFloor || 1;
+      const level = account.npcLevel || 1;
+      
+      if (floor >= 100 && level >= 100) {
+        return res.json({
+          result: "completed",
+          floor: 100,
+          level: 100,
+          message: "Tower already completed! You are a Tower Master!",
+        });
+      }
+      
+      const rankIndex = playerRanks.indexOf(account.rank);
+      const gate = TOWER_CONFIG.rankGates.find(g => g.floor === floor);
+      if (gate && rankIndex < gate.minRank) {
+        return res.status(403).json({ 
+          error: `Floor ${floor} requires ${playerRanks[gate.minRank]} rank`,
+          required: playerRanks[gate.minRank],
+        });
+      }
+      
+      const enemyPower = floor * 10 + level;
+      const playerPower = Object.values(account.stats || { Str: 10 }).reduce((a, b) => a + b, 0);
+      const won = playerPower >= enemyPower * 0.8 || Math.random() > 0.3;
+      
+      if (!won) {
+        return res.json({
+          result: "defeat",
+          floor,
+          level,
+          message: "The tower guardian was too powerful!",
+        });
+      }
+      
+      let newFloor = floor;
+      let newLevel = level + 1;
+      const rewards = { ...TOWER_CONFIG.rewards.perLevel };
+      
+      if (newLevel > 100) {
+        newLevel = 1;
+        newFloor++;
+        Object.assign(rewards, TOWER_CONFIG.rewards.perFloor);
+        
+        if (TOWER_CONFIG.floorBosses.includes(floor)) {
+          Object.assign(rewards, TOWER_CONFIG.rewards.bossFloor);
+        }
+      }
+      
+      if (newFloor > 100) {
+        newFloor = 100;
+        newLevel = 100;
+        if (!towerCompletions.has(req.params.id)) {
+          Object.assign(rewards, TOWER_CONFIG.rewards.completion);
+          towerCompletions.add(req.params.id);
+        }
+      }
+      
+      await storage.updateAccount(req.params.id, {
+        npcFloor: newFloor,
+        npcLevel: newLevel,
+        gold: account.gold + rewards.gold,
+        rubies: (account.rubies || 0) + (rewards.rubies || 0),
+        soulShards: (account.soulShards || 0) + (rewards.soulShards || 0),
+      });
+      
+      res.json({
+        result: "victory",
+        previousFloor: floor,
+        previousLevel: level,
+        newFloor,
+        newLevel,
+        rewards,
+        message: newFloor > floor ? `Cleared Floor ${floor}!` : `Defeated level ${level} guardian!`,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Tower battle failed" });
+    }
+  });
+
+  // ==================== HELL ZONE (BATTLE ROYALE) ====================
+
+  const HELL_ZONE_CONFIG = {
+    minRank: 10,
+    deathTax: 0.1,
+    antiHealPenalty: 0.5,
+    mythicDropChance: 0.001,
+    mythicDrops: [
+      { id: "demon_blade", name: "Demon's Blade", power: 50000, rarity: "mythic" },
+      { id: "hellfire_armor", name: "Hellfire Armor", defense: 50000, rarity: "mythic" },
+      { id: "abyssal_ring", name: "Abyssal Ring", allStats: 5000, rarity: "mythic" },
+      { id: "demon_lord_crown", name: "Demon Lord's Crown", power: 100000, rarity: "legendary" },
+    ],
+    enemies: [
+      { id: "demon_soldier", name: "Demon Soldier", power: 10000, goldDrop: 5000 },
+      { id: "hellfire_elemental", name: "Hellfire Elemental", power: 25000, goldDrop: 15000 },
+      { id: "abyssal_horror", name: "Abyssal Horror", power: 50000, goldDrop: 50000 },
+      { id: "demon_lord", name: "Demon Lord", power: 100000, goldDrop: 200000, isBoss: true },
+    ],
+  };
+
+  const hellZoneParticipants: Map<string, { enteredAt: number; kills: number; alive: boolean }> = new Map();
+
+  app.get("/api/hell-zone/config", (_req, res) => {
+    res.json({
+      ...HELL_ZONE_CONFIG,
+      activeParticipants: Array.from(hellZoneParticipants.entries())
+        .filter(([_, data]) => data.alive)
+        .length,
+    });
+  });
+
+  app.post("/api/hell-zone/enter", async (req, res) => {
+    try {
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const rankIndex = playerRanks.indexOf(account.rank);
+      if (rankIndex < HELL_ZONE_CONFIG.minRank) {
+        return res.status(403).json({ 
+          error: `Hell Zone requires ${playerRanks[HELL_ZONE_CONFIG.minRank]} rank`,
+          required: playerRanks[HELL_ZONE_CONFIG.minRank],
+        });
+      }
+      
+      if (hellZoneParticipants.has(accountId)) {
+        const data = hellZoneParticipants.get(accountId)!;
+        if (data.alive) {
+          return res.status(400).json({ error: "Already in Hell Zone" });
+        }
+      }
+      
+      hellZoneParticipants.set(accountId, { enteredAt: Date.now(), kills: 0, alive: true });
+      
+      await storage.createActivityFeed({
+        type: "hell_zone_entry",
+        message: `${account.username} entered the Hell Zone!`,
+        metadata: { accountId },
+      });
+      
+      res.json({
+        success: true,
+        message: "Entered the Hell Zone. Healing is reduced by 50%. Death costs 10% of your gold.",
+        antiHeal: HELL_ZONE_CONFIG.antiHealPenalty,
+        deathTax: HELL_ZONE_CONFIG.deathTax,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to enter Hell Zone" });
+    }
+  });
+
+  app.post("/api/hell-zone/battle", async (req, res) => {
+    try {
+      const { accountId, enemyId } = z.object({ accountId: z.string(), enemyId: z.string().optional() }).parse(req.body);
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const participant = hellZoneParticipants.get(accountId);
+      if (!participant || !participant.alive) {
+        return res.status(400).json({ error: "Not in Hell Zone or already defeated" });
+      }
+      
+      const enemy = enemyId 
+        ? HELL_ZONE_CONFIG.enemies.find(e => e.id === enemyId)
+        : HELL_ZONE_CONFIG.enemies[Math.floor(Math.random() * HELL_ZONE_CONFIG.enemies.length)];
+      
+      if (!enemy) {
+        return res.status(400).json({ error: "Invalid enemy" });
+      }
+      
+      const playerPower = Object.values(account.stats || { Str: 10 }).reduce((a, b) => a + b, 0) * 100;
+      const won = playerPower >= enemy.power * 0.7 || Math.random() > 0.4;
+      
+      if (!won) {
+        participant.alive = false;
+        const goldLost = Math.floor(account.gold * HELL_ZONE_CONFIG.deathTax);
+        await storage.updateAccountGold(accountId, account.gold - goldLost);
+        
+        await storage.createActivityFeed({
+          type: "hell_zone_death",
+          message: `${account.username} was slain in the Hell Zone by ${enemy.name}!`,
+          metadata: { accountId, enemyId: enemy.id, goldLost },
+        });
+        
+        return res.json({
+          result: "defeat",
+          enemy: enemy.name,
+          goldLost,
+          message: `Defeated by ${enemy.name}! Lost ${goldLost} gold.`,
+          canReenter: true,
+        });
+      }
+      
+      participant.kills++;
+      const goldEarned = enemy.goldDrop;
+      await storage.updateAccountGold(accountId, account.gold + goldEarned);
+      
+      let mythicDrop = null;
+      if (Math.random() < HELL_ZONE_CONFIG.mythicDropChance * (enemy.isBoss ? 10 : 1)) {
+        mythicDrop = HELL_ZONE_CONFIG.mythicDrops[Math.floor(Math.random() * HELL_ZONE_CONFIG.mythicDrops.length)];
+        
+        await storage.createActivityFeed({
+          type: "mythic_drop",
+          message: `${account.username} obtained ${mythicDrop.name} from the Hell Zone!`,
+          metadata: { accountId, itemId: mythicDrop.id },
+        });
+      }
+      
+      res.json({
+        result: "victory",
+        enemy: enemy.name,
+        goldEarned,
+        kills: participant.kills,
+        mythicDrop,
+        message: mythicDrop 
+          ? `Defeated ${enemy.name}! Earned ${goldEarned} gold and found ${mythicDrop.name}!`
+          : `Defeated ${enemy.name}! Earned ${goldEarned} gold.`,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Hell Zone battle failed" });
+    }
+  });
+
+  app.post("/api/hell-zone/exit", async (req, res) => {
+    try {
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      
+      const participant = hellZoneParticipants.get(accountId);
+      if (!participant) {
+        return res.status(400).json({ error: "Not in Hell Zone" });
+      }
+      
+      const timeSpent = Date.now() - participant.enteredAt;
+      hellZoneParticipants.delete(accountId);
+      
+      res.json({
+        success: true,
+        kills: participant.kills,
+        timeSpent,
+        message: `Exited Hell Zone with ${participant.kills} kills.`,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to exit Hell Zone" });
+    }
+  });
+
+  app.post("/api/hell-zone/heal", async (req, res) => {
+    try {
+      const { accountId, healAmount } = z.object({ accountId: z.string(), healAmount: z.number() }).parse(req.body);
+      
+      const participant = hellZoneParticipants.get(accountId);
+      if (!participant || !participant.alive) {
+        return res.json({
+          success: true,
+          actualHeal: healAmount,
+          message: "Healed normally (not in Hell Zone)",
+          antiHealApplied: false,
+        });
+      }
+      
+      const actualHeal = Math.floor(healAmount * (1 - HELL_ZONE_CONFIG.antiHealPenalty));
+      
+      res.json({
+        success: true,
+        requestedHeal: healAmount,
+        actualHeal,
+        penalty: HELL_ZONE_CONFIG.antiHealPenalty,
+        antiHealApplied: true,
+        message: `Hell Zone anti-heal: Healed ${actualHeal} instead of ${healAmount} (50% penalty)`,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to process heal" });
+    }
+  });
+
+  app.get("/api/hell-zone/leaderboard", async (_req, res) => {
+    try {
+      const leaderboard = Array.from(hellZoneParticipants.entries())
+        .map(([accountId, data]) => ({ accountId, kills: data.kills, alive: data.alive }))
+        .sort((a, b) => b.kills - a.kills)
+        .slice(0, 10);
+      
+      res.json({ leaderboard });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get leaderboard" });
+    }
+  });
+
   app.post("/api/accounts/:id/trigger-raid", async (req, res) => {
     try {
       const account = await storage.getAccount(req.params.id);
