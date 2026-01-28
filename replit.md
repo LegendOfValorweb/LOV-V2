@@ -101,6 +101,8 @@ cd Legends-Of-Valor && npm run db:push
   - Race stat modifiers applied in combat
 - World Map with 12 interactive zones (Capital City, Mystic Tower, Mountain Caverns, Ancient Ruins, Research Lab, Pet Training, Ruby Mines, Enchanted Forest, Battle Arena, Crystal Lake, Coastal Village, Hell Zone)
 - Base/Home System with 5 tiers (Humble Camp → Fortress Castle) and 6 room types (Storage, Rest, Crafting, Training, Vault, Defenses)
+- Zone backdrops: shop (marketplace), fishing (lake), base (castle), arena, tower, pets (training grounds)
+- World map is central hub after login with player avatar display, quick travel, and zone navigation
 
 ### Planned
 - Enhanced combat formulas

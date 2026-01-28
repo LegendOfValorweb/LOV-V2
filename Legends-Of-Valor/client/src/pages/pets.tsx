@@ -442,8 +442,15 @@ export default function Pets() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <div className="min-h-screen relative">
+      <div 
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: "url('/backdrops/pets.png')" }}
+      />
+      <div className="absolute inset-0 bg-black/60" />
+      
+      <div className="relative z-10 min-h-screen">
+      <header className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-4">
@@ -451,32 +458,14 @@ export default function Pets() {
                 My Pets
               </h1>
               <div className="hidden sm:flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => navigate("/world-map")} data-testid="link-world-map">
+                  World Map
+                </Button>
                 <Button variant="ghost" size="sm" onClick={() => navigate("/shop")} data-testid="link-shop">
                   <ShoppingBag className="w-4 h-4 mr-1.5" />Shop
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => navigate("/skills")} data-testid="link-skills">
-                  <Sparkles className="w-4 h-4 mr-1.5" />Skills
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => navigate("/trading")} data-testid="link-trading">
-                  <ArrowLeftRight className="w-4 h-4 mr-1.5" />Trade
-                </Button>
                 <Button variant="ghost" size="sm" onClick={() => navigate("/inventory")} data-testid="link-inventory">
                   <Package className="w-4 h-4 mr-1.5" />Inventory
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => navigate("/challenges")} data-testid="link-challenges">
-                  <Swords className="w-4 h-4 mr-1.5" />Challenges
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => navigate("/events")} data-testid="link-events">
-                  <Calendar className="w-4 h-4 mr-1.5" />Events
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => navigate("/npc-battle")} data-testid="link-npc">
-                  <Target className="w-4 h-4 mr-1.5" />NPC Tower
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => navigate("/quests")} data-testid="link-quests">
-                  <ScrollText className="w-4 h-4 mr-1.5" />Quests
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => navigate("/leaderboard")} data-testid="link-leaderboard">
-                  <Trophy className="w-4 h-4 mr-1.5" />Leaderboard
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => navigate("/guild")} data-testid="link-guild">
                   <Target className="w-4 h-4 mr-1.5" />Guild
@@ -831,6 +820,7 @@ export default function Pets() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }

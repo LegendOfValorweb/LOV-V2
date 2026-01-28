@@ -166,12 +166,19 @@ export default function Base() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Castle className="w-8 h-8 text-primary" />
-            <h1 className="font-serif text-3xl font-bold text-foreground">Your Base</h1>
+    <div className="min-h-screen relative">
+      <div 
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: "url('/backdrops/base.png')" }}
+      />
+      <div className="absolute inset-0 bg-black/50" />
+      
+      <div className="relative z-10 min-h-screen p-4">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <Castle className="w-8 h-8 text-primary" />
+              <h1 className="font-serif text-3xl font-bold text-foreground">Your Base</h1>
           </div>
           <Button variant="outline" onClick={() => navigate("/world-map")}>
             World Map
@@ -362,6 +369,7 @@ export default function Base() {
               </CardContent>
             </Card>
           </div>
+        </div>
         </div>
       </div>
     </div>

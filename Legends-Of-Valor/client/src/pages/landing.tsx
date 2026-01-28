@@ -83,7 +83,7 @@ export default function Landing() {
     }
     
     if (result.account) {
-      navigate("/ai-chat?welcome=true");
+      navigate("/world-map");
     } else {
       setError(result.error || "Login failed");
     }
@@ -99,7 +99,7 @@ export default function Landing() {
     const result = await login(playerName.trim(), playerPassword, "player", selectedRace, selectedGender);
     
     if (result.account) {
-      navigate("/ai-chat?welcome=true");
+      navigate("/world-map");
     } else {
       setError(result.error || "Failed to create character");
     }

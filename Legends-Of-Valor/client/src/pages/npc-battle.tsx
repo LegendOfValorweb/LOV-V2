@@ -112,23 +112,24 @@ export default function NpcBattle() {
   const levelProgress = currentNpc ? ((currentNpc.level - 1) / 99) * 100 : 0;
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border bg-card/50 backdrop-blur sticky top-0 z-50">
+    <div className="min-h-screen relative">
+      <div 
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: "url('/backdrops/tower.png')" }}
+      />
+      <div className="absolute inset-0 bg-black/60" />
+      
+      <div className="relative z-10 min-h-screen text-foreground">
+      <header className="border-b border-border bg-card/80 backdrop-blur sticky top-0 z-50">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-bold font-serif text-primary">NPC Tower</h1>
             <nav className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => navigate("/world-map")} data-testid="link-world-map">World Map</Button>
               <Button variant="ghost" size="sm" onClick={() => navigate("/shop")} data-testid="link-shop">Shop</Button>
               <Button variant="ghost" size="sm" onClick={() => navigate("/inventory")} data-testid="link-inventory">Inventory</Button>
               <Button variant="ghost" size="sm" onClick={() => navigate("/pets")} data-testid="link-pets">Pets</Button>
-              <Button variant="ghost" size="sm" onClick={() => navigate("/challenges")} data-testid="link-challenges">Challenges</Button>
-              <Button variant="ghost" size="sm" onClick={() => navigate("/events")} data-testid="link-events">Events</Button>
               <Button variant="secondary" size="sm" data-testid="link-npc-active">NPC Battle</Button>
-              <Button variant="ghost" size="sm" onClick={() => navigate("/quests")} data-testid="link-quests">Quests</Button>
-              <Button variant="ghost" size="sm" onClick={() => navigate("/leaderboard")} data-testid="link-leaderboard">Leaderboard</Button>
-              <Button variant="ghost" size="sm" onClick={() => navigate("/guild")} data-testid="link-guild">Guild</Button>
-              <Button variant="ghost" size="sm" onClick={() => navigate("/skills")} data-testid="link-skills">Skills</Button>
-              <Button variant="ghost" size="sm" onClick={() => navigate("/trading")} data-testid="link-trading">Trade</Button>
             </nav>
           </div>
           <div className="flex items-center gap-4">
@@ -526,6 +527,7 @@ export default function NpcBattle() {
           </div>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }

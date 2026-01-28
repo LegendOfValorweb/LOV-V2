@@ -157,13 +157,20 @@ export default function Fishing() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-900/20 to-background p-4">
+    <div className="min-h-screen relative">
+      <div 
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: "url('/backdrops/fishing.png')" }}
+      />
+      <div className="absolute inset-0 bg-black/50" />
+      
+      <div className="relative z-10 min-h-screen p-4">
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" onClick={() => navigate("/shop")}>
+            <Button variant="outline" className="bg-card/80" size="sm" onClick={() => navigate("/world-map")}>
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Back
+              World Map
             </Button>
             <h1 className="text-2xl font-bold font-serif flex items-center gap-2">
               <Fish className="w-6 h-6 text-blue-400" />
@@ -354,6 +361,7 @@ export default function Fishing() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      </div>
       </div>
     </div>
   );

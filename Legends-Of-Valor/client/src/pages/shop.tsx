@@ -49,7 +49,7 @@ export default function Shop() {
     master: "Master",
     grandmaster: "Grandmaster",
     legend: "Legend",
-    elite: "Elite",
+    elite: "Mythic",
   };
 
   const excludedTiers = useMemo(() => {
@@ -117,8 +117,15 @@ export default function Shop() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <div className="min-h-screen relative">
+      <div 
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: "url('/backdrops/shop.png')" }}
+      />
+      <div className="absolute inset-0 bg-black/60" />
+      
+      <div className="relative z-10">
+      <header className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-4">
@@ -127,10 +134,17 @@ export default function Shop() {
               </h1>
               <div className="hidden sm:flex items-center gap-2">
                 <Button
-                  variant="ghost"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate("/world-map")}
+                  data-testid="link-world-map"
+                >
+                  World Map
+                </Button>
+                <Button
+                  variant="secondary"
                   size="sm"
                   onClick={() => navigate("/shop")}
-                  className="toggle-elevate toggle-elevated"
                   data-testid="link-shop"
                 >
                   <ShoppingBag className="w-4 h-4 mr-1.5" />
@@ -140,21 +154,10 @@ export default function Shop() {
                   variant="ghost"
                   size="sm"
                   onClick={() => navigate("/inventory")}
-                  className="toggle-elevate"
                   data-testid="link-inventory"
                 >
                   <Package className="w-4 h-4 mr-1.5" />
                   Inventory ({inventory.length})
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => navigate("/skills")}
-                  className="toggle-elevate"
-                  data-testid="link-skills"
-                >
-                  <Sparkles className="w-4 h-4 mr-1.5" />
-                  Skills
                 </Button>
                 <Button
                   variant="ghost"
@@ -392,6 +395,7 @@ export default function Shop() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }
