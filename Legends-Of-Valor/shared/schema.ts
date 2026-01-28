@@ -155,6 +155,12 @@ export const accounts = pgTable("accounts", {
   // V2: Story progression tracking
   storyAct: integer("story_act").notNull().default(1), // Current story act (1-4)
   storyCheckpoint: text("story_checkpoint"), // Current story checkpoint
+  // V2: Death & Revival system
+  isDead: boolean("is_dead").notNull().default(false),
+  lastDeathTime: timestamp("last_death_time"),
+  deathCount: integer("death_count").notNull().default(0),
+  reviveTokens: integer("revive_tokens").notNull().default(1), // One-time revives
+  respawnLocation: text("respawn_location").notNull().default("base"), // Where to respawn
 });
 
 export const inventoryItems = pgTable("inventory_items", {

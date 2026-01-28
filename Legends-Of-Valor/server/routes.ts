@@ -346,6 +346,143 @@ export async function registerRoutes(
       res.status(404).json({ error: "Session not found" });
     }
   });
+  
+  // V2: Death & Revival System
+  // Respawn at base (free, takes you back to base)
+  app.post("/api/accounts/:id/respawn", async (req, res) => {
+    try {
+      const session = activeSessions.get(req.params.id);
+      if (!session) {
+        return res.status(401).json({ error: "Active session required" });
+      }
+      const account = await storage.getAccount(req.params.id);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      if (!account.isDead) {
+        return res.status(400).json({ error: "You are not dead" });
+      }
+      
+      // Respawn at base with full HP recovery
+      await db.update(accounts).set({
+        isDead: false,
+        respawnLocation: "base",
+      }).where(eq(accounts.id, req.params.id));
+      
+      res.json({ 
+        success: true, 
+        message: "You have respawned at your Base. Your wounds have healed.",
+        location: "base"
+      });
+    } catch (error) {
+      console.error("Respawn error:", error);
+      res.status(500).json({ error: "Failed to respawn" });
+    }
+  });
+  
+  // Revive using revive token (instant revive at current location)
+  app.post("/api/accounts/:id/revive", async (req, res) => {
+    try {
+      const session = activeSessions.get(req.params.id);
+      if (!session) {
+        return res.status(401).json({ error: "Active session required" });
+      }
+      const account = await storage.getAccount(req.params.id);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      if (!account.isDead) {
+        return res.status(400).json({ error: "You are not dead" });
+      }
+      if (account.reviveTokens <= 0) {
+        return res.status(400).json({ error: "No revive tokens available. Respawn at base instead." });
+      }
+      
+      // Use revive token to revive at current location
+      await db.update(accounts).set({
+        isDead: false,
+        reviveTokens: account.reviveTokens - 1,
+      }).where(eq(accounts.id, req.params.id));
+      
+      res.json({ 
+        success: true, 
+        message: "You used a Revive Token! You are back on your feet.",
+        reviveTokensRemaining: account.reviveTokens - 1
+      });
+    } catch (error) {
+      console.error("Revive error:", error);
+      res.status(500).json({ error: "Failed to revive" });
+    }
+  });
+  
+  // Pet sacrifice for revival (sacrifice active pet to revive)
+  app.post("/api/accounts/:id/sacrifice-pet", async (req, res) => {
+    try {
+      const session = activeSessions.get(req.params.id);
+      if (!session) {
+        return res.status(401).json({ error: "Active session required" });
+      }
+      const account = await storage.getAccount(req.params.id);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      if (!account.isDead) {
+        return res.status(400).json({ error: "You are not dead" });
+      }
+      if (!account.equippedPetId) {
+        return res.status(400).json({ error: "No pet equipped to sacrifice" });
+      }
+      
+      // Get the equipped pet
+      const { pets } = await import("@shared/schema");
+      const [pet] = await db.select().from(pets).where(eq(pets.id, account.equippedPetId));
+      if (!pet) {
+        return res.status(400).json({ error: "Equipped pet not found" });
+      }
+      
+      // Delete the pet (sacrifice)
+      await db.delete(pets).where(eq(pets.id, account.equippedPetId));
+      
+      // Revive player and unequip pet
+      await db.update(accounts).set({
+        isDead: false,
+        equippedPetId: null,
+      }).where(eq(accounts.id, req.params.id));
+      
+      res.json({ 
+        success: true, 
+        message: `Your loyal companion ${pet.name} sacrificed itself to save you. You have been revived.`,
+        sacrificedPet: pet.name
+      });
+    } catch (error) {
+      console.error("Pet sacrifice error:", error);
+      res.status(500).json({ error: "Failed to sacrifice pet" });
+    }
+  });
+  
+  // Check death status - requires active session
+  app.get("/api/accounts/:id/death-status", async (req, res) => {
+    try {
+      const session = activeSessions.get(req.params.id);
+      if (!session) {
+        return res.status(401).json({ error: "Active session required" });
+      }
+      const account = await storage.getAccount(req.params.id);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      res.json({
+        isDead: account.isDead,
+        deathCount: account.deathCount,
+        reviveTokens: account.reviveTokens,
+        lastDeathTime: account.lastDeathTime,
+        hasEquippedPet: !!account.equippedPetId,
+      });
+    } catch (error) {
+      console.error("Death status error:", error);
+      res.status(500).json({ error: "Failed to get death status" });
+    }
+  });
 
   app.post("/api/accounts/:id/logout", (req, res) => {
     const { id } = req.params;
@@ -1773,21 +1910,49 @@ export async function registerRoutes(
           if (winner) await storage.updateAccountWins(winnerId, winner.wins + 1);
           if (loser) await storage.updateAccountLosses(loserId, loser.losses + 1);
           
+          // V2: Death & Revival - Apply PvP drops and death state
+          let goldDropped = 0;
+          let deathMessage = "";
+          if (loser && !isNPCAccount(loser.username)) {
+            // Loser drops 10% of their gold (min 100, max 10000)
+            goldDropped = Math.min(10000, Math.max(100, Math.floor(loser.gold * 0.1)));
+            
+            // Update loser: mark as dead, lose gold, increment death count
+            await db.update(accounts).set({
+              gold: loser.gold - goldDropped,
+              isDead: true,
+              lastDeathTime: new Date(),
+              deathCount: loser.deathCount + 1,
+            }).where(eq(accounts.id, loserId));
+            
+            // Update winner: gain gold
+            if (winner) {
+              await db.update(accounts).set({
+                gold: winner.gold + goldDropped,
+              }).where(eq(accounts.id, winnerId));
+            }
+            
+            deathMessage = ` You dropped ${goldDropped} gold. Return to your Base to respawn.`;
+          }
+          
           broadcastToPlayer(winnerId, "challengeResult", {
             challengeId: req.params.id,
             result: "won",
             combatState,
-            message: `You won the battle against ${loser?.username}!`,
+            message: `You won the battle against ${loser?.username}!${goldDropped > 0 ? ` You gained ${goldDropped} gold!` : ""}`,
+            goldGained: goldDropped,
           });
           
           broadcastToPlayer(loserId, "challengeResult", {
             challengeId: req.params.id,
             result: "lost",
             combatState,
-            message: `You lost the battle against ${winner?.username}.`,
+            message: `You lost the battle against ${winner?.username}.${deathMessage}`,
+            goldLost: goldDropped,
+            isDead: true,
           });
           
-          res.json({ combatState, finished: true, winnerId });
+          res.json({ combatState, finished: true, winnerId, goldDropped });
           return;
         }
         
