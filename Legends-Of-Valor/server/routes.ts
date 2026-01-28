@@ -6089,6 +6089,187 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== ANTI-CHEAT SYSTEM ====================
+
+  const playerSnapshots: Map<string, { stats: any; gold: number; rubies: number; timestamp: number }> = new Map();
+  const suspiciousActivity: Map<string, { count: number; lastSeen: number; actions: string[] }> = new Map();
+
+  const STAT_GROWTH_LIMITS: Record<string, number> = {
+    gold: 1000000,
+    rubies: 10000,
+    soulShards: 5000,
+    trainingPoints: 50000,
+    statPoints: 100,
+  };
+
+  const logSuspiciousActivity = async (accountId: string, action: string, details: any) => {
+    const existing = suspiciousActivity.get(accountId) || { count: 0, lastSeen: 0, actions: [] };
+    existing.count++;
+    existing.lastSeen = Date.now();
+    existing.actions.push(action);
+    if (existing.actions.length > 20) existing.actions.shift();
+    suspiciousActivity.set(accountId, existing);
+
+    await storage.createActivityFeed({
+      type: "anticheat_alert",
+      message: `Suspicious activity detected for account ${accountId}: ${action}`,
+      metadata: { accountId, action, details, alertLevel: existing.count > 5 ? "high" : "medium" },
+    });
+  };
+
+  const validateStatGrowth = async (accountId: string, field: string, oldValue: number, newValue: number): Promise<boolean> => {
+    const limit = STAT_GROWTH_LIMITS[field];
+    if (limit && newValue - oldValue > limit) {
+      await logSuspiciousActivity(accountId, "excessive_growth", {
+        field,
+        oldValue,
+        newValue,
+        delta: newValue - oldValue,
+        limit,
+      });
+      return false;
+    }
+    return true;
+  };
+
+  const createSnapshot = (account: any): { stats: any; gold: number; rubies: number; timestamp: number } => ({
+    stats: { ...account.stats },
+    gold: account.gold || 0,
+    rubies: account.rubies || 0,
+    timestamp: Date.now(),
+  });
+
+  app.post("/api/anticheat/snapshot", async (req, res) => {
+    try {
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const snapshot = createSnapshot(account);
+      playerSnapshots.set(accountId, snapshot);
+      
+      res.json({ success: true, snapshotTime: snapshot.timestamp });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create snapshot" });
+    }
+  });
+
+  app.post("/api/anticheat/verify", async (req, res) => {
+    try {
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const snapshot = playerSnapshots.get(accountId);
+      if (!snapshot) {
+        return res.json({ verified: true, message: "No snapshot to compare" });
+      }
+      
+      const issues: string[] = [];
+      const timeDelta = (Date.now() - snapshot.timestamp) / 1000;
+      
+      const goldGrowth = (account.gold || 0) - snapshot.gold;
+      if (goldGrowth > STAT_GROWTH_LIMITS.gold) {
+        issues.push(`Gold growth exceeds limit: ${goldGrowth} in ${timeDelta}s`);
+        await logSuspiciousActivity(accountId, "gold_manipulation", { goldGrowth, timeDelta });
+      }
+      
+      const rubyGrowth = (account.rubies || 0) - snapshot.rubies;
+      if (rubyGrowth > STAT_GROWTH_LIMITS.rubies) {
+        issues.push(`Ruby growth exceeds limit: ${rubyGrowth} in ${timeDelta}s`);
+        await logSuspiciousActivity(accountId, "ruby_manipulation", { rubyGrowth, timeDelta });
+      }
+      
+      if (issues.length > 0) {
+        res.json({ verified: false, issues, timeDelta });
+      } else {
+        playerSnapshots.set(accountId, createSnapshot(account));
+        res.json({ verified: true, message: "Account verified", timeDelta });
+      }
+    } catch (error) {
+      res.status(500).json({ error: "Verification failed" });
+    }
+  });
+
+  app.get("/api/admin/anticheat/alerts", async (req, res) => {
+    try {
+      const adminId = req.query.adminId as string;
+      if (!adminId) {
+        return res.status(401).json({ error: "Admin ID required" });
+      }
+      const admin = await storage.getAccount(adminId);
+      if (!admin || admin.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      
+      const alerts = Array.from(suspiciousActivity.entries())
+        .map(([accountId, data]) => ({ accountId, ...data }))
+        .sort((a, b) => b.count - a.count);
+      
+      res.json(alerts);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get alerts" });
+    }
+  });
+
+  app.get("/api/admin/anticheat/logs", async (req, res) => {
+    try {
+      const adminId = req.query.adminId as string;
+      if (!adminId) {
+        return res.status(401).json({ error: "Admin ID required" });
+      }
+      const admin = await storage.getAccount(adminId);
+      if (!admin || admin.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      
+      const allFeeds = await storage.getAllActivityFeeds();
+      const antiCheatLogs = allFeeds.filter(f => f.type === "anticheat_alert");
+      res.json(antiCheatLogs.slice(0, 100));
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get logs" });
+    }
+  });
+
+  app.post("/api/admin/anticheat/ban", async (req, res) => {
+    try {
+      const schema = z.object({
+        adminId: z.string(),
+        accountId: z.string(),
+        reason: z.string(),
+      });
+      const { adminId, accountId, reason } = schema.parse(req.body);
+      
+      const admin = await storage.getAccount(adminId);
+      if (!admin || admin.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      await storage.updateAccountDeath(accountId, true);
+      
+      await storage.createActivityFeed({
+        type: "anticheat_ban",
+        message: `Account ${account.username} banned by admin ${admin.username} for: ${reason}`,
+        metadata: { accountId, adminId, reason, bannedAt: Date.now() },
+      });
+      
+      res.json({ success: true, message: `Account ${account.username} has been banned` });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to ban account" });
+    }
+  });
+
   // ==================== AI CHAT SYSTEM ====================
   const { chatWithGameAI, getPlayerStoryline, getPendingAdminRequests, resolveAdminRequest, generateWelcomeIntro, setGuidePersonality, getTutorialContent, getStoryAct } = await import("./game-ai");
   const { initializeNPCAccounts, autoAcceptNPCChallenge, isNPCAccount, startNPCProgressionLoop } = await import("./npc-accounts");
@@ -6244,6 +6425,414 @@ export async function registerRoutes(
     }
   });
   
+  // ==================== STORY PROGRESSION SYSTEM ====================
+
+  const STORY_ACTS = [
+    { act: 1, name: "The Awakening", description: "Your journey begins. Learn the ways of valor and discover your destiny.", gateRequirement: null, chapters: 5 },
+    { act: 2, name: "Fractured Realms", description: "The realm is splitting. Explore dangerous territories and forge alliances.", gateRequirement: { minRank: 3, minFloor: 10, act1Complete: true }, chapters: 8 },
+    { act: 3, name: "Hell Zone", description: "Descend into darkness. Face the ultimate trials and uncover ancient secrets.", gateRequirement: { minRank: 8, minFloor: 50, act2Complete: true }, chapters: 10 },
+    { act: 4, name: "Convergence War", description: "The final battle. Unite the realms or watch them fall.", gateRequirement: { minRank: 12, minFloor: 90, act3Complete: true }, chapters: 12 },
+  ];
+
+  const STORY_LORE: Record<number, { title: string; content: string }[]> = {
+    1: [
+      { title: "The Beginning", content: "Long ago, the realm of Valor was united under a single banner. Heroes from all races gathered to protect the innocent and uphold justice." },
+      { title: "The First Champions", content: "The original 14 races each produced legendary warriors who became known as the Champions of Valor. Their descendants carry their legacy." },
+      { title: "The Mystic Tower", content: "Built by ancient mages, the Mystic Tower serves as a proving ground for all who seek glory. Each floor presents greater challenges." },
+    ],
+    2: [
+      { title: "The Fracturing", content: "A great cataclysm shattered the realm into fragments. The zones we know today are remnants of what was once a unified world." },
+      { title: "The Void Incursion", content: "Dark entities began pouring through cracks in reality, threatening to consume everything. Only the bravest heroes dare face them." },
+      { title: "Guild Alliance", content: "Guilds formed from necessity, pooling resources and warriors to push back the darkness." },
+    ],
+    3: [
+      { title: "Gates of Hell", content: "The Hell Zone was once sealed away, containing the most dangerous creatures and forbidden treasures." },
+      { title: "The Demon Lords", content: "Seven Demon Lords rule the Hell Zone, each guarding secrets that could change the fate of all realms." },
+      { title: "Soul Gems", content: "In the depths of Hell, Soul Gems form from the essence of fallen warriors. They hold immense power." },
+    ],
+    4: [
+      { title: "The Convergence", content: "All timelines, all realms, all possibilities converge in the final battle. Reality itself hangs in the balance." },
+      { title: "Mythical Legends", content: "Those who complete the Convergence War and prove their worth become Mythical Legends - the highest honor." },
+      { title: "The New Dawn", content: "Victory in the Convergence War will reshape the realm. Your choices will echo through eternity." },
+    ],
+  };
+
+  const completedRewards: Map<string, Set<string>> = new Map();
+
+  app.get("/api/story/acts", (_req, res) => {
+    res.json(STORY_ACTS);
+  });
+
+  app.get("/api/story/acts/:act/lore", (req, res) => {
+    const act = parseInt(req.params.act);
+    const lore = STORY_LORE[act];
+    if (!lore) {
+      return res.status(404).json({ error: "Lore not found for this act" });
+    }
+    res.json(lore);
+  });
+
+  app.get("/api/story/progress/:accountId", async (req, res) => {
+    try {
+      const { accountId } = req.params;
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+
+      const storyline = await getPlayerStoryline(accountId);
+      const currentAct = storyline.currentAct || 1;
+      const actInfo = STORY_ACTS.find(a => a.act === currentAct);
+      const playerRankIndex = playerRanks.indexOf(account.rank);
+      
+      const actsStatus = STORY_ACTS.map(act => {
+        const gate = act.gateRequirement;
+        let locked = false;
+        let lockReason = "";
+        
+        if (gate) {
+          if (gate.minRank && playerRankIndex < gate.minRank) {
+            locked = true;
+            lockReason = `Requires ${playerRanks[gate.minRank]} rank`;
+          }
+          if (gate.minFloor && (account.npcFloor || 1) < gate.minFloor) {
+            locked = true;
+            lockReason = `Requires Mystic Tower Floor ${gate.minFloor}`;
+          }
+          if (gate.act1Complete && (storyline.storyProgress?.act1Completed !== true)) {
+            locked = true;
+            lockReason = "Complete Act 1 first";
+          }
+          if (gate.act2Complete && (storyline.storyProgress?.act2Completed !== true)) {
+            locked = true;
+            lockReason = "Complete Act 2 first";
+          }
+          if (gate.act3Complete && (storyline.storyProgress?.act3Completed !== true)) {
+            locked = true;
+            lockReason = "Complete Act 3 first";
+          }
+        }
+        
+        return {
+          ...act,
+          locked,
+          lockReason,
+          completed: storyline.storyProgress?.[`act${act.act}Completed`] === true,
+          currentChapter: act.act === currentAct ? storyline.currentChapter : 0,
+        };
+      });
+      
+      res.json({
+        currentAct,
+        currentChapter: storyline.currentChapter || 1,
+        actInfo,
+        actsStatus,
+        tutorialCompleted: storyline.tutorialCompleted || false,
+        totalProgress: Math.round((Object.keys(storyline.storyProgress || {}).filter(k => k.includes("Completed")).length / 4) * 100),
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get story progress" });
+    }
+  });
+
+  app.post("/api/story/advance", async (req, res) => {
+    try {
+      const schema = z.object({
+        accountId: z.string(),
+        actCompleted: z.number().optional(),
+        chapterCompleted: z.number().optional(),
+      });
+      const { accountId, actCompleted, chapterCompleted } = schema.parse(req.body);
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const storyline = await getPlayerStoryline(accountId);
+      const { updatePlayerStoryline } = await import("./game-ai");
+      
+      if (actCompleted) {
+        const actInfo = STORY_ACTS.find(a => a.act === actCompleted);
+        if (!actInfo) {
+          return res.status(400).json({ error: "Invalid act" });
+        }
+        
+        const gate = actInfo.gateRequirement as { minRank?: number; minFloor?: number; act1Complete?: boolean; act2Complete?: boolean; act3Complete?: boolean } | null;
+        if (gate) {
+          const playerRankIndex = playerRanks.indexOf(account.rank);
+          if (gate.minRank && playerRankIndex < gate.minRank) {
+            return res.status(403).json({ error: `Requires ${playerRanks[gate.minRank]} rank`, required: playerRanks[gate.minRank] });
+          }
+          if (gate.minFloor && (account.npcFloor || 1) < gate.minFloor) {
+            return res.status(403).json({ error: `Requires Mystic Tower Floor ${gate.minFloor}`, required: gate.minFloor });
+          }
+          if (gate.act1Complete && !storyline.storyProgress?.act1Completed) {
+            return res.status(403).json({ error: "Complete Act 1 first" });
+          }
+          if (gate.act2Complete && !storyline.storyProgress?.act2Completed) {
+            return res.status(403).json({ error: "Complete Act 2 first" });
+          }
+          if (gate.act3Complete && !storyline.storyProgress?.act3Completed) {
+            return res.status(403).json({ error: "Complete Act 3 first" });
+          }
+        }
+        
+        const rewardKey = `act${actCompleted}`;
+        const playerRewards = completedRewards.get(accountId) || new Set();
+        
+        if (playerRewards.has(rewardKey)) {
+          return res.json({ 
+            success: true, 
+            message: "Act already completed - no duplicate rewards",
+            replayMode: true,
+          });
+        }
+        
+        const rewards: Record<string, number> = {
+          gold: actCompleted * 10000,
+          rubies: actCompleted * 100,
+          soulShards: actCompleted * 50,
+        };
+        
+        await storage.updateAccount(accountId, {
+          gold: (account.gold || 0) + rewards.gold,
+          rubies: (account.rubies || 0) + rewards.rubies,
+          soulShards: (account.soulShards || 0) + rewards.soulShards,
+        });
+        
+        playerRewards.add(rewardKey);
+        completedRewards.set(accountId, playerRewards);
+        
+        await updatePlayerStoryline(accountId, {
+          storyProgress: {
+            ...storyline.storyProgress,
+            [`act${actCompleted}Completed`]: true,
+            [`act${actCompleted}CompletedAt`]: Date.now(),
+          },
+          currentAct: Math.min(actCompleted + 1, 4),
+          currentChapter: 1,
+        } as any);
+        
+        await storage.createActivityFeed({
+          type: "story_progress",
+          message: `${account.username} completed Act ${actCompleted}: ${STORY_ACTS[actCompleted - 1]?.name}!`,
+          metadata: { accountId, actCompleted, rewards },
+        });
+        
+        res.json({
+          success: true,
+          message: `Completed Act ${actCompleted}!`,
+          rewards,
+          nextAct: Math.min(actCompleted + 1, 4),
+        });
+      } else if (chapterCompleted) {
+        const currentAct = storyline.currentAct || 1;
+        const actInfo = STORY_ACTS.find(a => a.act === currentAct);
+        const nextChapter = Math.min((storyline.currentChapter || 1) + 1, actInfo?.chapters || 5);
+        
+        await updatePlayerStoryline(accountId, {
+          currentChapter: nextChapter,
+        } as any);
+        
+        res.json({
+          success: true,
+          message: `Completed Chapter ${chapterCompleted}`,
+          nextChapter,
+          actComplete: nextChapter >= (actInfo?.chapters || 5),
+        });
+      } else {
+        res.status(400).json({ error: "Specify actCompleted or chapterCompleted" });
+      }
+    } catch (error) {
+      console.error("Story advance error:", error);
+      res.status(500).json({ error: "Failed to advance story" });
+    }
+  });
+
+  app.post("/api/story/checkpoint", async (req, res) => {
+    try {
+      const schema = z.object({
+        accountId: z.string(),
+        checkpoint: z.string(),
+      });
+      const { accountId, checkpoint } = schema.parse(req.body);
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      await db.update(accounts).set({ storyCheckpoint: checkpoint }).where(eq(accounts.id, accountId));
+      
+      res.json({ success: true, checkpoint });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to save checkpoint" });
+    }
+  });
+
+  // ==================== ACHIEVEMENTS SYSTEM ====================
+
+  const ACHIEVEMENT_CATEGORIES = ["combat", "exploration", "economy", "pets", "social", "story", "mastery"] as const;
+
+  const ACHIEVEMENTS = [
+    { id: "first_blood", name: "First Blood", description: "Win your first battle", category: "combat", reward: { gold: 100 }, rankTier: 0 },
+    { id: "warrior_10", name: "Warrior", description: "Win 10 battles", category: "combat", reward: { gold: 500, rubies: 5 }, rankTier: 0 },
+    { id: "champion_100", name: "Champion", description: "Win 100 battles", category: "combat", reward: { gold: 5000, rubies: 50 }, rankTier: 3 },
+    { id: "legend_1000", name: "Legend of Battle", description: "Win 1000 battles", category: "combat", reward: { gold: 50000, rubies: 500 }, rankTier: 8 },
+    { id: "first_tower", name: "Tower Climber", description: "Clear Mystic Tower Floor 1", category: "exploration", reward: { gold: 200 }, rankTier: 0 },
+    { id: "tower_10", name: "Tower Veteran", description: "Reach Mystic Tower Floor 10", category: "exploration", reward: { gold: 2000, rubies: 20 }, rankTier: 2 },
+    { id: "tower_50", name: "Tower Master", description: "Reach Mystic Tower Floor 50", category: "exploration", reward: { gold: 25000, rubies: 250 }, rankTier: 6 },
+    { id: "tower_100", name: "Tower Conqueror", description: "Complete all 100 Mystic Tower floors", category: "exploration", reward: { gold: 100000, rubies: 1000 }, rankTier: 12 },
+    { id: "first_gold", name: "Getting Started", description: "Earn 1000 gold", category: "economy", reward: { gold: 100 }, rankTier: 0 },
+    { id: "rich", name: "Rich", description: "Have 100,000 gold", category: "economy", reward: { rubies: 50 }, rankTier: 3 },
+    { id: "wealthy", name: "Wealthy", description: "Have 1,000,000 gold", category: "economy", reward: { rubies: 200 }, rankTier: 6 },
+    { id: "first_pet", name: "Pet Owner", description: "Obtain your first pet", category: "pets", reward: { gold: 300 }, rankTier: 0 },
+    { id: "pet_collector", name: "Pet Collector", description: "Own 5 pets", category: "pets", reward: { gold: 1500, soulShards: 10 }, rankTier: 2 },
+    { id: "pet_master", name: "Pet Master", description: "Own 10 pets", category: "pets", reward: { gold: 5000, soulShards: 50 }, rankTier: 5 },
+    { id: "join_guild", name: "Social Butterfly", description: "Join a guild", category: "social", reward: { gold: 500 }, rankTier: 0 },
+    { id: "guild_leader", name: "Guild Leader", description: "Become a guild master", category: "social", reward: { gold: 10000, rubies: 100 }, rankTier: 4 },
+    { id: "act1_complete", name: "Awakened", description: "Complete Story Act 1", category: "story", reward: { gold: 5000 }, rankTier: 0 },
+    { id: "act2_complete", name: "Realm Walker", description: "Complete Story Act 2", category: "story", reward: { gold: 15000, rubies: 100 }, rankTier: 3 },
+    { id: "act3_complete", name: "Hell Survivor", description: "Complete Story Act 3", category: "story", reward: { gold: 50000, rubies: 300 }, rankTier: 8 },
+    { id: "act4_complete", name: "Convergence Hero", description: "Complete Story Act 4", category: "story", reward: { gold: 200000, rubies: 1000 }, rankTier: 12 },
+    { id: "rank_apprentice", name: "Apprentice", description: "Reach Apprentice rank", category: "mastery", reward: { gold: 500 }, rankTier: 0 },
+    { id: "rank_journeyman", name: "Journeyman", description: "Reach Journeyman rank", category: "mastery", reward: { gold: 2000 }, rankTier: 2 },
+    { id: "rank_expert", name: "Expert", description: "Reach Expert rank", category: "mastery", reward: { gold: 10000 }, rankTier: 4 },
+    { id: "rank_master", name: "Master", description: "Reach Master rank", category: "mastery", reward: { gold: 50000 }, rankTier: 6 },
+    { id: "rank_grandmaster", name: "Grandmaster", description: "Reach Grandmaster rank", category: "mastery", reward: { gold: 200000, rubies: 500 }, rankTier: 9 },
+    { id: "rank_legend", name: "Legendary", description: "Reach Legend rank", category: "mastery", reward: { gold: 1000000, rubies: 2000 }, rankTier: 11 },
+    { id: "mythical", name: "Mythical Legend", description: "Reach Mythical Legend rank", category: "mastery", reward: { gold: 10000000, rubies: 10000 }, rankTier: 14 },
+  ];
+
+  const playerAchievements: Map<string, Set<string>> = new Map();
+
+  app.get("/api/achievements", (req, res) => {
+    const accountId = req.query.accountId as string;
+    const completed = playerAchievements.get(accountId) || new Set();
+    
+    res.json({
+      categories: ACHIEVEMENT_CATEGORIES,
+      achievements: ACHIEVEMENTS.map(a => ({
+        ...a,
+        completed: completed.has(a.id),
+      })),
+      totalCompleted: completed.size,
+      totalAchievements: ACHIEVEMENTS.length,
+    });
+  });
+
+  app.get("/api/achievements/check/:accountId", async (req, res) => {
+    try {
+      const { accountId } = req.params;
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+
+      const completed = playerAchievements.get(accountId) || new Set();
+      const newlyUnlocked: typeof ACHIEVEMENTS = [];
+      const playerRankIndex = playerRanks.indexOf(account.rank);
+
+      for (const achievement of ACHIEVEMENTS) {
+        if (completed.has(achievement.id)) continue;
+        
+        let unlocked = false;
+        
+        switch (achievement.id) {
+          case "first_blood": unlocked = (account.wins || 0) >= 1; break;
+          case "warrior_10": unlocked = (account.wins || 0) >= 10; break;
+          case "champion_100": unlocked = (account.wins || 0) >= 100; break;
+          case "legend_1000": unlocked = (account.wins || 0) >= 1000; break;
+          case "first_tower": unlocked = (account.npcFloor || 1) > 1; break;
+          case "tower_10": unlocked = (account.npcFloor || 1) >= 10; break;
+          case "tower_50": unlocked = (account.npcFloor || 1) >= 50; break;
+          case "tower_100": unlocked = (account.npcFloor || 1) >= 100; break;
+          case "first_gold": unlocked = (account.gold || 0) >= 1000; break;
+          case "rich": unlocked = (account.gold || 0) >= 100000; break;
+          case "wealthy": unlocked = (account.gold || 0) >= 1000000; break;
+          case "first_pet": unlocked = (account.pets?.length || 0) >= 1; break;
+          case "pet_collector": unlocked = (account.pets?.length || 0) >= 5; break;
+          case "pet_master": unlocked = (account.pets?.length || 0) >= 10; break;
+          case "rank_apprentice": unlocked = playerRankIndex >= 1; break;
+          case "rank_journeyman": unlocked = playerRankIndex >= 2; break;
+          case "rank_expert": unlocked = playerRankIndex >= 4; break;
+          case "rank_master": unlocked = playerRankIndex >= 6; break;
+          case "rank_grandmaster": unlocked = playerRankIndex >= 9; break;
+          case "rank_legend": unlocked = playerRankIndex >= 11; break;
+          case "mythical": unlocked = playerRankIndex >= 14; break;
+        }
+        
+        if (unlocked) {
+          completed.add(achievement.id);
+          newlyUnlocked.push(achievement);
+        }
+      }
+      
+      playerAchievements.set(accountId, completed);
+      
+      res.json({
+        newlyUnlocked,
+        totalCompleted: completed.size,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to check achievements" });
+    }
+  });
+
+  const claimedAchievements: Map<string, Set<string>> = new Map();
+
+  app.post("/api/achievements/:achievementId/claim", async (req, res) => {
+    try {
+      const { achievementId } = req.params;
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const completed = playerAchievements.get(accountId) || new Set();
+      if (!completed.has(achievementId)) {
+        return res.status(400).json({ error: "Achievement not unlocked" });
+      }
+      
+      const claimed = claimedAchievements.get(accountId) || new Set();
+      if (claimed.has(achievementId)) {
+        return res.status(400).json({ error: "Achievement already claimed" });
+      }
+      
+      const achievement = ACHIEVEMENTS.find(a => a.id === achievementId);
+      if (!achievement) {
+        return res.status(404).json({ error: "Achievement not found" });
+      }
+      
+      claimed.add(achievementId);
+      claimedAchievements.set(accountId, claimed);
+      
+      const reward = achievement.reward as { gold?: number; rubies?: number; soulShards?: number };
+      await storage.updateAccount(accountId, {
+        gold: (account.gold || 0) + (reward.gold || 0),
+        rubies: (account.rubies || 0) + (reward.rubies || 0),
+        soulShards: (account.soulShards || 0) + (reward.soulShards || 0),
+      });
+      
+      await storage.createActivityFeed({
+        type: "achievement_claimed",
+        message: `${account.username} claimed achievement: ${achievement.name}!`,
+        metadata: { accountId, achievementId, reward },
+      });
+      
+      res.json({
+        success: true,
+        achievement: achievement.name,
+        reward,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to claim achievement" });
+    }
+  });
+
   // Admin: Get pending AI requests - requires admin role
   app.get("/api/admin/ai-requests", async (req, res) => {
     try {
@@ -6810,6 +7399,136 @@ export async function registerRoutes(
       allEvents: WEEKLY_EVENTS,
       nextEventIn: (7 * 24 * 60 * 60 * 1000) - (Date.now() % (7 * 24 * 60 * 60 * 1000)),
     });
+  });
+
+  // ==================== HIDDEN MECHANICS & TRIGGERS ====================
+
+  const HIDDEN_TRIGGERS = [
+    { id: "lucky_drop", name: "Lucky Drop", chance: 0.01, reward: { gold: 5000, rubies: 50 }, oneTime: false },
+    { id: "mysterious_stranger", name: "Mysterious Stranger", chance: 0.005, reward: { soulShards: 100 }, oneTime: false },
+    { id: "ancient_blessing", name: "Ancient Blessing", chance: 0.002, reward: { gold: 25000, trainingPoints: 1000 }, oneTime: true },
+    { id: "rare_pet_egg", name: "Rare Pet Egg", chance: 0.001, reward: { petEgg: true }, oneTime: false },
+    { id: "secret_chamber", name: "Secret Chamber", chance: 0.0005, reward: { gold: 100000, rubies: 500 }, oneTime: true },
+  ];
+
+  const triggeredOnce: Map<string, Set<string>> = new Map();
+
+  app.post("/api/hidden/check-trigger", async (req, res) => {
+    try {
+      const { accountId, context } = z.object({ accountId: z.string(), context: z.string().optional() }).parse(req.body);
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const playerOnce = triggeredOnce.get(accountId) || new Set();
+      
+      for (const trigger of HIDDEN_TRIGGERS) {
+        if (trigger.oneTime && playerOnce.has(trigger.id)) continue;
+        
+        if (Math.random() < trigger.chance) {
+          if (trigger.oneTime) {
+            playerOnce.add(trigger.id);
+            triggeredOnce.set(accountId, playerOnce);
+          }
+          
+          const reward = trigger.reward as { gold?: number; rubies?: number; soulShards?: number; trainingPoints?: number; petEgg?: boolean };
+          await storage.updateAccount(accountId, {
+            gold: (account.gold || 0) + (reward.gold || 0),
+            rubies: (account.rubies || 0) + (reward.rubies || 0),
+            soulShards: (account.soulShards || 0) + (reward.soulShards || 0),
+            trainingPoints: (account.trainingPoints || 0) + (reward.trainingPoints || 0),
+          });
+          
+          await storage.createActivityFeed({
+            type: "hidden_trigger",
+            message: `${account.username} discovered: ${trigger.name}!`,
+            metadata: { accountId, triggerId: trigger.id, reward, context },
+          });
+          
+          return res.json({
+            triggered: true,
+            event: trigger.name,
+            reward: trigger.reward,
+            message: `You discovered ${trigger.name}!`,
+          });
+        }
+      }
+      
+      res.json({ triggered: false });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to check triggers" });
+    }
+  });
+
+  // ==================== STAT FORMULAS (QUINTILLION-SAFE) ====================
+
+  const STAT_FORMULAS = {
+    baseStat: (base: number, level: number, bonus: number) => 
+      BigInt(base) + BigInt(level) * BigInt(10) + BigInt(bonus),
+    
+    hp: (vit: number, level: number, rankMultiplier: number) => 
+      BigInt(100) + BigInt(vit) * BigInt(10) * BigInt(level) * BigInt(rankMultiplier),
+    
+    damage: (str: number, weaponPower: number, skillMultiplier: number) =>
+      (BigInt(str) * BigInt(2) + BigInt(weaponPower)) * BigInt(Math.floor(skillMultiplier * 100)) / BigInt(100),
+    
+    defense: (def: number, armorValue: number, shieldBonus: number) =>
+      BigInt(def) * BigInt(3) + BigInt(armorValue) * BigInt(2) + BigInt(shieldBonus),
+    
+    initiative: (spd: number, bonuses: number) =>
+      BigInt(spd) * BigInt(2) + BigInt(bonuses),
+    
+    luck: (luk: number, bonuses: number) =>
+      Math.min(100, Math.floor((luk + bonuses) / 10)),
+    
+    petPower: (petLevel: number, bondLevel: number, evolution: number) =>
+      BigInt(petLevel) * BigInt(bondLevel) * BigInt(evolution + 1) * BigInt(10),
+    
+    skillPower: (int: number, skillLevel: number, elementBonus: number) =>
+      BigInt(int) * BigInt(skillLevel) * BigInt(10) + BigInt(elementBonus) * BigInt(100),
+    
+    cooldown: (baseCd: number, spdReduction: number) =>
+      Math.max(1, Math.floor(baseCd * (100 - Math.min(spdReduction, 75)) / 100)),
+  };
+
+  app.post("/api/calculate-stats", async (req, res) => {
+    try {
+      const schema = z.object({
+        accountId: z.string(),
+        context: z.enum(["combat", "pet", "skill"]).optional(),
+      });
+      const { accountId, context } = schema.parse(req.body);
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const stats = account.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Vit: 10, Luk: 10 };
+      const rankIndex = playerRanks.indexOf(account.rank);
+      const rankMultiplier = rankIndex + 1;
+      
+      const calculated = {
+        hp: STAT_FORMULAS.hp(stats.Vit || 10, rankMultiplier, rankMultiplier).toString(),
+        damage: STAT_FORMULAS.damage(stats.Str || 10, 0, 1.0).toString(),
+        defense: STAT_FORMULAS.defense(stats.Def || 10, 0, 0).toString(),
+        initiative: STAT_FORMULAS.initiative(stats.Spd || 10, 0).toString(),
+        luck: STAT_FORMULAS.luck(stats.Luk || 10, 0),
+        critChance: Math.min(50, Math.floor((stats.Luk || 10) / 5)),
+        dodgeChance: Math.min(40, Math.floor((stats.Spd || 10) / 8)),
+      };
+      
+      res.json({
+        baseStats: stats,
+        calculatedStats: calculated,
+        rankMultiplier,
+        context: context || "general",
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to calculate stats" });
+    }
   });
 
   app.post("/api/accounts/:id/trigger-raid", async (req, res) => {
