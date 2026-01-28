@@ -7031,5 +7031,210 @@ export async function registerRoutes(
     }
   });
 
+  // ================ GATHERING SYSTEM ================
+
+  const ZONE_RESOURCES: Record<string, { 
+    resources: { id: string; name: string; baseRate: number; rarity: 'common' | 'uncommon' | 'rare' | 'epic'; goldValue: number }[];
+    gatheringTime: number; // seconds per gather attempt
+  }> = {
+    "mountain_caverns": {
+      resources: [
+        { id: "iron-ore", name: "Iron Ore", baseRate: 0.6, rarity: 'common', goldValue: 10 },
+        { id: "coal", name: "Coal", baseRate: 0.5, rarity: 'common', goldValue: 5 },
+        { id: "silver-ore", name: "Silver Ore", baseRate: 0.2, rarity: 'uncommon', goldValue: 25 },
+        { id: "gold-ore", name: "Gold Ore", baseRate: 0.08, rarity: 'rare', goldValue: 100 },
+      ],
+      gatheringTime: 30,
+    },
+    "enchanted_forest": {
+      resources: [
+        { id: "wood", name: "Enchanted Wood", baseRate: 0.7, rarity: 'common', goldValue: 8 },
+        { id: "herbs", name: "Magical Herbs", baseRate: 0.5, rarity: 'common', goldValue: 12 },
+        { id: "moonpetal", name: "Moon Petal", baseRate: 0.15, rarity: 'uncommon', goldValue: 35 },
+        { id: "faerie-dust", name: "Faerie Dust", baseRate: 0.05, rarity: 'epic', goldValue: 200 },
+      ],
+      gatheringTime: 25,
+    },
+    "ruby_mines": {
+      resources: [
+        { id: "rough-ruby", name: "Rough Ruby", baseRate: 0.4, rarity: 'uncommon', goldValue: 50 },
+        { id: "crystal-shard", name: "Crystal Shard", baseRate: 0.3, rarity: 'uncommon', goldValue: 40 },
+        { id: "perfect-ruby", name: "Perfect Ruby", baseRate: 0.08, rarity: 'rare', goldValue: 150 },
+        { id: "blood-ruby", name: "Blood Ruby", baseRate: 0.02, rarity: 'epic', goldValue: 500 },
+      ],
+      gatheringTime: 45,
+    },
+    "crystal_lake": {
+      resources: [
+        { id: "water-crystal", name: "Water Crystal", baseRate: 0.5, rarity: 'common', goldValue: 15 },
+        { id: "pearl", name: "Freshwater Pearl", baseRate: 0.25, rarity: 'uncommon', goldValue: 45 },
+        { id: "spirit-essence", name: "Spirit Essence", baseRate: 0.1, rarity: 'rare', goldValue: 120 },
+      ],
+      gatheringTime: 35,
+    },
+    "coastal_village": {
+      resources: [
+        { id: "driftwood", name: "Driftwood", baseRate: 0.6, rarity: 'common', goldValue: 6 },
+        { id: "sea-salt", name: "Sea Salt", baseRate: 0.5, rarity: 'common', goldValue: 8 },
+        { id: "coral", name: "Rare Coral", baseRate: 0.15, rarity: 'uncommon', goldValue: 55 },
+        { id: "sea-gem", name: "Sea Gem", baseRate: 0.04, rarity: 'rare', goldValue: 180 },
+      ],
+      gatheringTime: 30,
+    },
+    "ancient_ruins": {
+      resources: [
+        { id: "ancient-stone", name: "Ancient Stone", baseRate: 0.5, rarity: 'uncommon', goldValue: 30 },
+        { id: "relic-fragment", name: "Relic Fragment", baseRate: 0.2, rarity: 'rare', goldValue: 80 },
+        { id: "artifact-shard", name: "Artifact Shard", baseRate: 0.06, rarity: 'epic', goldValue: 300 },
+      ],
+      gatheringTime: 40,
+    },
+    "hell_zone": {
+      resources: [
+        { id: "brimstone", name: "Brimstone", baseRate: 0.4, rarity: 'rare', goldValue: 100 },
+        { id: "demon-bone", name: "Demon Bone", baseRate: 0.2, rarity: 'rare', goldValue: 200 },
+        { id: "hellfire-crystal", name: "Hellfire Crystal", baseRate: 0.05, rarity: 'epic', goldValue: 750 },
+        { id: "soul-gem", name: "Soul Gem", baseRate: 0.01, rarity: 'epic', goldValue: 2000 },
+      ],
+      gatheringTime: 60,
+    },
+  };
+
+  const activeGatherers: Map<string, { accountId: string; startTime: number; zoneId: string }> = new Map();
+
+  app.get("/api/zones/:zoneId/resources", (req, res) => {
+    const zoneId = req.params.zoneId;
+    const zoneResources = ZONE_RESOURCES[zoneId];
+    if (!zoneResources) {
+      return res.status(404).json({ error: "No resources in this zone" });
+    }
+    res.json(zoneResources);
+  });
+
+  app.post("/api/zones/:zoneId/gather", async (req, res) => {
+    try {
+      const zoneId = req.params.zoneId;
+      const { accountId } = req.body;
+
+      if (!accountId) {
+        return res.status(400).json({ error: "Account ID required" });
+      }
+
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+
+      if (account.isDead) {
+        return res.status(400).json({ error: "Cannot gather while dead" });
+      }
+
+      const zoneResources = ZONE_RESOURCES[zoneId];
+      if (!zoneResources) {
+        return res.status(400).json({ error: "No resources available in this zone" });
+      }
+
+      // Rank check for zone
+      const zoneConfig = ZONE_ENEMY_CONFIG[zoneId];
+      const playerRankIndex = playerRanks.indexOf(account.rank);
+      if (zoneConfig) {
+        const difficulty = ZONE_DIFFICULTIES[zoneConfig.difficulty];
+        if (playerRankIndex < difficulty.minRank) {
+          return res.status(403).json({ 
+            error: "Rank too low for this zone",
+            requiredRank: playerRanks[difficulty.minRank],
+          });
+        }
+      }
+
+      // Calculate efficiency based on player stats (Int + rank bonus)
+      const baseEfficiency = 1.0;
+      const intBonus = ((account.stats?.Int || 10) / 100) * 0.5;
+      const rankBonus = playerRankIndex * 0.05;
+      const efficiency = Math.min(3.0, baseEfficiency + intBonus + rankBonus);
+
+      // Track active gatherer for contesting
+      const gatherKey = `${zoneId}:${accountId}`;
+      activeGatherers.set(gatherKey, { accountId, startTime: Date.now(), zoneId });
+
+      // Clean up old gatherers (inactive for more than 5 minutes)
+      const now = Date.now();
+      for (const [key, gatherer] of activeGatherers.entries()) {
+        if (now - gatherer.startTime > 300000) {
+          activeGatherers.delete(key);
+        }
+      }
+
+      // Count competitors in the zone
+      const competitors = Array.from(activeGatherers.values())
+        .filter(g => g.zoneId === zoneId && g.accountId !== accountId)
+        .length;
+
+      // Competition penalty (more gatherers = lower yields)
+      const competitionMultiplier = Math.max(0.3, 1.0 - competitors * 0.1);
+
+      // Gather resources
+      const gathered: { resource: string; name: string; quantity: number; rarity: string }[] = [];
+      let totalGold = 0;
+
+      for (const resource of zoneResources.resources) {
+        const adjustedRate = resource.baseRate * efficiency * competitionMultiplier;
+        if (Math.random() < adjustedRate) {
+          const quantity = Math.floor(1 + Math.random() * (efficiency));
+          gathered.push({
+            resource: resource.id,
+            name: resource.name,
+            quantity,
+            rarity: resource.rarity,
+          });
+          totalGold += resource.goldValue * quantity;
+        }
+      }
+
+      // Award gold for resources
+      if (totalGold > 0) {
+        await storage.updateAccountGold(accountId, account.gold + totalGold);
+      }
+
+      // Remove from active gatherers
+      activeGatherers.delete(gatherKey);
+
+      res.json({
+        success: true,
+        gathered,
+        totalGold,
+        efficiency: efficiency.toFixed(2),
+        competition: competitors,
+        competitionPenalty: competitors > 0 ? `${Math.round((1 - competitionMultiplier) * 100)}%` : "None",
+        gatheringTime: zoneResources.gatheringTime,
+        message: gathered.length > 0 
+          ? `Gathered ${gathered.map(g => `${g.quantity}x ${g.name}`).join(', ')}!`
+          : "Found nothing this time. Try again!",
+      });
+    } catch (error) {
+      console.error("Gathering error:", error);
+      res.status(500).json({ error: "Failed to gather resources" });
+    }
+  });
+
+  // Check active gatherers in a zone (for contesting)
+  app.get("/api/zones/:zoneId/gatherers", (req, res) => {
+    const zoneId = req.params.zoneId;
+    const now = Date.now();
+    
+    // Clean up old gatherers
+    for (const [key, gatherer] of activeGatherers.entries()) {
+      if (now - gatherer.startTime > 300000) {
+        activeGatherers.delete(key);
+      }
+    }
+
+    const gatherers = Array.from(activeGatherers.values())
+      .filter(g => g.zoneId === zoneId)
+      .length;
+
+    res.json({ gatherers, zoneId });
+  });
+
   return httpServer;
 }

@@ -207,6 +207,11 @@ const HUNTABLE_ZONES = new Set([
   "pet-training", "hell-zone", "mystic-tower"
 ]);
 
+const GATHERABLE_ZONES = new Set([
+  "mountain-caverns", "enchanted-forest", "ruby-mines", "crystal-lake",
+  "coastal-village", "ancient-ruins", "hell-zone"
+]);
+
 export default function WorldMap() {
   const [, navigate] = useLocation();
   const { account, logout, setAccount } = useGame();
@@ -216,6 +221,10 @@ export default function WorldMap() {
   const [isBattling, setIsBattling] = useState(false);
   const [currentEnemy, setCurrentEnemy] = useState<any>(null);
   const [battleResult, setBattleResult] = useState<any>(null);
+  const [gatherDialog, setGatherDialog] = useState(false);
+  const [isGathering, setIsGathering] = useState(false);
+  const [gatherResult, setGatherResult] = useState<any>(null);
+  const [zoneResources, setZoneResources] = useState<any>(null);
 
   const { data: zoneDifficulties } = useQuery<any>({
     queryKey: ["/api/zone-difficulties"],
@@ -321,6 +330,67 @@ export default function WorldMap() {
       setBattleResult(null);
       setCurrentEnemy(null);
       await handleHuntInZone(selectedZone);
+    }
+  };
+
+  const handleGatherInZone = async (zone: Zone) => {
+    if (!account) return;
+    setGatherDialog(true);
+    setGatherResult(null);
+    
+    try {
+      const res = await fetch(`/api/zones/${zone.id.replace(/-/g, "_")}/resources`);
+      const data = await res.json();
+      
+      if (res.ok) {
+        setZoneResources(data);
+      } else {
+        toast({
+          title: "Cannot Gather",
+          description: data.error || "No resources in this zone",
+          variant: "destructive",
+        });
+        setGatherDialog(false);
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to load zone resources",
+        variant: "destructive",
+      });
+      setGatherDialog(false);
+    }
+  };
+
+  const handleGather = async () => {
+    if (!account || !selectedZone) return;
+    setIsGathering(true);
+    
+    try {
+      const res = await apiRequest("POST", `/api/zones/${selectedZone.id.replace(/-/g, "_")}/gather`, {
+        accountId: account.id,
+      });
+      const data = await res.json();
+      setGatherResult(data);
+      
+      if (data.success && data.totalGold > 0) {
+        toast({
+          title: "Gathering Complete!",
+          description: `Earned ${data.totalGold.toLocaleString()} gold from resources!`,
+        });
+        const accRes = await fetch(`/api/accounts/${account.id}`);
+        if (accRes.ok) {
+          setAccount(await accRes.json());
+        }
+      }
+    } catch (error: any) {
+      toast({
+        title: "Gathering Error",
+        description: error.message || "Failed to gather",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGathering(false);
     }
   };
 
@@ -506,6 +576,16 @@ export default function WorldMap() {
                           Hunt
                         </Button>
                       )}
+                      {GATHERABLE_ZONES.has(selectedZone.id) && (
+                        <Button 
+                          variant="secondary"
+                          className="flex-1"
+                          onClick={() => handleGatherInZone(selectedZone)}
+                        >
+                          <Gem className="w-4 h-4 mr-2" />
+                          Gather
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -680,6 +760,134 @@ export default function WorldMap() {
                 <div className="text-center py-8">
                   <Target className="w-12 h-12 mx-auto mb-4 text-muted-foreground animate-pulse" />
                   <p className="text-muted-foreground">Searching for enemies...</p>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={gatherDialog} onOpenChange={(open) => { setGatherDialog(open); if (!open) { setZoneResources(null); setGatherResult(null); } }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Gem className="w-5 h-5 text-emerald-500" />
+                {gatherResult ? "Gathering Complete" : "Resource Gathering"}
+              </DialogTitle>
+              <DialogDescription>
+                {selectedZone?.name} - {zoneResources?.gatheringTime || 30}s per attempt
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {!gatherResult && zoneResources && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                    <h3 className="font-semibold mb-3">Available Resources</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {zoneResources.resources?.map((resource: any) => (
+                        <div key={resource.id} className="flex items-center gap-2 text-sm">
+                          <Badge variant={
+                            resource.rarity === 'epic' ? 'default' :
+                            resource.rarity === 'rare' ? 'secondary' : 'outline'
+                          } className={
+                            resource.rarity === 'epic' ? 'bg-purple-500' :
+                            resource.rarity === 'rare' ? 'bg-blue-500' :
+                            resource.rarity === 'uncommon' ? 'bg-green-500' : ''
+                          }>
+                            {resource.rarity}
+                          </Badge>
+                          <span>{resource.name}</span>
+                          <span className="text-yellow-400 ml-auto">{resource.goldValue}g</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 text-sm">
+                    <p className="text-muted-foreground">
+                      Your INT stat ({account?.stats?.Int || 10}) and rank affect gathering efficiency.
+                      More gatherers in the zone reduce yields.
+                    </p>
+                  </div>
+
+                  <Button 
+                    className="w-full" 
+                    variant="default"
+                    onClick={handleGather}
+                    disabled={isGathering}
+                  >
+                    {isGathering ? (
+                      <>
+                        <Gem className="w-4 h-4 mr-2 animate-pulse" />
+                        Gathering...
+                      </>
+                    ) : (
+                      <>
+                        <Gem className="w-4 h-4 mr-2" />
+                        Start Gathering
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              {gatherResult && (
+                <div className="space-y-4">
+                  <div className={`p-4 rounded-lg ${gatherResult.gathered?.length > 0 ? "bg-emerald-500/10 border border-emerald-500/30" : "bg-yellow-500/10 border border-yellow-500/30"}`}>
+                    <p className="font-medium text-lg mb-2">{gatherResult.message}</p>
+                    
+                    {gatherResult.gathered?.length > 0 && (
+                      <div className="space-y-2 mt-3">
+                        {gatherResult.gathered.map((item: any, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <Badge variant={
+                                item.rarity === 'epic' ? 'default' :
+                                item.rarity === 'rare' ? 'secondary' : 'outline'
+                              } className={
+                                item.rarity === 'epic' ? 'bg-purple-500' :
+                                item.rarity === 'rare' ? 'bg-blue-500' :
+                                item.rarity === 'uncommon' ? 'bg-green-500' : ''
+                              }>
+                                {item.rarity}
+                              </Badge>
+                              <span>{item.quantity}x {item.name}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {gatherResult.totalGold > 0 && (
+                      <div className="mt-3 p-2 rounded bg-yellow-500/10 border border-yellow-500/30">
+                        <p className="text-sm font-medium flex items-center gap-2">
+                          <Coins className="w-4 h-4 text-yellow-500" />
+                          Total Value: {gatherResult.totalGold.toLocaleString()} gold
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                      <div>Efficiency: {gatherResult.efficiency}x</div>
+                      <div>Competition: {gatherResult.competition} gatherers</div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button onClick={() => { setGatherResult(null); }} className="flex-1">
+                      <Gem className="w-4 h-4 mr-2" />
+                      Gather Again
+                    </Button>
+                    <Button onClick={() => { setGatherDialog(false); setGatherResult(null); setZoneResources(null); }} variant="outline" className="flex-1">
+                      Leave
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {!zoneResources && !gatherResult && (
+                <div className="text-center py-8">
+                  <Gem className="w-12 h-12 mx-auto mb-4 text-muted-foreground animate-pulse" />
+                  <p className="text-muted-foreground">Loading zone resources...</p>
                 </div>
               )}
             </div>
