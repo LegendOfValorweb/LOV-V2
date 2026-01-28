@@ -90,6 +90,15 @@ cd Legends-Of-Valor && npm run db:push
 - Race availability tracking and selection UI
 - New currencies: Soul Gins, Beak Coins, Valor Tokens
 - Story progression tracking (Acts 1-4)
+- 28 static race portraits for character customization
+- V2 Combat Engine with turn-based mechanics:
+  - Initiative system (Speed-based turn order)
+  - HP calculation based on STR/DEF/Level
+  - Damage formulas with DEF reduction
+  - Critical hit mechanics (Luck-based)
+  - Elemental stacking (x2 for 2 elements, x5 for 3+)
+  - 4 combat actions: Attack, Defend, Trick, Dodge
+  - Race stat modifiers applied in combat
 
 ### Planned
 - Base/Home system with fixed upgrade tiers

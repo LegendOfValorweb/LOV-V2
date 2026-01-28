@@ -7,6 +7,15 @@ import { z } from "zod";
 import type { Account, Event, Challenge, PlayerRace, PlayerGender } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
 import bcrypt from "bcrypt";
+import { 
+  runAutoCombat, 
+  calculateCombatRewards, 
+  applyRaceModifiers, 
+  calculateMaxHP,
+  type Combatant, 
+  type CombatStats,
+  type ElementalAffinity
+} from "./combat-engine";
 
 // V2: Max 32 players per server
 const MAX_PLAYERS = 32;
@@ -2344,70 +2353,92 @@ export async function registerRoutes(
         }
       }
       
-      // Calculate player power from stats and equipped items
-      const playerStats = account.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 };
-      let playerPower = playerStats.Str + playerStats.Spd + playerStats.Int + playerStats.Luck + playerStats.Pot;
+      // V2 Combat Engine: Build player combatant
+      const basePlayerStats = account.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 };
+      const playerCombatStats: CombatStats = applyRaceModifiers(
+        { ...basePlayerStats, Def: basePlayerStats.Def || 10 } as CombatStats,
+        account.race || null
+      );
       
       // Add equipped item stats
       const inventory = await storage.getInventoryByAccount(account.id);
       const equipped = account.equipped;
       
-      console.log(`Battle Debug - Equipped Slots: ${JSON.stringify(equipped)}`);
-
       for (const slot of ["weapon", "armor", "accessory1", "accessory2"] as const) {
         const inventoryId = equipped[slot];
         if (inventoryId) {
           const invItem = inventory.find(i => i.id === inventoryId);
           if (invItem) {
             const stats = invItem.stats as any || {};
-            // Explicitly convert each stat to number to ensure weapon boosts are added correctly
-            const itemPower = (Number(stats.Str) || 0) + (Number(stats.Int) || 0) + (Number(stats.Spd) || 0) + (Number(stats.Luck) || 0) + (Number(stats.Pot) || 0);
-            playerPower += itemPower;
-            console.log(`Battle Debug - Added ${slot} power: ${itemPower}, Item stats: ${JSON.stringify(stats)}`);
+            playerCombatStats.Str += Number(stats.Str) || 0;
+            playerCombatStats.Def += Number(stats.Def) || 0;
+            playerCombatStats.Spd += Number(stats.Spd) || 0;
+            playerCombatStats.Int += Number(stats.Int) || 0;
+            playerCombatStats.Luck += Number(stats.Luck) || 0;
+            playerCombatStats.Pot += Number(stats.Pot) || 0;
           }
         }
       }
       
-      // Add pet power
-      let petPower = 0;
-      let petElementalPower = 0;
+      // Add pet stats and elements
       let petElements: string[] = [];
+      let petElementalPower = 0;
       let equippedPet = null;
       
       if ((account as any).equippedPetId) {
         equippedPet = await storage.getPet((account as any).equippedPetId);
         if (equippedPet) {
           const petStats = equippedPet.stats as any;
-          petPower = (petStats.Str || 0) + (petStats.Spd || 0) + (petStats.Luck || 0);
+          playerCombatStats.Str += Number(petStats.Str) || 0;
+          playerCombatStats.Spd += Number(petStats.Spd) || 0;
+          playerCombatStats.Luck += Number(petStats.Luck) || 0;
           petElementalPower = petStats.ElementalPower || 0;
-          // Use pet's elements array, fallback to single element if not set
           petElements = equippedPet.elements && equippedPet.elements.length > 0 
             ? equippedPet.elements 
-            : [equippedPet.element];
-          console.log(`Battle Debug - Equipped Pet: ${equippedPet.name}, Stats: ${JSON.stringify(petStats)}, Elements: ${petElements.join(", ")}`);
+            : equippedPet.element ? [equippedPet.element] : [];
         }
       }
       
-      // Check if pet's elements are immune - if so, don't add elemental power
+      // Build player combatant
+      const playerCombatant: Combatant = {
+        id: account.id,
+        name: account.username,
+        stats: playerCombatStats,
+        race: account.race,
+        elements: petElements.length > 0 ? { elements: petElements, elementalPower: petElementalPower } : undefined,
+        immunities: [],
+        level: globalLevel,
+        isPlayer: true,
+      };
+      
+      // Build NPC combatant with scaled stats
+      const npcBaseStats = Math.floor(npcPower / 5);
+      const npcCombatStats: CombatStats = {
+        Str: npcBaseStats + (isBoss ? 10 : 0),
+        Def: Math.floor(npcBaseStats * 0.8) + (isBoss ? 15 : 0),
+        Spd: Math.floor(npcBaseStats * 0.7),
+        Int: Math.floor(npcBaseStats * 0.6),
+        Luck: Math.floor(npcBaseStats * 0.3),
+        Pot: isBoss ? Math.floor(npcBaseStats * 0.5) : 0,
+      };
+      
+      const npcCombatant: Combatant = {
+        id: `npc-${globalLevel}`,
+        name: npcName,
+        stats: npcCombatStats,
+        immunities: npcImmunities,
+        level: globalLevel,
+        isPlayer: false,
+      };
+      
+      // Run V2 combat engine
+      const combatResult = runAutoCombat(playerCombatant, npcCombatant, 20);
+      const won = combatResult.winner === account.id;
+      
+      console.log(`V2 Battle - ${account.username} vs ${npcName}: ${won ? "WON" : "LOST"} in ${combatResult.rounds.length} rounds`);
+      console.log(`V2 Battle - Player HP: ${combatResult.finalHP[account.id]}, NPC HP: ${combatResult.finalHP[npcCombatant.id]}`);
+      
       const isElementImmune = petElements.some(elem => npcImmunities.includes(elem));
-      
-      if (!isElementImmune) {
-        playerPower += petElementalPower;
-      }
-      playerPower += petPower;
-      
-      // Battle calculation with luck factor
-      const luckBonus = Math.random() * ((playerStats.Luck || 10) / 100);
-      const effectivePlayerPower = playerPower * (1 + luckBonus);
-      
-      // Boss fights are harder
-      const effectiveNpcPower = isBoss ? npcPower * 1.2 : npcPower;
-      
-      console.log(`Battle Debug - Player: ${account.username}, Power: ${playerPower}, Luck Bonus: ${luckBonus}, Effective Power: ${effectivePlayerPower}`);
-      console.log(`Battle Debug - NPC: ${npcName}, Power: ${npcPower}, Effective Power: ${effectiveNpcPower}, Immunities: ${npcImmunities.join(", ")}`);
-      
-      const won = effectivePlayerPower >= effectiveNpcPower;
-      console.log(`Battle Debug - Result: ${won ? "WON" : "LOST"}`);
       
       let newFloor = floor;
       let newLevel = level;
@@ -2455,10 +2486,13 @@ export async function registerRoutes(
         await storage.updateNpcProgress(account.id, newFloor, newLevel);
       }
       
+      const playerTotalPower = playerCombatStats.Str + playerCombatStats.Def + playerCombatStats.Spd + playerCombatStats.Int + playerCombatStats.Luck + playerCombatStats.Pot;
+      const npcTotalPower = npcCombatStats.Str + npcCombatStats.Def + npcCombatStats.Spd + npcCombatStats.Int + npcCombatStats.Luck + npcCombatStats.Pot;
+      
       const result = {
         won,
-        playerPower: Math.floor(effectivePlayerPower),
-        npcPower: Math.floor(effectiveNpcPower),
+        playerPower: Math.floor(playerTotalPower),
+        npcPower: Math.floor(npcTotalPower),
         npcName: isBoss ? `Floor ${floor} Guardian` : `NPC ${globalLevel}`,
         isBoss,
         bossAbility: isBoss ? getRandomBossAbility(floor) : null,
@@ -2467,13 +2501,21 @@ export async function registerRoutes(
         equippedPet: equippedPet ? {
           name: equippedPet.name,
           elements: petElements,
-          power: petPower + (isElementImmune ? 0 : petElementalPower),
+          power: petElementalPower,
         } : null,
         rewards,
         newFloor,
         newLevel,
         floor,
         level,
+        combatDetails: {
+          rounds: combatResult.rounds.length,
+          playerFinalHP: combatResult.finalHP[account.id],
+          npcFinalHP: combatResult.finalHP[npcCombatant.id],
+          totalDamageDealt: combatResult.totalDamageDealt[account.id] || 0,
+          totalDamageTaken: combatResult.totalDamageDealt[npcCombatant.id] || 0,
+          highlights: combatResult.rounds.slice(-3).flatMap(r => r.effects).slice(0, 5),
+        },
       };
       
       // Broadcast to admins
