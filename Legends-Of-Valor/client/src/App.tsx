@@ -22,6 +22,8 @@ import Admin from "@/pages/admin";
 import AIChat from "@/pages/ai-chat";
 import Birds from "@/pages/birds";
 import Fishing from "@/pages/fishing";
+import WorldMap from "@/pages/world-map";
+import Base from "@/pages/base";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -42,6 +44,8 @@ function Router() {
       <Route path="/ai-chat" component={AIChat} />
       <Route path="/birds" component={Birds} />
       <Route path="/fishing" component={Fishing} />
+      <Route path="/world-map" component={WorldMap} />
+      <Route path="/base" component={Base} />
       <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>

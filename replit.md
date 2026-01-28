@@ -80,7 +80,7 @@ cd Legends-Of-Valor && npm run db:push
 - **V2 Phase 1: Rank System** - Expanded to 15 ranks (Novice → Mythical Legend) with quintillion-safe power scaling
 - Race stat modifiers affect starting stats based on racial bonuses
 - Max 2 players per race limit enforced server-side
-- Max 32 players per server
+- Max 28 players per server (2 per race x 14 races)
 
 ## V2 Features
 
@@ -99,9 +99,9 @@ cd Legends-Of-Valor && npm run db:push
   - Elemental stacking (x2 for 2 elements, x5 for 3+)
   - 4 combat actions: Attack, Defend, Trick, Dodge
   - Race stat modifiers applied in combat
+- World Map with 12 interactive zones (Capital City, Mystic Tower, Mountain Caverns, Ancient Ruins, Research Lab, Pet Training, Ruby Mines, Enchanted Forest, Battle Arena, Crystal Lake, Coastal Village, Hell Zone)
+- Base/Home System with 5 tiers (Humble Camp → Fortress Castle) and 6 room types (Storage, Rest, Crafting, Training, Vault, Defenses)
 
 ### Planned
-- Base/Home system with fixed upgrade tiers
-- World Map with 12+ clickable zones
 - Enhanced combat formulas
 - AI Story Guide with 4-act storyline

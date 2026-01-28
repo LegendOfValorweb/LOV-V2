@@ -17,8 +17,8 @@ import {
   type ElementalAffinity
 } from "./combat-engine";
 
-// V2: Max 32 players per server
-const MAX_PLAYERS = 32;
+// V2: Max 28 players per server (2 per race x 14 races)
+const MAX_PLAYERS = 28;
 // V2: Max 2 players per race
 const MAX_PLAYERS_PER_RACE = 2;
 const SESSION_TIMEOUT = 5 * 60 * 1000; // 5 minutes of inactivity
