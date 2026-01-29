@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useGame } from "@/lib/game-context";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -15,7 +16,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Sword, Shield, Crown, LogOut, ChevronRight, Target, Trophy, Skull, Sparkles, Cat, Check, ArrowLeftRight } from "lucide-react";
+import { Sword, Shield, Crown, LogOut, ChevronRight, Target, Trophy, Skull, Sparkles, Cat, Check, ArrowLeftRight, Play, Square, Zap } from "lucide-react";
 
 const elementColors: Record<string, string> = {
   Fire: "text-red-500 border-red-500",
@@ -46,6 +47,10 @@ export default function NpcBattle() {
   
   const [battleResult, setBattleResult] = useState<any>(null);
   const [showPetSelect, setShowPetSelect] = useState(false);
+  const [isAutoFighting, setIsAutoFighting] = useState(false);
+  const [autoFightCount, setAutoFightCount] = useState("10");
+  const [autoFightProgress, setAutoFightProgress] = useState({ current: 0, total: 0, wins: 0, losses: 0 });
+  const autoFightRef = useRef<boolean>(false);
 
   const { data: currentNpc } = useQuery({
     queryKey: ["/api/accounts", account?.id, "current-npc"],
@@ -97,6 +102,60 @@ export default function NpcBattle() {
       toast({ title: "Error", description: "Battle failed", variant: "destructive" });
     },
   });
+
+  const startAutoFight = async () => {
+    const count = parseInt(autoFightCount);
+    if (isNaN(count) || count < 1) return;
+    
+    setIsAutoFighting(true);
+    autoFightRef.current = true;
+    setAutoFightProgress({ current: 0, total: count, wins: 0, losses: 0 });
+    setBattleResult(null);
+
+    let wins = 0;
+    let losses = 0;
+
+    for (let i = 0; i < count; i++) {
+      if (!autoFightRef.current) break;
+      
+      try {
+        const res = await apiRequest("POST", `/api/accounts/${account?.id}/npc-battle`);
+        const result = await res.json();
+        
+        if (result.victory) {
+          wins++;
+        } else {
+          losses++;
+        }
+        
+        setAutoFightProgress({ current: i + 1, total: count, wins, losses });
+        
+        if (!result.victory && result.message?.includes("rank")) {
+          toast({ title: "Auto-Fight Stopped", description: "Rank requirement not met", variant: "destructive" });
+          break;
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 300));
+      } catch (error) {
+        losses++;
+        setAutoFightProgress({ current: i + 1, total: count, wins, losses });
+      }
+    }
+
+    queryClient.invalidateQueries({ queryKey: ["/api/accounts", account?.id, "current-npc"] });
+    setIsAutoFighting(false);
+    autoFightRef.current = false;
+    
+    toast({ 
+      title: "Auto-Fight Complete", 
+      description: `${wins} wins, ${losses} losses` 
+    });
+  };
+
+  const stopAutoFight = () => {
+    autoFightRef.current = false;
+    setIsAutoFighting(false);
+  };
 
   const handleLogout = () => {
     logout();
@@ -352,7 +411,7 @@ export default function NpcBattle() {
                 size="lg" 
                 className="w-full" 
                 onClick={() => battleMutation.mutate()}
-                disabled={battleMutation.isPending || !currentNpc?.canFight}
+                disabled={battleMutation.isPending || !currentNpc?.canFight || isAutoFighting}
                 data-testid="button-battle"
               >
                 {battleMutation.isPending ? (
@@ -369,6 +428,64 @@ export default function NpcBattle() {
                   </>
                 )}
               </Button>
+
+              <div className="mt-4 pt-4 border-t border-border">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-yellow-500" />
+                    <span className="font-semibold">Auto-Fight</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Battles:</span>
+                    <Select value={autoFightCount} onValueChange={setAutoFightCount} disabled={isAutoFighting}>
+                      <SelectTrigger className="w-24">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="5">5</SelectItem>
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="25">25</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                        <SelectItem value="100">100</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {isAutoFighting && (
+                  <div className="mb-3 space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>Progress: {autoFightProgress.current}/{autoFightProgress.total}</span>
+                      <span className="flex gap-3">
+                        <span className="text-green-500">{autoFightProgress.wins} W</span>
+                        <span className="text-red-500">{autoFightProgress.losses} L</span>
+                      </span>
+                    </div>
+                    <Progress value={(autoFightProgress.current / autoFightProgress.total) * 100} className="h-2" />
+                  </div>
+                )}
+
+                {isAutoFighting ? (
+                  <Button 
+                    variant="destructive" 
+                    className="w-full" 
+                    onClick={stopAutoFight}
+                  >
+                    <Square className="w-4 h-4 mr-2" />
+                    Stop Auto-Fight
+                  </Button>
+                ) : (
+                  <Button 
+                    variant="outline" 
+                    className="w-full" 
+                    onClick={startAutoFight}
+                    disabled={!currentNpc?.canFight || battleMutation.isPending}
+                  >
+                    <Play className="w-4 h-4 mr-2" />
+                    Start Auto-Fight ({autoFightCount} battles)
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
 

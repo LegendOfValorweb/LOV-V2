@@ -464,6 +464,7 @@ export default function Base() {
                 <TabsTrigger value="defenses" className="flex-1">Defenses</TabsTrigger>
                 <TabsTrigger value="raids" className="flex-1">Raids</TabsTrigger>
                 <TabsTrigger value="events" className="flex-1">Events</TabsTrigger>
+                <TabsTrigger value="settings" className="flex-1">Settings</TabsTrigger>
               </TabsList>
               
               <TabsContent value="rooms" className="mt-4">
@@ -801,6 +802,114 @@ export default function Base() {
                       <p className="text-xs text-muted-foreground">
                         Visit other players' bases to see their trophies (80% visible). Upgrade your base to impress visitors!
                       </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="settings" className="mt-4">
+                <Card>
+                  <CardContent className="p-6">
+                    <h3 className="font-serif text-lg font-semibold flex items-center gap-2 mb-4">
+                      <Home className="w-5 h-5 text-primary" />
+                      Base Automation Settings
+                    </h3>
+                    <p className="text-sm text-muted-foreground mb-6">
+                      Configure automatic features for your base. Higher tier bases unlock more automation.
+                    </p>
+
+                    <div className="space-y-6">
+                      <div className="p-4 rounded-lg bg-secondary/50 border border-border">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-3">
+                            <Package className="w-5 h-5 text-green-500" />
+                            <div>
+                              <p className="font-medium">Auto-Loot</p>
+                              <p className="text-xs text-muted-foreground">Automatically collect drops from battles</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm ${currentTier >= 2 ? 'text-green-500' : 'text-muted-foreground'}`}>
+                              {currentTier >= 2 ? 'Enabled' : 'Tier 2 Required'}
+                            </span>
+                            {currentTier >= 2 && <Sparkles className="w-4 h-4 text-green-500" />}
+                          </div>
+                        </div>
+                        {currentTier >= 2 && (
+                          <div className="mt-3 text-xs text-muted-foreground">
+                            All battle rewards are automatically added to your inventory.
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="p-4 rounded-lg bg-secondary/50 border border-border">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-3">
+                            <Hammer className="w-5 h-5 text-blue-500" />
+                            <div>
+                              <p className="font-medium">Auto-Gather</p>
+                              <p className="text-xs text-muted-foreground">Passively gather resources over time</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm ${currentTier >= 3 ? 'text-green-500' : 'text-muted-foreground'}`}>
+                              {currentTier >= 3 ? 'Enabled' : 'Tier 3 Required'}
+                            </span>
+                            {currentTier >= 3 && <Sparkles className="w-4 h-4 text-green-500" />}
+                          </div>
+                        </div>
+                        {currentTier >= 3 && (
+                          <div className="mt-3 text-xs text-muted-foreground">
+                            Your base generates {(currentTier * 100).toLocaleString()} gold and {currentTier * 5} training points per hour.
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="p-4 rounded-lg bg-secondary/50 border border-border">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-3">
+                            <Dumbbell className="w-5 h-5 text-orange-500" />
+                            <div>
+                              <p className="font-medium">Auto-Train Pets</p>
+                              <p className="text-xs text-muted-foreground">Pets gain experience while you're away</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm ${currentTier >= 4 ? 'text-green-500' : 'text-muted-foreground'}`}>
+                              {currentTier >= 4 ? 'Enabled' : 'Tier 4 Required'}
+                            </span>
+                            {currentTier >= 4 && <Sparkles className="w-4 h-4 text-green-500" />}
+                          </div>
+                        </div>
+                        {currentTier >= 4 && (
+                          <div className="mt-3 text-xs text-muted-foreground">
+                            All pets gain {currentTier * 10} experience points per hour.
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="p-4 rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-3">
+                            <Crown className="w-5 h-5 text-purple-500" />
+                            <div>
+                              <p className="font-medium">Auto-Defend</p>
+                              <p className="text-xs text-muted-foreground">Maximum defense automation</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm ${currentTier >= 5 ? 'text-green-500' : 'text-muted-foreground'}`}>
+                              {currentTier >= 5 ? 'Enabled' : 'Tier 5 Required'}
+                            </span>
+                            {currentTier >= 5 && <Sparkles className="w-4 h-4 text-purple-500" />}
+                          </div>
+                        </div>
+                        {currentTier >= 5 && (
+                          <div className="mt-3 text-xs text-muted-foreground">
+                            Your fortress automatically repels weak raiders and triggers counter-attacks.
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
