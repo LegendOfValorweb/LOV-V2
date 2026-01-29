@@ -24,26 +24,49 @@ export default function AudioPlayer() {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const handleEnded = () => setIsPlaying(false);
+    const handleEnded = () => {
+      // With loop enabled, this shouldn't fire, but if it does, restart
+      if (audio.loop && isPlaying) {
+        audio.currentTime = 0;
+        audio.play().catch(console.error);
+      } else {
+        setIsPlaying(false);
+      }
+    };
     const handlePlay = () => setIsPlaying(true);
     const handlePause = () => setIsPlaying(false);
-    const handleError = () => {
-      console.error("Audio element error:", audio.error);
-      setIsPlaying(false);
+    const handleError = (e: Event) => {
+      console.error("Audio element error:", audio.error, e);
+      // Try to recover by resetting
+      setTimeout(() => {
+        if (isPlaying && audio.paused) {
+          audio.play().catch(console.error);
+        }
+      }, 1000);
+    };
+    const handleStalled = () => {
+      console.log("Audio stalled, attempting recovery...");
+      if (isPlaying) {
+        setTimeout(() => {
+          audio.play().catch(console.error);
+        }, 500);
+      }
     };
 
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('play', handlePlay);
     audio.addEventListener('pause', handlePause);
     audio.addEventListener('error', handleError);
+    audio.addEventListener('stalled', handleStalled);
 
     return () => {
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('play', handlePlay);
       audio.removeEventListener('pause', handlePause);
       audio.removeEventListener('error', handleError);
+      audio.removeEventListener('stalled', handleStalled);
     };
-  }, []);
+  }, [isPlaying]);
 
   const togglePlay = () => {
     if (audioRef.current) {
