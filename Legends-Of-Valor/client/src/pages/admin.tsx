@@ -50,12 +50,19 @@ const tierBadgeStyles: Record<ItemTier, string> = {
   umr: "bg-tier-umr/20 text-tier-umr border-tier-umr/30",
   ssumr: "bg-tier-ssumr/20 text-tier-ssumr border-tier-ssumr/30",
   divine: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+  initiate: "bg-slate-500/20 text-slate-400 border-slate-500/30",
   journeyman: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
+  adept: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
   expert: "bg-blue-500/20 text-blue-400 border-blue-500/30",
   master: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30",
   grandmaster: "bg-violet-500/20 text-violet-400 border-violet-500/30",
+  champion: "bg-rose-500/20 text-rose-400 border-rose-500/30",
+  overlord: "bg-slate-900/20 text-slate-300 border-slate-900/30",
+  sovereign: "bg-amber-600/20 text-amber-500 border-amber-600/30",
+  ascendant: "bg-sky-500/20 text-sky-400 border-sky-500/30",
   legend: "bg-amber-500/20 text-amber-400 border-amber-500/30",
   elite: "bg-rose-500/20 text-rose-400 border-rose-500/30",
+  mythical_legend: "bg-pink-600/20 text-pink-500 border-pink-600/30",
 };
 
 function ItemTypeIcon({ type }: { type: ItemType }) {
