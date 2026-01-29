@@ -13,6 +13,7 @@ import {
   Crown, Coins, Heart, Target, Zap, Sparkles
 } from "lucide-react";
 import { useGame } from "@/lib/game-context";
+import { LoadingScreen } from "@/components/loading-screen";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import {
@@ -265,7 +266,7 @@ export default function WorldMap() {
     };
   }, [account?.id, account?.username]);
 
-  const { data: zoneDifficulties } = useQuery<any>({
+  const { data: zoneDifficulties, isLoading: isZonesLoading } = useQuery<any>({
     queryKey: ["/api/zone-difficulties"],
     queryFn: async () => {
       const res = await fetch("/api/zone-difficulties");
@@ -273,7 +274,7 @@ export default function WorldMap() {
     },
   });
 
-  const { data: enemyArchetypes } = useQuery<any>({
+  const { data: enemyArchetypes, isLoading: isArchetypesLoading } = useQuery<any>({
     queryKey: ["/api/enemy-archetypes"],
     queryFn: async () => {
       const res = await fetch("/api/enemy-archetypes");
@@ -281,7 +282,7 @@ export default function WorldMap() {
     },
   });
 
-  const { data: equippedSkins } = useQuery<{ character?: string; pet?: string; bird?: string; base?: string }>({
+  const { data: equippedSkins, isLoading: isSkinsLoading } = useQuery<{ character?: string; pet?: string; bird?: string; base?: string }>({
     queryKey: [`/api/accounts/${account?.id}/skins`],
     queryFn: async () => {
       const res = await fetch(`/api/accounts/${account?.id}/skins`);
@@ -289,6 +290,8 @@ export default function WorldMap() {
     },
     enabled: !!account,
   });
+
+  const isPageLoading = isZonesLoading || isArchetypesLoading || isSkinsLoading;
 
   if (!account) {
     navigate("/");
@@ -457,6 +460,10 @@ export default function WorldMap() {
     legendary: "border-orange-500",
     mythic: "border-pink-500 shadow-lg shadow-pink-500/50"
   };
+
+  if (isPageLoading) {
+    return <LoadingScreen message="Preparing the realm..." />;
+  }
 
   return (
     <div className="min-h-screen relative">

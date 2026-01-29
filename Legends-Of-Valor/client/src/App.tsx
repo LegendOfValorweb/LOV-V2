@@ -28,6 +28,7 @@ import PetArena from "@/pages/pet-arena";
 import Achievements from "@/pages/achievements";
 import NotFound from "@/pages/not-found";
 import { MobileLandscapePrompt } from "@/components/mobile-landscape-prompt";
+import { AppLoadingWrapper } from "@/components/app-loading-wrapper";
 
 function Router() {
   return (
@@ -63,10 +64,12 @@ function App() {
       <TooltipProvider>
         <GameProvider>
           <MobileLandscapePrompt />
-          <Toaster />
-          <AudioPlayer />
-          <FloatingAIButton />
-          <Router />
+          <AppLoadingWrapper>
+            <Toaster />
+            <AudioPlayer />
+            <FloatingAIButton />
+            <Router />
+          </AppLoadingWrapper>
         </GameProvider>
       </TooltipProvider>
     </QueryClientProvider>
