@@ -71,7 +71,7 @@ export default function Tournaments() {
   const pending = tournamentData?.pending || [];
   const completed = tournamentData?.completed || [];
 
-  const isParticipant = (t: Tournament) => t.participants.includes(account.id);
+  const isParticipant = (t: Tournament) => account?.id ? t.participants.includes(account.id) : false;
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -105,11 +105,11 @@ export default function Tournaments() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className={match.winner === match.player1 ? "text-green-400 font-bold" : "text-gray-300"}>
-                        {match.player1.substring(0, 8)}...
+                        {match.player1?.length > 8 ? `${match.player1.substring(0, 8)}...` : match.player1 ?? "Unknown"}
                       </span>
                       <span className="text-gray-500">vs</span>
                       <span className={match.winner === match.player2 ? "text-green-400 font-bold" : "text-gray-300"}>
-                        {match.player2.substring(0, 8)}...
+                        {match.player2?.length > 8 ? `${match.player2.substring(0, 8)}...` : match.player2 ?? "Unknown"}
                       </span>
                     </div>
                     {match.winner ? (

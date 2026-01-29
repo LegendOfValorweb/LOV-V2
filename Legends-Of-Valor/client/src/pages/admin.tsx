@@ -1130,25 +1130,6 @@ export default function Admin() {
     });
   };
 
-  const getMinimumStats = (player: Account) => {
-    const minStats = { Str: 0, Def: 0, Spd: 0, Int: 0, Luck: 0, Pot: 0 };
-    if (!player.equipped) return minStats;
-
-    Object.values(player.equipped).forEach((itemId) => {
-      if (itemId) {
-        const item = ALL_ITEMS.find((i) => i.id === itemId);
-        if (item) {
-          Object.entries(item.stats).forEach(([stat, val]) => {
-            if (val && stat in minStats) {
-              (minStats as any)[stat] += val;
-            }
-          });
-        }
-      }
-    });
-    return minStats;
-  };
-
   const [scaling, setScaling] = useState(1);
 
   const handleStatChange = (stat: string, amount: number) => {
@@ -1172,8 +1153,7 @@ export default function Admin() {
   const handleSavePlayer = async () => {
     if (!editPlayerDialog) return;
 
-    const minStats = getMinimumStats(editPlayerDialog);
-    const statsToValidate: (keyof typeof minStats)[] = ["Str", "Def", "Spd", "Int", "Luck", "Pot"];
+    const statsToValidate: ("Str" | "Def" | "Spd" | "Int" | "Luck" | "Pot")[] = ["Str", "Def", "Spd", "Int", "Luck", "Pot"];
     
     for (const stat of statsToValidate) {
       if (editValues[stat] < 0) {

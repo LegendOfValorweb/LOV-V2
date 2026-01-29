@@ -187,13 +187,13 @@ export default function Achievements() {
                             </div>
                             {achievement.rewards && (
                               <div className="flex gap-2 mt-2 flex-wrap">
-                                {achievement.rewards.gold && (
+                                {achievement.rewards?.gold && (
                                   <span className="text-[10px] text-yellow-500">+{achievement.rewards.gold.toLocaleString()} Gold</span>
                                 )}
-                                {achievement.rewards.rubies && (
+                                {achievement.rewards?.rubies && (
                                   <span className="text-[10px] text-pink-500">+{achievement.rewards.rubies} Rubies</span>
                                 )}
-                                {achievement.rewards.trainingPoints && (
+                                {achievement.rewards?.trainingPoints && (
                                   <span className="text-[10px] text-blue-500">+{achievement.rewards.trainingPoints} TP</span>
                                 )}
                               </div>

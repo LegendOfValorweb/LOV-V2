@@ -87,7 +87,7 @@ export default function CosmeticsShop() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          accountId: account.id,
+          accountId: account?.id,
           skinId: selectedItem.item.id,
           category: selectedItem.category,
           paymentType
@@ -125,7 +125,7 @@ export default function CosmeticsShop() {
       const res = await fetch("/api/cosmetics/equip", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accountId: account.id, skinId, category })
+        body: JSON.stringify({ accountId: account?.id, skinId, category })
       });
 
       const data = await res.json();
