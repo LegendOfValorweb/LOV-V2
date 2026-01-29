@@ -2910,11 +2910,16 @@ export async function registerRoutes(
       }
       
       // V2 Combat Engine: Build player combatant
+      // Note: Account stats already have race modifiers applied at registration, so don't re-apply
       const basePlayerStats = account.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 };
-      const playerCombatStats: CombatStats = applyRaceModifiers(
-        { ...basePlayerStats, Def: basePlayerStats.Def || 10 } as CombatStats,
-        account.race || null
-      );
+      const playerCombatStats: CombatStats = {
+        Str: basePlayerStats.Str || 10,
+        Def: basePlayerStats.Def || 10,
+        Spd: basePlayerStats.Spd || 10,
+        Int: basePlayerStats.Int || 10,
+        Luck: basePlayerStats.Luck || 10,
+        Pot: basePlayerStats.Pot || 0,
+      };
       
       // Add equipped item stats
       const inventory = await storage.getInventoryByAccount(account.id);

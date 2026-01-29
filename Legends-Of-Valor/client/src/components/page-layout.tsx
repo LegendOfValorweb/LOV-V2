@@ -16,7 +16,20 @@ export function PageLayout({ children, title, backdrop, showPlayerInfo = true }:
   const [, navigate] = useLocation();
   const { account } = useGame();
 
-  const portraitPath = account?.portrait || `/portraits/${account?.race}_${account?.gender}.png`;
+  const getPortraitPath = () => {
+    if (!account) return '/portraits/human_male.png';
+    if (account.portrait && account.portrait.includes('/')) {
+      return account.portrait;
+    }
+    if (account.portrait) {
+      return `/portraits/${account.portrait}.png`;
+    }
+    if (account.race && account.gender) {
+      return `/portraits/${account.race}_${account.gender}.png`;
+    }
+    return '/portraits/human_male.png';
+  };
+  const portraitPath = getPortraitPath();
 
   return (
     <div className="min-h-screen relative">

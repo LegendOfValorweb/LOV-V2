@@ -466,7 +466,19 @@ export default function WorldMap() {
     navigate("/");
   };
 
-  const portraitPath = account.portrait || `/portraits/${account.race}_${account.gender}.png`;
+  const getPortraitPath = () => {
+    if (account.portrait && account.portrait.includes('/')) {
+      return account.portrait;
+    }
+    if (account.portrait) {
+      return `/portraits/${account.portrait}.png`;
+    }
+    if (account.race && account.gender) {
+      return `/portraits/${account.race}_${account.gender}.png`;
+    }
+    return '/portraits/human_male.png';
+  };
+  const portraitPath = getPortraitPath();
   const hasEquippedSkin = equippedSkins?.character && equippedSkins.character !== "default";
   
   const skinRarityColors: Record<string, string> = {
