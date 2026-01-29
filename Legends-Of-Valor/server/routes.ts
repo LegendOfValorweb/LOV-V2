@@ -756,7 +756,7 @@ export async function registerRoutes(
       const account = await storage.getAccount(accountId);
       if (!account) return;
 
-      const earned = playerTrophies.get(accountId) || new Set();
+      const earned = playerTrophiesMap.get(accountId) || new Set();
       const newEarned = new Set(earned);
 
       // Gold milestones
@@ -785,7 +785,7 @@ export async function registerRoutes(
 
       // Sync if any new ones earned
       if (newEarned.size > earned.size) {
-        playerTrophies.set(accountId, newEarned);
+        playerTrophiesMap.set(accountId, newEarned);
         await storage.updateAccount(accountId, { 
           trophies: Array.from(newEarned) 
         });
@@ -6849,6 +6849,78 @@ export async function registerRoutes(
   ];
 
   const playerAchievements: Map<string, Set<string>> = new Map();
+  const playerTrophiesMapMap: Map<string, Set<string>> = new Map();
+
+  async function autoCheckAchievementsAndTrophies(accountId: string) {
+    try {
+      const account = await storage.getAccount(accountId);
+      if (!account) return;
+
+      const achievements = playerAchievements.get(accountId) || new Set();
+      const trophies = playerTrophiesMapMap.get(accountId) || new Set();
+      const pets = await storage.getAccountPets(accountId);
+      const petsCount = pets?.length || 0;
+      
+      const rankIndex = playerRanks.indexOf(account.rank);
+      const floor = (account as any).towerFloor || 1;
+      const gold = account.gold || 0;
+      const wins = (account as any).wins || 0;
+      const baseTier = (account as any).baseTier || 1;
+
+      const rankAchievements: Record<string, string> = {
+        "Apprentice": "rank_apprentice",
+        "Journeyman": "rank_journeyman", 
+        "Expert": "rank_expert",
+        "Master": "rank_master",
+        "Grand Master": "rank_grandmaster",
+        "Champion": "rank_champion",
+        "Hero": "rank_hero",
+        "Legend": "rank_legend",
+        "Mythical Legend": "rank_mythical",
+      };
+      
+      if (rankAchievements[account.rank] && !achievements.has(rankAchievements[account.rank])) {
+        achievements.add(rankAchievements[account.rank]);
+      }
+
+      if (wins >= 1 && !achievements.has("first_blood")) achievements.add("first_blood");
+      if (wins >= 10 && !achievements.has("warrior_10")) achievements.add("warrior_10");
+      if (wins >= 100 && !achievements.has("champion_100")) achievements.add("champion_100");
+      if (wins >= 1000 && !achievements.has("legend_1000")) achievements.add("legend_1000");
+
+      if (floor >= 1 && !achievements.has("first_tower")) achievements.add("first_tower");
+      if (floor >= 10 && !achievements.has("tower_10")) achievements.add("tower_10");
+      if (floor >= 50 && !achievements.has("tower_50")) achievements.add("tower_50");
+      if (floor >= 100 && !achievements.has("tower_100")) achievements.add("tower_100");
+
+      if (gold >= 1000 && !achievements.has("first_gold")) achievements.add("first_gold");
+      if (gold >= 100000 && !achievements.has("rich")) achievements.add("rich");
+      if (gold >= 1000000 && !achievements.has("wealthy")) achievements.add("wealthy");
+
+      if (petsCount >= 1 && !achievements.has("first_pet")) achievements.add("first_pet");
+      if (petsCount >= 5 && !achievements.has("pet_collector")) achievements.add("pet_collector");
+      if (petsCount >= 10 && !achievements.has("pet_master")) achievements.add("pet_master");
+
+      if (wins >= 1 && !trophies.has("first_victory")) trophies.add("first_victory");
+      if (floor >= 10 && !trophies.has("tower_10")) trophies.add("tower_10");
+      if (floor >= 25 && !trophies.has("tower_25")) trophies.add("tower_25");
+      if (floor >= 50 && !trophies.has("tower_50")) trophies.add("tower_50");
+      if (floor >= 100 && !trophies.has("tower_100")) trophies.add("tower_100");
+      if (gold >= 1000000 && !trophies.has("millionaire")) trophies.add("millionaire");
+      if (gold >= 1000000000 && !trophies.has("billionaire")) trophies.add("billionaire");
+      if (petsCount >= 50 && !trophies.has("pet_master")) trophies.add("pet_master");
+      if (baseTier >= 5 && !trophies.has("base_max")) trophies.add("base_max");
+      if (rankIndex >= 4 && !trophies.has("rank_5")) trophies.add("rank_5");
+      if (rankIndex >= 9 && !trophies.has("rank_10")) trophies.add("rank_10");
+      if (rankIndex >= 14 && !trophies.has("rank_15")) trophies.add("rank_15");
+      if (rankIndex >= 14 && !trophies.has("mythical_ascension")) trophies.add("mythical_ascension");
+
+      playerAchievements.set(accountId, achievements);
+      playerTrophiesMapMap.set(accountId, trophies);
+    } catch (error) {
+      console.error("Error auto-checking achievements:", error);
+    }
+  }
 
   app.get("/api/achievements", (req, res) => {
     const accountId = req.query.accountId as string;
@@ -10181,7 +10253,8 @@ export async function registerRoutes(
     res.json({ categories: EXPANDED_ACHIEVEMENT_CATEGORIES, total: allExpandedAchievements.length });
   });
 
-  app.get("/api/accounts/:id/achievements", (req, res) => {
+  app.get("/api/accounts/:id/achievements", async (req, res) => {
+    await autoCheckAchievementsAndTrophies(req.params.id);
     const claimed = playerAchievements.get(req.params.id) || new Set();
     res.json({ 
       unlocked: Array.from(claimed),
@@ -10247,14 +10320,13 @@ export async function registerRoutes(
     { id: "mythical_ascension", name: "Ascended", description: "Achieve Mythical Legend status", icon: "crown" },
   ];
 
-  const playerTrophies: Map<string, Set<string>> = new Map();
-
   app.get("/api/full-trophies", (_req, res) => {
     res.json({ trophies: FULL_TROPHIES, total: FULL_TROPHIES.length });
   });
 
-  app.get("/api/accounts/:id/full-trophies", (req, res) => {
-    const earned = playerTrophies.get(req.params.id) || new Set();
+  app.get("/api/accounts/:id/full-trophies", async (req, res) => {
+    await autoCheckAchievementsAndTrophies(req.params.id);
+    const earned = playerTrophiesMapMap.get(req.params.id) || new Set();
     res.json({ 
       earned: Array.from(earned),
       total: FULL_TROPHIES.length,
@@ -10271,13 +10343,13 @@ export async function registerRoutes(
       return res.status(404).json({ error: "Trophy not found" });
     }
     
-    const earned = playerTrophies.get(accountId) || new Set();
+    const earned = playerTrophiesMap.get(accountId) || new Set();
     if (earned.has(trophyId)) {
       return res.status(400).json({ error: "Trophy already earned" });
     }
     
     earned.add(trophyId);
-    playerTrophies.set(accountId, earned);
+    playerTrophiesMap.set(accountId, earned);
     
     const account = await storage.getAccount(accountId);
     if (account) {
@@ -10462,9 +10534,9 @@ export async function registerRoutes(
             trainingPoints: (winner.trainingPoints || 0) + (tournament.rewards.trainingPoints || 0),
           });
           
-          const trophies = playerTrophies.get(winners[0]) || new Set();
+          const trophies = playerTrophiesMap.get(winners[0]) || new Set();
           trophies.add("tournament_winner");
-          playerTrophies.set(winners[0], trophies);
+          playerTrophiesMap.set(winners[0], trophies);
         }
         
         await storage.createActivityFeed({
@@ -10535,6 +10607,12 @@ export async function registerRoutes(
       const egg = PET_SHOP_EGGS.find(e => e.id === eggId);
       if (!egg) return res.status(404).json({ error: "Egg not found" });
 
+      const requiredRankIndex = playerRanks.indexOf(egg.rankRequired);
+      const playerRankIndex = playerRanks.indexOf(account.rank);
+      if (playerRankIndex < requiredRankIndex) {
+        return res.status(403).json({ error: `This egg requires ${egg.rankRequired} rank or higher`, required: egg.rankRequired });
+      }
+
       if ((account.rubies || 0) < egg.rubyPrice) {
         return res.status(400).json({ error: `Need ${egg.rubyPrice} rubies` });
       }
@@ -10572,12 +10650,18 @@ export async function registerRoutes(
     }
   });
 
-  // ===== MINING ZONE =====
+  // ===== MINING ZONE (Requires Apprentice rank) =====
   app.post("/api/mining/mine", async (req, res) => {
     try {
       const { accountId, nodeId } = req.body;
       const account = await storage.getAccount(accountId);
       if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const requiredRankIndex = playerRanks.indexOf("Apprentice");
+      const playerRankIndex = playerRanks.indexOf(account.rank);
+      if (playerRankIndex < requiredRankIndex) {
+        return res.status(403).json({ error: "Mining requires Apprentice rank or higher", required: "Apprentice" });
+      }
 
       const nodes: Record<string, { goldReward: number; expReward: number }> = {
         copper: { goldReward: 100, expReward: 5 },
@@ -10607,12 +10691,18 @@ export async function registerRoutes(
     }
   });
 
-  // ===== RUBY MINES ZONE =====
+  // ===== RUBY MINES ZONE (Requires Expert rank) =====
   app.post("/api/ruby-mines/mine", async (req, res) => {
     try {
       const { accountId, nodeId } = req.body;
       const account = await storage.getAccount(accountId);
       if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const requiredRankIndex = playerRanks.indexOf("Expert");
+      const playerRankIndex = playerRanks.indexOf(account.rank);
+      if (playerRankIndex < requiredRankIndex) {
+        return res.status(403).json({ error: "Ruby Mines requires Expert rank or higher", required: "Expert" });
+      }
 
       const nodes: Record<string, { rubyReward: number; goldReward: number; pvpRisk: boolean }> = {
         raw_ruby: { rubyReward: 5, goldReward: 500, pvpRisk: false },
@@ -10678,6 +10768,12 @@ export async function registerRoutes(
       const { accountId, challengeId } = req.body;
       const account = await storage.getAccount(accountId);
       if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const requiredRankIndex = playerRanks.indexOf("Grand Master");
+      const playerRankIndex = playerRanks.indexOf(account.rank);
+      if (playerRankIndex < requiredRankIndex) {
+        return res.status(403).json({ error: "Hell Zone requires Grand Master rank or higher", required: "Grand Master" });
+      }
 
       const challenges: Record<string, { rewards: { gold: number; rubies: number; soulShards: number }; riskPercent: number; difficulty: number }> = {
         demon_pit: { rewards: { gold: 50000, rubies: 25, soulShards: 50 }, riskPercent: 10, difficulty: 1 },
