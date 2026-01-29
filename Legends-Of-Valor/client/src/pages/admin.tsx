@@ -97,11 +97,14 @@ function SkillAuctionManagement({ account, toast }: { account: Account; toast: a
   });
 
   const filteredSkills = useMemo(() => {
-    if (!skillSearch) return ALL_SKILLS.slice(0, 20);
-    return ALL_SKILLS.filter(s => 
-      s.name.toLowerCase().includes(skillSearch.toLowerCase()) ||
-      s.rarity.toLowerCase().includes(skillSearch.toLowerCase())
-    ).slice(0, 20);
+    let skills = ALL_SKILLS;
+    if (skillSearch) {
+      skills = skills.filter(s => 
+        s.name.toLowerCase().includes(skillSearch.toLowerCase()) ||
+        s.rarity.toLowerCase().includes(skillSearch.toLowerCase())
+      );
+    }
+    return skills.slice(0, 100);
   }, [skillSearch]);
 
   const addToQueue = async () => {
