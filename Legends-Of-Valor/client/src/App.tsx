@@ -27,6 +27,7 @@ import Base from "@/pages/base";
 import PetArena from "@/pages/pet-arena";
 import Achievements from "@/pages/achievements";
 import NotFound from "@/pages/not-found";
+import { MobileLandscapePrompt } from "@/components/mobile-landscape-prompt";
 
 function Router() {
   return (
@@ -61,6 +62,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <GameProvider>
+          <MobileLandscapePrompt />
           <Toaster />
           <AudioPlayer />
           <FloatingAIButton />

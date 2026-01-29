@@ -228,12 +228,7 @@ export default function WorldMap() {
   const welcomeAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    const welcomeKey = `lov_welcome_${account?.id}`;
-    const hasPlayedWelcome = sessionStorage.getItem(welcomeKey);
-    
-    if (account && !hasPlayedWelcome) {
-      sessionStorage.setItem(welcomeKey, 'true');
-      
+    if (account) {
       const playWelcomeAudio = async () => {
         try {
           const response = await fetch('/api/ai-chat/voice', {
