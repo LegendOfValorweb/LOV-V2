@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Castle, Hammer, Package, Dumbbell, Shield, Sparkles,
   Coins, ArrowUp, Lock, Home, Palette, Trophy, Swords, Users, Calendar,
-  Target, Zap
+  Target, Zap, Flame, Crown
 } from "lucide-react";
 import { useGame } from "@/lib/game-context";
 import { useToast } from "@/hooks/use-toast";
@@ -55,28 +55,28 @@ const baseTiers: BaseTier[] = [
     tier: 2,
     name: "Wooden Lodge",
     description: "A sturdy wooden structure with more space.",
-    requirements: { gold: 50000, rank: "Apprentice" },
+    requirements: { gold: 500000, rank: "Journeyman" },
     rooms: ["storage", "rest", "crafting"],
   },
   {
     tier: 3,
     name: "Stone Keep",
     description: "A fortified stone building with defenses.",
-    requirements: { gold: 200000, rank: "Journeyman" },
-    rooms: ["storage", "rest", "crafting", "training"],
+    requirements: { gold: 5000000, rank: "Expert" },
+    rooms: ["storage", "rest", "crafting", "training", "defenses"],
   },
   {
     tier: 4,
     name: "Grand Manor",
     description: "A luxurious manor with all amenities.",
-    requirements: { gold: 1000000, rank: "Expert" },
-    rooms: ["storage", "rest", "crafting", "training", "vault"],
+    requirements: { gold: 50000000, rank: "Grand Master" },
+    rooms: ["storage", "rest", "crafting", "training", "vault", "defenses"],
   },
   {
     tier: 5,
     name: "Fortress Castle",
     description: "An impenetrable fortress befitting a legend.",
-    requirements: { gold: 10000000, rank: "Master" },
+    requirements: { gold: 500000000, rank: "Legend" },
     rooms: ["storage", "rest", "crafting", "training", "vault", "defenses"],
   },
 ];
@@ -366,7 +366,7 @@ export default function Base() {
     }
   };
 
-  const tierCosts = [0, 50000, 200000, 1000000, 10000000];
+  const tierCosts = [0, 500000, 5000000, 50000000, 500000000];
   const nextTierCost = currentTier < 5 ? tierCosts[currentTier] : 0;
 
   return (
@@ -513,37 +513,150 @@ export default function Base() {
               <TabsContent value="defenses" className="mt-4">
                 <Card>
                   <CardContent className="p-6">
-                    {currentTier >= 5 ? (
-                      <div className="space-y-4">
-                        <h3 className="font-serif text-lg font-semibold flex items-center gap-2">
-                          <Shield className="w-5 h-5 text-primary" />
-                          Fortress Defenses
-                        </h3>
+                    {currentTier >= 3 ? (
+                      <div className="space-y-6">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-serif text-lg font-semibold flex items-center gap-2">
+                            <Shield className="w-5 h-5 text-primary" />
+                            Base Defenses
+                          </h3>
+                          <Badge variant="secondary">Tier {currentTier} Defenses</Badge>
+                        </div>
                         <p className="text-sm text-muted-foreground">
-                          Your Fortress Castle is equipped with advanced magical wards and physical traps.
+                          Your {currentTierData.name} is equipped with defensive systems. Higher tiers unlock more options.
                         </p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                          <div className="p-3 rounded-lg bg-secondary/50 border border-primary/20">
-                            <p className="font-medium flex items-center gap-2">
-                              <Target className="w-4 h-4 text-red-400" />
-                              Automatic Sentry
-                            </p>
-                            <p className="text-xs text-muted-foreground">Deals damage to raiders before they enter.</p>
+                        
+                        <div className="space-y-4">
+                          <h4 className="text-sm font-semibold text-muted-foreground">TRAPS & SENTRIES</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="p-4 rounded-lg bg-secondary/50 border border-primary/20">
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="font-medium flex items-center gap-2">
+                                  <Target className="w-4 h-4 text-red-400" />
+                                  Arrow Traps
+                                </p>
+                                <Badge variant="outline" className="text-xs">Level {roomLevels["defenses"] || 1}</Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground mb-3">Deals {(roomLevels["defenses"] || 1) * 50} damage to raiders.</p>
+                              <Progress value={(roomLevels["defenses"] || 1) * 10} className="h-1.5" />
+                            </div>
+                            <div className="p-4 rounded-lg bg-secondary/50 border border-primary/20">
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="font-medium flex items-center gap-2">
+                                  <Zap className="w-4 h-4 text-yellow-400" />
+                                  Magical Wards
+                                </p>
+                                <Badge variant="outline" className="text-xs">Level {roomLevels["defenses"] || 1}</Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground mb-3">Reduces gold lost by {(roomLevels["defenses"] || 1) * 5}%.</p>
+                              <Progress value={(roomLevels["defenses"] || 1) * 10} className="h-1.5" />
+                            </div>
+                            {currentTier >= 4 && (
+                              <>
+                                <div className="p-4 rounded-lg bg-secondary/50 border border-orange-500/20">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <p className="font-medium flex items-center gap-2">
+                                      <Flame className="w-4 h-4 text-orange-400" />
+                                      Fire Pits
+                                    </p>
+                                    <Badge variant="outline" className="text-xs bg-orange-500/10">Tier 4+</Badge>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground mb-3">Burns {(roomLevels["defenses"] || 1) * 2}% of raider HP over time.</p>
+                                  <Progress value={(roomLevels["defenses"] || 1) * 10} className="h-1.5" />
+                                </div>
+                                <div className="p-4 rounded-lg bg-secondary/50 border border-blue-500/20">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <p className="font-medium flex items-center gap-2">
+                                      <Shield className="w-4 h-4 text-blue-400" />
+                                      Reinforced Walls
+                                    </p>
+                                    <Badge variant="outline" className="text-xs bg-blue-500/10">Tier 4+</Badge>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground mb-3">+{(roomLevels["defenses"] || 1) * 100} base defense rating.</p>
+                                  <Progress value={(roomLevels["defenses"] || 1) * 10} className="h-1.5" />
+                                </div>
+                              </>
+                            )}
+                            {currentTier >= 5 && (
+                              <>
+                                <div className="p-4 rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <p className="font-medium flex items-center gap-2">
+                                      <Sparkles className="w-4 h-4 text-purple-400" />
+                                      Arcane Sentinels
+                                    </p>
+                                    <Badge className="text-xs bg-purple-600">Tier 5</Badge>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground mb-3">Summons {Math.floor((roomLevels["defenses"] || 1) / 2) + 1} magical guardians.</p>
+                                  <Progress value={(roomLevels["defenses"] || 1) * 10} className="h-1.5" />
+                                </div>
+                                <div className="p-4 rounded-lg bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/30">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <p className="font-medium flex items-center gap-2">
+                                      <Crown className="w-4 h-4 text-yellow-400" />
+                                      Dragon's Wrath
+                                    </p>
+                                    <Badge className="text-xs bg-yellow-600">Tier 5</Badge>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground mb-3">Ultimate defense - 25% chance to instantly defeat raiders.</p>
+                                  <Progress value={100} className="h-1.5" />
+                                </div>
+                              </>
+                            )}
                           </div>
-                          <div className="p-3 rounded-lg bg-secondary/50 border border-primary/20">
-                            <p className="font-medium flex items-center gap-2">
-                              <Zap className="w-4 h-4 text-yellow-400" />
-                              Magical Wards
-                            </p>
-                            <p className="text-xs text-muted-foreground">Reduces gold lost during failed defenses.</p>
+                        </div>
+
+                        <div className="space-y-4 pt-4 border-t border-border/50">
+                          <h4 className="text-sm font-semibold text-muted-foreground">HIRE GUARDS</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="p-4 rounded-lg bg-secondary/50 border border-border hover:border-primary/50 transition-colors cursor-pointer">
+                              <div className="flex items-center gap-3 mb-2">
+                                <Users className="w-8 h-8 text-green-400" />
+                                <div>
+                                  <p className="font-medium">Militia</p>
+                                  <p className="text-xs text-muted-foreground">Basic guards</p>
+                                </div>
+                              </div>
+                              <p className="text-xs mb-2">+100 Defense Rating</p>
+                              <Button size="sm" variant="outline" className="w-full">
+                                <Coins className="w-3 h-3 mr-1" /> 50,000/day
+                              </Button>
+                            </div>
+                            <div className={`p-4 rounded-lg bg-secondary/50 border ${currentTier >= 4 ? 'border-border hover:border-primary/50 cursor-pointer' : 'border-border/30 opacity-50'} transition-colors`}>
+                              <div className="flex items-center gap-3 mb-2">
+                                <Swords className="w-8 h-8 text-blue-400" />
+                                <div>
+                                  <p className="font-medium">Knights</p>
+                                  <p className="text-xs text-muted-foreground">Elite warriors</p>
+                                </div>
+                              </div>
+                              <p className="text-xs mb-2">+500 Defense Rating</p>
+                              <Button size="sm" variant="outline" className="w-full" disabled={currentTier < 4}>
+                                {currentTier >= 4 ? <><Coins className="w-3 h-3 mr-1" /> 250,000/day</> : <><Lock className="w-3 h-3 mr-1" /> Tier 4</>}
+                              </Button>
+                            </div>
+                            <div className={`p-4 rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10 border ${currentTier >= 5 ? 'border-purple-500/30 hover:border-purple-500/50 cursor-pointer' : 'border-border/30 opacity-50'} transition-colors`}>
+                              <div className="flex items-center gap-3 mb-2">
+                                <Sparkles className="w-8 h-8 text-purple-400" />
+                                <div>
+                                  <p className="font-medium">Archmages</p>
+                                  <p className="text-xs text-muted-foreground">Legendary mages</p>
+                                </div>
+                              </div>
+                              <p className="text-xs mb-2">+2000 Defense Rating</p>
+                              <Button size="sm" variant="outline" className="w-full" disabled={currentTier < 5}>
+                                {currentTier >= 5 ? <><Coins className="w-3 h-3 mr-1" /> 1,000,000/day</> : <><Lock className="w-3 h-3 mr-1" /> Tier 5</>}
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       </div>
                     ) : (
                       <div className="text-center text-muted-foreground py-6">
                         <Shield className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                        <p>Defense systems unlock at Tier 5</p>
+                        <p>Defense systems unlock at Tier 3 (Stone Keep)</p>
                         <p className="text-sm mt-2">Upgrade your base to access traps, guards, and magical wards.</p>
+                        <p className="text-xs mt-4 text-yellow-400">Requires: 5,000,000 gold + Expert rank</p>
                       </div>
                     )}
                   </CardContent>

@@ -29,6 +29,10 @@ import Achievements from "@/pages/achievements";
 import ValorShop from "@/pages/valor-shop";
 import CosmeticsShop from "@/pages/cosmetics-shop";
 import Tournaments from "@/pages/tournaments";
+import PetShop from "@/pages/pet-shop";
+import Mining from "@/pages/mining";
+import RubyMines from "@/pages/ruby-mines";
+import HellZone from "@/pages/hell-zone";
 import NotFound from "@/pages/not-found";
 import { MobileLandscapePrompt } from "@/components/mobile-landscape-prompt";
 import { AppLoadingWrapper } from "@/components/app-loading-wrapper";
@@ -58,6 +62,10 @@ function Router() {
       <Route path="/valor-shop" component={ValorShop} />
       <Route path="/cosmetics-shop" component={CosmeticsShop} />
       <Route path="/tournaments" component={Tournaments} />
+      <Route path="/pet-shop" component={PetShop} />
+      <Route path="/mining" component={Mining} />
+      <Route path="/ruby-mines" component={RubyMines} />
+      <Route path="/hell-zone" component={HellZone} />
       <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>

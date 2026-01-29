@@ -9465,104 +9465,105 @@ export async function registerRoutes(
   });
 
   // ===== COSMETICS SHOP =====
+  // Prices significantly increased - mythic skins are now premium items
   const COSMETICS_SHOP = {
     character: [
-      { id: "warrior_gold", name: "Golden Warrior", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
-      { id: "shadow_knight", name: "Shadow Knight", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
-      { id: "flame_lord", name: "Flame Lord", rarity: "mythic", skinTicketCost: 200, rubyPrice: 2500 },
-      { id: "ice_queen", name: "Ice Queen", rarity: "mythic", skinTicketCost: 200, rubyPrice: 2500 },
-      { id: "dragon_slayer", name: "Dragon Slayer", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
-      { id: "mystic_sage", name: "Mystic Sage", rarity: "rare", skinTicketCost: 25, rubyPrice: 250 },
-      { id: "forest_ranger", name: "Forest Ranger", rarity: "rare", skinTicketCost: 25, rubyPrice: 250 },
-      { id: "void_walker", name: "Void Walker", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
-      { id: "celestial_guardian", name: "Celestial Guardian", rarity: "mythic", skinTicketCost: 200, rubyPrice: 2500 },
-      { id: "crimson_berserker", name: "Crimson Berserker", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
-      { id: "ocean_warden", name: "Ocean Warden", rarity: "rare", skinTicketCost: 25, rubyPrice: 250 },
-      { id: "thunder_champion", name: "Thunder Champion", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
-      { id: "blood_monarch", name: "Blood Monarch", rarity: "mythic", skinTicketCost: 200, rubyPrice: 2500 },
-      { id: "starlight_paladin", name: "Starlight Paladin", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
-      { id: "desert_nomad", name: "Desert Nomad", rarity: "rare", skinTicketCost: 25, rubyPrice: 250 },
-      { id: "crystal_mage", name: "Crystal Mage", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
-      { id: "undead_warlord", name: "Undead Warlord", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
-      { id: "demon_hunter", name: "Demon Hunter", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
-      { id: "holy_crusader", name: "Holy Crusader", rarity: "rare", skinTicketCost: 25, rubyPrice: 250 },
-      { id: "storm_caller", name: "Storm Caller", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
-      { id: "plague_doctor", name: "Plague Doctor", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
-      { id: "arcane_emperor", name: "Arcane Emperor", rarity: "mythic", skinTicketCost: 200, rubyPrice: 2500 },
-      { id: "primal_beast", name: "Primal Beast", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
-      { id: "ancient_pharaoh", name: "Ancient Pharaoh", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
+      { id: "warrior_gold", name: "Golden Warrior", rarity: "epic", skinTicketCost: 50, rubyPrice: 5000 },
+      { id: "shadow_knight", name: "Shadow Knight", rarity: "legendary", skinTicketCost: 100, rubyPrice: 15000 },
+      { id: "flame_lord", name: "Flame Lord", rarity: "mythic", skinTicketCost: 200, rubyPrice: 50000 },
+      { id: "ice_queen", name: "Ice Queen", rarity: "mythic", skinTicketCost: 200, rubyPrice: 50000 },
+      { id: "dragon_slayer", name: "Dragon Slayer", rarity: "epic", skinTicketCost: 50, rubyPrice: 5000 },
+      { id: "mystic_sage", name: "Mystic Sage", rarity: "rare", skinTicketCost: 25, rubyPrice: 2000 },
+      { id: "forest_ranger", name: "Forest Ranger", rarity: "rare", skinTicketCost: 25, rubyPrice: 2000 },
+      { id: "void_walker", name: "Void Walker", rarity: "legendary", skinTicketCost: 100, rubyPrice: 15000 },
+      { id: "celestial_guardian", name: "Celestial Guardian", rarity: "mythic", skinTicketCost: 200, rubyPrice: 50000 },
+      { id: "crimson_berserker", name: "Crimson Berserker", rarity: "epic", skinTicketCost: 50, rubyPrice: 5000 },
+      { id: "ocean_warden", name: "Ocean Warden", rarity: "rare", skinTicketCost: 25, rubyPrice: 2000 },
+      { id: "thunder_champion", name: "Thunder Champion", rarity: "legendary", skinTicketCost: 100, rubyPrice: 15000 },
+      { id: "blood_monarch", name: "Blood Monarch", rarity: "mythic", skinTicketCost: 200, rubyPrice: 50000 },
+      { id: "starlight_paladin", name: "Starlight Paladin", rarity: "legendary", skinTicketCost: 100, rubyPrice: 15000 },
+      { id: "desert_nomad", name: "Desert Nomad", rarity: "rare", skinTicketCost: 25, rubyPrice: 2000 },
+      { id: "crystal_mage", name: "Crystal Mage", rarity: "epic", skinTicketCost: 50, rubyPrice: 5000 },
+      { id: "undead_warlord", name: "Undead Warlord", rarity: "legendary", skinTicketCost: 100, rubyPrice: 15000 },
+      { id: "demon_hunter", name: "Demon Hunter", rarity: "epic", skinTicketCost: 50, rubyPrice: 5000 },
+      { id: "holy_crusader", name: "Holy Crusader", rarity: "rare", skinTicketCost: 25, rubyPrice: 2000 },
+      { id: "storm_caller", name: "Storm Caller", rarity: "epic", skinTicketCost: 50, rubyPrice: 5000 },
+      { id: "plague_doctor", name: "Plague Doctor", rarity: "legendary", skinTicketCost: 100, rubyPrice: 15000 },
+      { id: "arcane_emperor", name: "Arcane Emperor", rarity: "mythic", skinTicketCost: 200, rubyPrice: 50000 },
+      { id: "primal_beast", name: "Primal Beast", rarity: "epic", skinTicketCost: 50, rubyPrice: 5000 },
+      { id: "ancient_pharaoh", name: "Ancient Pharaoh", rarity: "legendary", skinTicketCost: 100, rubyPrice: 15000 },
     ],
     pet: [
-      { id: "elemental_glow", name: "Elemental Glow", rarity: "epic", skinTicketCost: 30, rubyPrice: 300 },
-      { id: "shadow_aura", name: "Shadow Aura", rarity: "legendary", skinTicketCost: 75, rubyPrice: 750 },
-      { id: "golden_scales", name: "Golden Scales", rarity: "mythic", skinTicketCost: 150, rubyPrice: 1500 },
-      { id: "crystal_armor", name: "Crystal Armor", rarity: "rare", skinTicketCost: 20, rubyPrice: 200 },
-      { id: "flame_wings", name: "Flame Wings", rarity: "epic", skinTicketCost: 30, rubyPrice: 300 },
-      { id: "ice_scales", name: "Ice Scales", rarity: "rare", skinTicketCost: 20, rubyPrice: 200 },
-      { id: "nature_vines", name: "Nature Vines", rarity: "rare", skinTicketCost: 20, rubyPrice: 200 },
-      { id: "void_essence", name: "Void Essence", rarity: "mythic", skinTicketCost: 150, rubyPrice: 1500 },
-      { id: "thunder_crackle", name: "Thunder Crackle", rarity: "epic", skinTicketCost: 30, rubyPrice: 300 },
-      { id: "starlit_fur", name: "Starlit Fur", rarity: "legendary", skinTicketCost: 75, rubyPrice: 750 },
-      { id: "blood_mark", name: "Blood Mark", rarity: "epic", skinTicketCost: 30, rubyPrice: 300 },
-      { id: "ocean_shimmer", name: "Ocean Shimmer", rarity: "rare", skinTicketCost: 20, rubyPrice: 200 },
-      { id: "forest_moss", name: "Forest Moss", rarity: "rare", skinTicketCost: 20, rubyPrice: 200 },
-      { id: "lava_veins", name: "Lava Veins", rarity: "legendary", skinTicketCost: 75, rubyPrice: 750 },
-      { id: "spectral_mist", name: "Spectral Mist", rarity: "mythic", skinTicketCost: 150, rubyPrice: 1500 },
-      { id: "diamond_shell", name: "Diamond Shell", rarity: "legendary", skinTicketCost: 75, rubyPrice: 750 },
-      { id: "toxic_ooze", name: "Toxic Ooze", rarity: "epic", skinTicketCost: 30, rubyPrice: 300 },
-      { id: "holy_halo", name: "Holy Halo", rarity: "legendary", skinTicketCost: 75, rubyPrice: 750 },
-      { id: "demon_horns", name: "Demon Horns", rarity: "epic", skinTicketCost: 30, rubyPrice: 300 },
-      { id: "ancient_runes", name: "Ancient Runes", rarity: "rare", skinTicketCost: 20, rubyPrice: 200 },
-      { id: "mechanical_parts", name: "Mechanical Parts", rarity: "epic", skinTicketCost: 30, rubyPrice: 300 },
-      { id: "celestial_glow", name: "Celestial Glow", rarity: "mythic", skinTicketCost: 150, rubyPrice: 1500 },
+      { id: "elemental_glow", name: "Elemental Glow", rarity: "epic", skinTicketCost: 30, rubyPrice: 3500 },
+      { id: "shadow_aura", name: "Shadow Aura", rarity: "legendary", skinTicketCost: 75, rubyPrice: 12000 },
+      { id: "golden_scales", name: "Golden Scales", rarity: "mythic", skinTicketCost: 150, rubyPrice: 40000 },
+      { id: "crystal_armor", name: "Crystal Armor", rarity: "rare", skinTicketCost: 20, rubyPrice: 1500 },
+      { id: "flame_wings", name: "Flame Wings", rarity: "epic", skinTicketCost: 30, rubyPrice: 3500 },
+      { id: "ice_scales", name: "Ice Scales", rarity: "rare", skinTicketCost: 20, rubyPrice: 1500 },
+      { id: "nature_vines", name: "Nature Vines", rarity: "rare", skinTicketCost: 20, rubyPrice: 1500 },
+      { id: "void_essence", name: "Void Essence", rarity: "mythic", skinTicketCost: 150, rubyPrice: 40000 },
+      { id: "thunder_crackle", name: "Thunder Crackle", rarity: "epic", skinTicketCost: 30, rubyPrice: 3500 },
+      { id: "starlit_fur", name: "Starlit Fur", rarity: "legendary", skinTicketCost: 75, rubyPrice: 12000 },
+      { id: "blood_mark", name: "Blood Mark", rarity: "epic", skinTicketCost: 30, rubyPrice: 3500 },
+      { id: "ocean_shimmer", name: "Ocean Shimmer", rarity: "rare", skinTicketCost: 20, rubyPrice: 1500 },
+      { id: "forest_moss", name: "Forest Moss", rarity: "rare", skinTicketCost: 20, rubyPrice: 1500 },
+      { id: "lava_veins", name: "Lava Veins", rarity: "legendary", skinTicketCost: 75, rubyPrice: 12000 },
+      { id: "spectral_mist", name: "Spectral Mist", rarity: "mythic", skinTicketCost: 150, rubyPrice: 40000 },
+      { id: "diamond_shell", name: "Diamond Shell", rarity: "legendary", skinTicketCost: 75, rubyPrice: 12000 },
+      { id: "toxic_ooze", name: "Toxic Ooze", rarity: "epic", skinTicketCost: 30, rubyPrice: 3500 },
+      { id: "holy_halo", name: "Holy Halo", rarity: "legendary", skinTicketCost: 75, rubyPrice: 12000 },
+      { id: "demon_horns", name: "Demon Horns", rarity: "epic", skinTicketCost: 30, rubyPrice: 3500 },
+      { id: "ancient_runes", name: "Ancient Runes", rarity: "rare", skinTicketCost: 20, rubyPrice: 1500 },
+      { id: "mechanical_parts", name: "Mechanical Parts", rarity: "epic", skinTicketCost: 30, rubyPrice: 3500 },
+      { id: "celestial_glow", name: "Celestial Glow", rarity: "mythic", skinTicketCost: 150, rubyPrice: 40000 },
     ],
     bird: [
-      { id: "phoenix_feathers", name: "Phoenix Feathers", rarity: "mythic", skinTicketCost: 125, rubyPrice: 1250 },
-      { id: "storm_wings", name: "Storm Wings", rarity: "legendary", skinTicketCost: 60, rubyPrice: 600 },
-      { id: "rainbow_plume", name: "Rainbow Plume", rarity: "epic", skinTicketCost: 35, rubyPrice: 350 },
-      { id: "shadow_feathers", name: "Shadow Feathers", rarity: "rare", skinTicketCost: 15, rubyPrice: 150 },
-      { id: "golden_wings", name: "Golden Wings", rarity: "epic", skinTicketCost: 35, rubyPrice: 350 },
-      { id: "ice_crystal_wings", name: "Ice Crystal Wings", rarity: "legendary", skinTicketCost: 60, rubyPrice: 600 },
-      { id: "nature_leaf", name: "Nature Leaf Plumage", rarity: "rare", skinTicketCost: 15, rubyPrice: 150 },
-      { id: "volcanic_ember", name: "Volcanic Ember", rarity: "epic", skinTicketCost: 35, rubyPrice: 350 },
-      { id: "void_raven", name: "Void Raven", rarity: "mythic", skinTicketCost: 125, rubyPrice: 1250 },
-      { id: "celestial_dove", name: "Celestial Dove", rarity: "legendary", skinTicketCost: 60, rubyPrice: 600 },
-      { id: "blood_hawk", name: "Blood Hawk", rarity: "epic", skinTicketCost: 35, rubyPrice: 350 },
-      { id: "ocean_spray", name: "Ocean Spray Feathers", rarity: "rare", skinTicketCost: 15, rubyPrice: 150 },
-      { id: "thunderbird", name: "Thunderbird Spark", rarity: "legendary", skinTicketCost: 60, rubyPrice: 600 },
-      { id: "spirit_owl", name: "Spirit Owl", rarity: "epic", skinTicketCost: 35, rubyPrice: 350 },
-      { id: "neon_parrot", name: "Neon Parrot", rarity: "rare", skinTicketCost: 15, rubyPrice: 150 },
-      { id: "demon_crow", name: "Demon Crow", rarity: "legendary", skinTicketCost: 60, rubyPrice: 600 },
-      { id: "aurora_wings", name: "Aurora Wings", rarity: "mythic", skinTicketCost: 125, rubyPrice: 1250 },
-      { id: "jade_peacock", name: "Jade Peacock", rarity: "epic", skinTicketCost: 35, rubyPrice: 350 },
-      { id: "royal_falcon", name: "Royal Falcon", rarity: "legendary", skinTicketCost: 60, rubyPrice: 600 },
-      { id: "ancient_condor", name: "Ancient Condor", rarity: "epic", skinTicketCost: 35, rubyPrice: 350 },
-      { id: "cosmic_eagle", name: "Cosmic Eagle", rarity: "mythic", skinTicketCost: 125, rubyPrice: 1250 },
-      { id: "frost_swan", name: "Frost Swan", rarity: "rare", skinTicketCost: 15, rubyPrice: 150 },
+      { id: "phoenix_feathers", name: "Phoenix Feathers", rarity: "mythic", skinTicketCost: 125, rubyPrice: 35000 },
+      { id: "storm_wings", name: "Storm Wings", rarity: "legendary", skinTicketCost: 60, rubyPrice: 10000 },
+      { id: "rainbow_plume", name: "Rainbow Plume", rarity: "epic", skinTicketCost: 35, rubyPrice: 3000 },
+      { id: "shadow_feathers", name: "Shadow Feathers", rarity: "rare", skinTicketCost: 15, rubyPrice: 1200 },
+      { id: "golden_wings", name: "Golden Wings", rarity: "epic", skinTicketCost: 35, rubyPrice: 3000 },
+      { id: "ice_crystal_wings", name: "Ice Crystal Wings", rarity: "legendary", skinTicketCost: 60, rubyPrice: 10000 },
+      { id: "nature_leaf", name: "Nature Leaf Plumage", rarity: "rare", skinTicketCost: 15, rubyPrice: 1200 },
+      { id: "volcanic_ember", name: "Volcanic Ember", rarity: "epic", skinTicketCost: 35, rubyPrice: 3000 },
+      { id: "void_raven", name: "Void Raven", rarity: "mythic", skinTicketCost: 125, rubyPrice: 35000 },
+      { id: "celestial_dove", name: "Celestial Dove", rarity: "legendary", skinTicketCost: 60, rubyPrice: 10000 },
+      { id: "blood_hawk", name: "Blood Hawk", rarity: "epic", skinTicketCost: 35, rubyPrice: 3000 },
+      { id: "ocean_spray", name: "Ocean Spray Feathers", rarity: "rare", skinTicketCost: 15, rubyPrice: 1200 },
+      { id: "thunderbird", name: "Thunderbird Spark", rarity: "legendary", skinTicketCost: 60, rubyPrice: 10000 },
+      { id: "spirit_owl", name: "Spirit Owl", rarity: "epic", skinTicketCost: 35, rubyPrice: 3000 },
+      { id: "neon_parrot", name: "Neon Parrot", rarity: "rare", skinTicketCost: 15, rubyPrice: 1200 },
+      { id: "demon_crow", name: "Demon Crow", rarity: "legendary", skinTicketCost: 60, rubyPrice: 10000 },
+      { id: "aurora_wings", name: "Aurora Wings", rarity: "mythic", skinTicketCost: 125, rubyPrice: 35000 },
+      { id: "jade_peacock", name: "Jade Peacock", rarity: "epic", skinTicketCost: 35, rubyPrice: 3000 },
+      { id: "royal_falcon", name: "Royal Falcon", rarity: "legendary", skinTicketCost: 60, rubyPrice: 10000 },
+      { id: "ancient_condor", name: "Ancient Condor", rarity: "epic", skinTicketCost: 35, rubyPrice: 3000 },
+      { id: "cosmic_eagle", name: "Cosmic Eagle", rarity: "mythic", skinTicketCost: 125, rubyPrice: 35000 },
+      { id: "frost_swan", name: "Frost Swan", rarity: "rare", skinTicketCost: 15, rubyPrice: 1200 },
     ],
     base: [
-      { id: "dark_fortress", name: "Dark Fortress", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
-      { id: "crystal_palace", name: "Crystal Palace", rarity: "mythic", skinTicketCost: 200, rubyPrice: 2000 },
-      { id: "ancient_temple", name: "Ancient Temple", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
-      { id: "dragon_keep", name: "Dragon Keep", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
-      { id: "nature_sanctuary", name: "Nature Sanctuary", rarity: "rare", skinTicketCost: 25, rubyPrice: 250 },
-      { id: "ice_citadel", name: "Ice Citadel", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
-      { id: "volcanic_stronghold", name: "Volcanic Stronghold", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
-      { id: "skyward_tower", name: "Skyward Tower", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
-      { id: "underwater_dome", name: "Underwater Dome", rarity: "mythic", skinTicketCost: 200, rubyPrice: 2000 },
-      { id: "desert_oasis", name: "Desert Oasis", rarity: "rare", skinTicketCost: 25, rubyPrice: 250 },
-      { id: "haunted_manor", name: "Haunted Manor", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
-      { id: "celestial_shrine", name: "Celestial Shrine", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
-      { id: "demon_lair", name: "Demon Lair", rarity: "mythic", skinTicketCost: 200, rubyPrice: 2000 },
-      { id: "floating_island", name: "Floating Island", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
-      { id: "mechanical_factory", name: "Mechanical Factory", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
-      { id: "elven_treehouse", name: "Elven Treehouse", rarity: "rare", skinTicketCost: 25, rubyPrice: 250 },
-      { id: "dwarven_mine", name: "Dwarven Mine", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
-      { id: "pirate_cove", name: "Pirate Cove", rarity: "rare", skinTicketCost: 25, rubyPrice: 250 },
-      { id: "void_dimension", name: "Void Dimension", rarity: "mythic", skinTicketCost: 200, rubyPrice: 2000 },
-      { id: "golden_throne", name: "Golden Throne Room", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
-      { id: "storm_castle", name: "Storm Castle", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
-      { id: "arcane_library", name: "Arcane Library", rarity: "rare", skinTicketCost: 25, rubyPrice: 250 },
+      { id: "dark_fortress", name: "Dark Fortress", rarity: "legendary", skinTicketCost: 100, rubyPrice: 18000 },
+      { id: "crystal_palace", name: "Crystal Palace", rarity: "mythic", skinTicketCost: 200, rubyPrice: 45000 },
+      { id: "ancient_temple", name: "Ancient Temple", rarity: "epic", skinTicketCost: 50, rubyPrice: 6000 },
+      { id: "dragon_keep", name: "Dragon Keep", rarity: "legendary", skinTicketCost: 100, rubyPrice: 18000 },
+      { id: "nature_sanctuary", name: "Nature Sanctuary", rarity: "rare", skinTicketCost: 25, rubyPrice: 2500 },
+      { id: "ice_citadel", name: "Ice Citadel", rarity: "epic", skinTicketCost: 50, rubyPrice: 6000 },
+      { id: "volcanic_stronghold", name: "Volcanic Stronghold", rarity: "legendary", skinTicketCost: 100, rubyPrice: 18000 },
+      { id: "skyward_tower", name: "Skyward Tower", rarity: "epic", skinTicketCost: 50, rubyPrice: 6000 },
+      { id: "underwater_dome", name: "Underwater Dome", rarity: "mythic", skinTicketCost: 200, rubyPrice: 45000 },
+      { id: "desert_oasis", name: "Desert Oasis", rarity: "rare", skinTicketCost: 25, rubyPrice: 2500 },
+      { id: "haunted_manor", name: "Haunted Manor", rarity: "epic", skinTicketCost: 50, rubyPrice: 6000 },
+      { id: "celestial_shrine", name: "Celestial Shrine", rarity: "legendary", skinTicketCost: 100, rubyPrice: 18000 },
+      { id: "demon_lair", name: "Demon Lair", rarity: "mythic", skinTicketCost: 200, rubyPrice: 45000 },
+      { id: "floating_island", name: "Floating Island", rarity: "legendary", skinTicketCost: 100, rubyPrice: 18000 },
+      { id: "mechanical_factory", name: "Mechanical Factory", rarity: "epic", skinTicketCost: 50, rubyPrice: 6000 },
+      { id: "elven_treehouse", name: "Elven Treehouse", rarity: "rare", skinTicketCost: 25, rubyPrice: 2500 },
+      { id: "dwarven_mine", name: "Dwarven Mine", rarity: "epic", skinTicketCost: 50, rubyPrice: 6000 },
+      { id: "pirate_cove", name: "Pirate Cove", rarity: "rare", skinTicketCost: 25, rubyPrice: 2500 },
+      { id: "void_dimension", name: "Void Dimension", rarity: "mythic", skinTicketCost: 200, rubyPrice: 45000 },
+      { id: "golden_throne", name: "Golden Throne Room", rarity: "legendary", skinTicketCost: 100, rubyPrice: 18000 },
+      { id: "storm_castle", name: "Storm Castle", rarity: "epic", skinTicketCost: 50, rubyPrice: 6000 },
+      { id: "arcane_library", name: "Arcane Library", rarity: "rare", skinTicketCost: 25, rubyPrice: 2500 },
     ],
   };
 
@@ -10512,6 +10513,204 @@ export async function registerRoutes(
       res.json({ leaderboard: sorted });
     } catch (error) {
       res.status(500).json({ error: "Failed to get leaderboard" });
+    }
+  });
+
+  // ===== PET SHOP - Buy pet eggs with rubies =====
+  const PET_SHOP_EGGS = [
+    { id: "common_egg", name: "Forest Egg", rubyPrice: 500, statBonus: { minStr: 1, maxStr: 5, minSpd: 1, maxSpd: 5, minLuck: 1, maxLuck: 5, minElem: 1, maxElem: 5 }, elements: ["Fire", "Water", "Earth", "Air"], rankRequired: "Journeyman" },
+    { id: "rare_egg", name: "Crystal Egg", rubyPrice: 2500, statBonus: { minStr: 5, maxStr: 15, minSpd: 5, maxSpd: 15, minLuck: 5, maxLuck: 15, minElem: 5, maxElem: 15 }, elements: ["Lightning", "Ice", "Nature"], rankRequired: "Expert" },
+    { id: "epic_egg", name: "Storm Egg", rubyPrice: 10000, statBonus: { minStr: 15, maxStr: 35, minSpd: 15, maxSpd: 35, minLuck: 10, maxLuck: 25, minElem: 20, maxElem: 50 }, elements: ["Lightning", "Fire", "Ice"], rankRequired: "Master" },
+    { id: "legendary_egg", name: "Dragon Egg", rubyPrice: 35000, statBonus: { minStr: 35, maxStr: 75, minSpd: 30, maxSpd: 65, minLuck: 20, maxLuck: 50, minElem: 50, maxElem: 100 }, elements: ["Dark", "Light", "Arcana"], rankRequired: "Grand Master" },
+    { id: "mythic_egg", name: "Void Egg", rubyPrice: 100000, statBonus: { minStr: 75, maxStr: 150, minSpd: 70, maxSpd: 140, minLuck: 50, maxLuck: 100, minElem: 100, maxElem: 200 }, elements: ["Void", "Aether", "Chrono", "Plasma"], rankRequired: "Legend" },
+    { id: "divine_egg", name: "Celestial Egg", rubyPrice: 250000, statBonus: { minStr: 150, maxStr: 300, minSpd: 140, maxSpd: 280, minLuck: 100, maxLuck: 200, minElem: 200, maxElem: 400 }, elements: ["Elemental Convergence"], rankRequired: "Mythical Legend" },
+  ];
+
+  app.post("/api/pet-shop/purchase", async (req, res) => {
+    try {
+      const { accountId, eggId } = req.body;
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const egg = PET_SHOP_EGGS.find(e => e.id === eggId);
+      if (!egg) return res.status(404).json({ error: "Egg not found" });
+
+      if ((account.rubies || 0) < egg.rubyPrice) {
+        return res.status(400).json({ error: `Need ${egg.rubyPrice} rubies` });
+      }
+
+      const randomStat = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+      const element = egg.elements[Math.floor(Math.random() * egg.elements.length)];
+      
+      const petNames = ["Ember", "Frost", "Storm", "Shadow", "Crystal", "Blaze", "Aurora", "Void", "Celestial", "Dragon"];
+      const petName = `${petNames[Math.floor(Math.random() * petNames.length)]}'s ${egg.name.replace(" Egg", "")}`;
+
+      const newPet = {
+        id: crypto.randomUUID(),
+        accountId,
+        name: petName,
+        tier: "egg" as const,
+        element,
+        elements: [element],
+        exp: 0,
+        stats: {
+          Str: randomStat(egg.statBonus.minStr, egg.statBonus.maxStr),
+          Spd: randomStat(egg.statBonus.minSpd, egg.statBonus.maxSpd),
+          Luck: randomStat(egg.statBonus.minLuck, egg.statBonus.maxLuck),
+          ElementalPower: randomStat(egg.statBonus.minElem, egg.statBonus.maxElem),
+        },
+        bondLevel: 0,
+        rebirthCount: 0,
+      };
+
+      await storage.createPet(newPet as any);
+      await storage.updateAccount(accountId, { rubies: (account.rubies || 0) - egg.rubyPrice });
+
+      res.json({ success: true, pet: newPet });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to purchase egg" });
+    }
+  });
+
+  // ===== MINING ZONE =====
+  app.post("/api/mining/mine", async (req, res) => {
+    try {
+      const { accountId, nodeId } = req.body;
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const nodes: Record<string, { goldReward: number; expReward: number }> = {
+        copper: { goldReward: 100, expReward: 5 },
+        iron: { goldReward: 250, expReward: 10 },
+        silver: { goldReward: 500, expReward: 20 },
+        gold: { goldReward: 1000, expReward: 50 },
+        mythril: { goldReward: 2500, expReward: 100 },
+        adamantite: { goldReward: 5000, expReward: 200 },
+      };
+
+      const node = nodes[nodeId];
+      if (!node) return res.status(400).json({ error: "Invalid node" });
+
+      const luck = (account.stats as any)?.Luck || 10;
+      const bonusMultiplier = 1 + (luck / 100);
+      const finalGold = Math.floor(node.goldReward * bonusMultiplier);
+      const finalExp = Math.floor(node.expReward * bonusMultiplier);
+
+      await storage.updateAccount(accountId, {
+        gold: (account.gold || 0) + finalGold,
+        trainingPoints: (account.trainingPoints || 0) + finalExp,
+      });
+
+      res.json({ success: true, goldReward: finalGold, expReward: finalExp });
+    } catch (error) {
+      res.status(500).json({ error: "Mining failed" });
+    }
+  });
+
+  // ===== RUBY MINES ZONE =====
+  app.post("/api/ruby-mines/mine", async (req, res) => {
+    try {
+      const { accountId, nodeId } = req.body;
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const nodes: Record<string, { rubyReward: number; goldReward: number; pvpRisk: boolean }> = {
+        raw_ruby: { rubyReward: 5, goldReward: 500, pvpRisk: false },
+        polished_ruby: { rubyReward: 15, goldReward: 1000, pvpRisk: false },
+        crimson_crystal: { rubyReward: 35, goldReward: 2500, pvpRisk: true },
+        blood_ruby: { rubyReward: 75, goldReward: 5000, pvpRisk: true },
+        dragon_ruby: { rubyReward: 150, goldReward: 10000, pvpRisk: true },
+        void_ruby: { rubyReward: 300, goldReward: 25000, pvpRisk: true },
+      };
+
+      const node = nodes[nodeId];
+      if (!node) return res.status(400).json({ error: "Invalid node" });
+
+      if (node.pvpRisk && Math.random() < 0.3) {
+        const accounts = await storage.getAllAccounts();
+        const otherPlayers = accounts.filter(a => a.id !== accountId && a.role === "player");
+        if (otherPlayers.length > 0) {
+          const opponent = otherPlayers[Math.floor(Math.random() * otherPlayers.length)];
+          const playerPower = ((account.stats as any)?.Str || 10) + ((account.stats as any)?.Spd || 10);
+          const opponentPower = ((opponent.stats as any)?.Str || 10) + ((opponent.stats as any)?.Spd || 10);
+          const won = playerPower + Math.random() * 50 > opponentPower + Math.random() * 50;
+          
+          if (won) {
+            const bonus = Math.floor(node.rubyReward * 0.5);
+            await storage.updateAccount(accountId, {
+              rubies: (account.rubies || 0) + node.rubyReward + bonus,
+              gold: (account.gold || 0) + node.goldReward,
+            });
+            return res.json({ 
+              pvpEncounter: true, 
+              won: true, 
+              message: `Defeated ${opponent.username} and claimed extra ${bonus} rubies!`,
+              rubyReward: node.rubyReward + bonus,
+              goldReward: node.goldReward 
+            });
+          } else {
+            const loss = Math.floor(node.rubyReward * 0.25);
+            return res.json({ 
+              pvpEncounter: true, 
+              won: false, 
+              message: `Lost to ${opponent.username}! They stole ${loss} rubies from you.`,
+              rubyReward: 0,
+              goldReward: 0 
+            });
+          }
+        }
+      }
+
+      await storage.updateAccount(accountId, {
+        rubies: (account.rubies || 0) + node.rubyReward,
+        gold: (account.gold || 0) + node.goldReward,
+      });
+
+      res.json({ success: true, rubyReward: node.rubyReward, goldReward: node.goldReward, pvpEncounter: false });
+    } catch (error) {
+      res.status(500).json({ error: "Mining failed" });
+    }
+  });
+
+  // ===== HELL ZONE =====
+  app.post("/api/hell-zone/challenge", async (req, res) => {
+    try {
+      const { accountId, challengeId } = req.body;
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const challenges: Record<string, { rewards: { gold: number; rubies: number; soulShards: number }; riskPercent: number; difficulty: number }> = {
+        demon_pit: { rewards: { gold: 50000, rubies: 25, soulShards: 50 }, riskPercent: 10, difficulty: 1 },
+        inferno_gauntlet: { rewards: { gold: 150000, rubies: 75, soulShards: 150 }, riskPercent: 25, difficulty: 2 },
+        blood_arena: { rewards: { gold: 500000, rubies: 200, soulShards: 400 }, riskPercent: 50, difficulty: 3 },
+        void_rift: { rewards: { gold: 1500000, rubies: 500, soulShards: 1000 }, riskPercent: 75, difficulty: 4 },
+        archdemons_throne: { rewards: { gold: 5000000, rubies: 1500, soulShards: 3000 }, riskPercent: 90, difficulty: 5 },
+      };
+
+      const challenge = challenges[challengeId];
+      if (!challenge) return res.status(400).json({ error: "Invalid challenge" });
+
+      const playerPower = ((account.stats as any)?.Str || 10) + ((account.stats as any)?.Def || 10) + ((account.stats as any)?.Spd || 10);
+      const requiredPower = challenge.difficulty * 100;
+      const winChance = Math.min(0.9, (playerPower / requiredPower) * 0.5 + 0.2);
+      const victory = Math.random() < winChance;
+
+      if (victory) {
+        await storage.updateAccount(accountId, {
+          gold: (account.gold || 0) + challenge.rewards.gold,
+          rubies: (account.rubies || 0) + challenge.rewards.rubies,
+          soulShards: (account.soulShards || 0) + challenge.rewards.soulShards,
+        });
+        res.json({ victory: true, message: "You conquered the challenge!", rewards: challenge.rewards });
+      } else {
+        const goldLoss = Math.floor((account.gold || 0) * (challenge.riskPercent / 100));
+        await storage.updateAccount(accountId, {
+          gold: Math.max(0, (account.gold || 0) - goldLoss),
+        });
+        res.json({ victory: false, message: `Defeated! Lost ${goldLoss.toLocaleString()} gold.`, goldLost: goldLoss });
+      }
+    } catch (error) {
+      res.status(500).json({ error: "Challenge failed" });
     }
   });
 
