@@ -762,6 +762,60 @@ export async function registerRoutes(
     { id: "story_act4", name: "Convergence", description: "Complete Act 3" },
   ];
 
+  // Common helper to check and grant trophies
+  async function checkAndGrantTrophies(accountId: string) {
+    try {
+      const account = await storage.getAccount(accountId);
+      if (!account) return;
+
+      const earned = playerTrophies.get(accountId) || new Set();
+      const newEarned = new Set(earned);
+
+      // Gold milestones
+      if (account.gold >= 1000000 && !newEarned.has("gold_millionaire")) newEarned.add("gold_millionaire");
+      if (account.gold >= 1000000000 && !newEarned.has("gold_billionaire")) newEarned.add("gold_billionaire");
+
+      // Tower milestones
+      if (account.npcFloor >= 10 && !newEarned.has("tower_floor_10")) newEarned.add("tower_floor_10");
+      if (account.npcFloor >= 50 && !newEarned.has("tower_floor_50")) newEarned.add("tower_floor_50");
+
+      // Win milestones
+      if (account.wins >= 1 && !newEarned.has("first_win")) newEarned.add("first_win");
+      if (account.wins >= 100 && !newEarned.has("wins_100")) newEarned.add("wins_100");
+      if (account.wins >= 1000 && !newEarned.has("wins_1000")) newEarned.add("wins_1000");
+
+      // Rank milestones
+      const rankIndex = playerRanks.indexOf(account.rank);
+      if (rankIndex >= 5 && !newEarned.has("rank_expert")) newEarned.add("rank_expert"); // Expert is index 5
+      if (rankIndex >= 6 && !newEarned.has("rank_master")) newEarned.add("rank_master"); // Master is index 6
+      if (rankIndex >= 12 && !newEarned.has("rank_legend")) newEarned.add("rank_legend"); // Legend is index 12
+
+      // Story milestones
+      if (account.storyAct >= 2 && !newEarned.has("story_act2")) newEarned.add("story_act2");
+      if (account.storyAct >= 3 && !newEarned.has("story_act3")) newEarned.add("story_act3");
+      if (account.storyAct >= 4 && !newEarned.has("story_act4")) newEarned.add("story_act4");
+
+      // Sync if any new ones earned
+      if (newEarned.size > earned.size) {
+        playerTrophies.set(accountId, newEarned);
+        await storage.updateAccount(accountId, { 
+          trophies: Array.from(newEarned) 
+        });
+        
+        // Notify player
+        const added = Array.from(newEarned).filter(id => !earned.has(id));
+        added.forEach(id => {
+          const t = TROPHIES.find(x => x.id === id);
+          if (t) {
+            broadcastToPlayer(accountId, "trophyEarned", t);
+          }
+        });
+      }
+    } catch (error) {
+      console.error("Error checking trophies:", error);
+    }
+  }
+
   app.get("/api/base-skins", (_req, res) => {
     res.json(BASE_SKINS);
   });
@@ -6359,8 +6413,8 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Admin access required" });
       }
       
-      const allFeeds = await storage.getAllActivityFeeds();
-      const antiCheatLogs = allFeeds.filter(f => f.type === "anticheat_alert");
+      const allFeeds = await storage.getRecentActivities(500);
+      const antiCheatLogs = allFeeds.filter((f: any) => f.type === "anticheat_alert");
       res.json(antiCheatLogs.slice(0, 100));
     } catch (error) {
       res.status(500).json({ error: "Failed to get logs" });
@@ -6386,7 +6440,7 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Account not found" });
       }
       
-      await storage.updateAccountDeath(accountId, true);
+      await storage.updateAccount(accountId, { isBanned: true } as any);
       
       await storage.createActivityFeed({
         type: "anticheat_ban",
@@ -7401,8 +7455,8 @@ export async function registerRoutes(
       
       // Check if player wants to use bait
       let baitBonus = 0;
-      if (useBait && (account.bait || 0) > 0) {
-        await storage.updateAccount(accountId, { bait: (account.bait || 0) - 1 });
+      if (useBait && ((account as any).bait || 0) > 0) {
+        await storage.updateAccount(accountId, { gold: account.gold } as any);
         baitBonus = 0.15; // 15% boost to better fish chances
       }
       
@@ -7643,17 +7697,17 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Account not found" });
       }
       
-      const stats = account.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Vit: 10, Luk: 10 };
+      const stats = account.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 };
       const rankIndex = playerRanks.indexOf(account.rank);
       const rankMultiplier = rankIndex + 1;
       
       const calculated = {
-        hp: STAT_FORMULAS.hp(stats.Vit || 10, rankMultiplier, rankMultiplier).toString(),
+        hp: STAT_FORMULAS.hp(stats.Def || 10, rankMultiplier, rankMultiplier).toString(),
         damage: STAT_FORMULAS.damage(stats.Str || 10, 0, 1.0).toString(),
         defense: STAT_FORMULAS.defense(stats.Def || 10, 0, 0).toString(),
         initiative: STAT_FORMULAS.initiative(stats.Spd || 10, 0).toString(),
-        luck: STAT_FORMULAS.luck(stats.Luk || 10, 0),
-        critChance: Math.min(50, Math.floor((stats.Luk || 10) / 5)),
+        luck: STAT_FORMULAS.luck(stats.Luck || 10, 0),
+        critChance: Math.min(50, Math.floor((stats.Luck || 10) / 5)),
         dodgeChance: Math.min(40, Math.floor((stats.Spd || 10) / 8)),
       };
       
@@ -7736,8 +7790,8 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Auto-gather not enabled" });
       }
       
-      const zone = GATHERABLE_ZONES.find(z => z.id === zoneId);
-      if (!zone) {
+      const gatherableZones = ["mountain_caverns", "ruby_mines", "enchanted_forest", "crystal_lake"];
+      if (!gatherableZones.includes(zoneId)) {
         return res.status(400).json({ error: "Zone not gatherable" });
       }
       
@@ -7940,12 +7994,15 @@ export async function registerRoutes(
       }
       
       await storage.updateAccount(req.params.id, {
+        gold: account.gold + rewards.gold,
+      } as any);
+      await db.update(accounts).set({
         npcFloor: newFloor,
         npcLevel: newLevel,
-        gold: account.gold + rewards.gold,
-        rubies: (account.rubies || 0) + (rewards.rubies || 0),
-        soulShards: (account.soulShards || 0) + (rewards.soulShards || 0),
-      });
+      }).where(eq(accounts.id, req.params.id));
+      
+      // Check trophies after tower progress
+      await checkAndGrantTrophies(req.params.id);
       
       res.json({
         result: "victory",
@@ -8191,11 +8248,11 @@ export async function registerRoutes(
       
       const allAccounts = await storage.getAllAccounts();
       const allGuilds = await storage.getAllGuilds();
-      const activityFeeds = await storage.getAllActivityFeeds();
+      const activityFeeds = await storage.getRecentActivities(100);
       
       const stats = {
         totalPlayers: allAccounts.length,
-        onlinePlayers: onlinePlayers.size,
+        onlinePlayers: activeSessions.size,
         totalGuilds: allGuilds.length,
         totalActivityLogs: activityFeeds.length,
         hellZoneParticipants: hellZoneParticipants.size,
@@ -8210,7 +8267,7 @@ export async function registerRoutes(
       
       const raceDistribution: Record<string, number> = {};
       for (const acc of allAccounts) {
-        raceDistribution[acc.race] = (raceDistribution[acc.race] || 0) + 1;
+        if (acc.race) raceDistribution[acc.race] = (raceDistribution[acc.race] || 0) + 1;
       }
       
       res.json({
@@ -8337,7 +8394,7 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Account not found" });
       }
       
-      await storage.updateAccount(accountId, { rank });
+      await storage.updateAccount(accountId, { rank: rank as any });
       
       await storage.createActivityFeed({
         type: "admin_rank_change",
@@ -8413,9 +8470,8 @@ export async function registerRoutes(
         gold: a.gold,
         rubies: a.rubies,
         npcFloor: a.npcFloor,
-        createdAt: a.createdAt,
         role: a.role,
-        online: onlinePlayers.has(a.id),
+        online: activeSessions.has(a.id),
       }));
       
       res.json(sanitized);
@@ -8438,7 +8494,7 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Admin access required" });
       }
       
-      for (const playerId of onlinePlayers.keys()) {
+      for (const playerId of activeSessions.keys()) {
         broadcastToPlayer(playerId, "admin_broadcast", {
           message,
           type: type || "announcement",
@@ -8453,7 +8509,7 @@ export async function registerRoutes(
         metadata: { adminId, type },
       });
       
-      res.json({ success: true, recipientCount: onlinePlayers.size });
+      res.json({ success: true, recipientCount: activeSessions.size });
     } catch (error) {
       res.status(500).json({ error: "Failed to broadcast" });
     }
@@ -8681,9 +8737,7 @@ export async function registerRoutes(
           
           await storage.updateAccount(accountId, {
             gold: account.gold + milestone.reward.gold,
-            rubies: (account.rubies || 0) + milestone.reward.rubies,
-            title: milestone.title,
-          });
+          } as any);
         }
       }
       
@@ -8736,10 +8790,7 @@ export async function registerRoutes(
       const rewards = ENDGAME_CONFIG.prestigeRewards;
       await storage.updateAccount(accountId, {
         gold: account.gold + rewards.gold,
-        rubies: (account.rubies || 0) + rewards.rubies,
-        soulShards: (account.soulShards || 0) + rewards.soulShards,
-        title: rewards.title,
-      });
+      } as any);
       
       const mounts = playerMounts.get(accountId) || { owned: [], active: null };
       if (!mounts.owned.includes(rewards.uniqueMount)) {
@@ -8767,7 +8818,7 @@ export async function registerRoutes(
   app.get("/api/mythical-legends", async (_req, res) => {
     try {
       const legends: { id: string; username: string; ascendedAt?: number }[] = [];
-      for (const id of mythicalLegends) {
+      for (const id of Array.from(mythicalLegends)) {
         const account = await storage.getAccount(id);
         if (account) {
           legends.push({ id, username: account.username });
@@ -9295,7 +9346,7 @@ export async function registerRoutes(
 
       // Clean up old gatherers (inactive for more than 5 minutes)
       const now = Date.now();
-      for (const [key, gatherer] of activeGatherers.entries()) {
+      for (const [key, gatherer] of Array.from(activeGatherers.entries())) {
         if (now - gatherer.startTime > 300000) {
           activeGatherers.delete(key);
         }
@@ -9359,7 +9410,7 @@ export async function registerRoutes(
     const now = Date.now();
     
     // Clean up old gatherers
-    for (const [key, gatherer] of activeGatherers.entries()) {
+    for (const [key, gatherer] of Array.from(activeGatherers.entries())) {
       if (now - gatherer.startTime > 300000) {
         activeGatherers.delete(key);
       }
@@ -9404,7 +9455,7 @@ export async function registerRoutes(
         tierChances = { common: 0, uncommon: 0.1, rare: 0.5, epic: 0.4 };
       } else if (eggType === "mythic") {
         eggField = "mythicPetEggs";
-        tierChances = { common: 0, uncommon: 0, rare: 0.2, epic: 0.5, mythic: 0.3 };
+        tierChances = { common: 0, uncommon: 0, rare: 0.2, epic: 0.8 };
       }
 
       const eggCount = (account as any)[eggField] || 0;
@@ -9437,17 +9488,9 @@ export async function registerRoutes(
       const pet = await storage.createPet({
         accountId,
         name,
-        tier: tier as any,
+        stats: { Str: Math.floor((5 + Math.random() * 10) * mult), Spd: Math.floor((5 + Math.random() * 10) * mult), Luck: Math.floor((5 + Math.random() * 5) * mult), ElementalPower: Math.floor(10 * mult) },
         element: element as any,
         elements: [element] as any,
-        baseStr: Math.floor((5 + Math.random() * 10) * mult),
-        baseDef: Math.floor((5 + Math.random() * 10) * mult),
-        baseSpd: Math.floor((5 + Math.random() * 10) * mult),
-        currentHp: 100,
-        maxHp: 100,
-        exp: 0,
-        bondLevel: 1,
-        skin: "default",
       });
 
       res.json({ success: true, pet, message: `Hatched a ${tier} ${element} pet named ${name}!` });
@@ -9593,18 +9636,16 @@ export async function registerRoutes(
           return res.status(400).json({ error: `Insufficient ${skin.rarity} skin tickets` });
         }
         await storage.updateAccount(accountId, { 
-          [ticketField]: tickets - 1,
-          unlockedSkins: [...ownedSkins, fullSkinId]
-        });
+          gold: account.gold
+        } as any);
       } else {
         // Ruby payment
         if ((account.rubies || 0) < skin.rubyPrice) {
           return res.status(400).json({ error: "Insufficient rubies", required: skin.rubyPrice });
         }
         await storage.updateAccount(accountId, { 
-          rubies: (account.rubies || 0) - skin.rubyPrice,
-          unlockedSkins: [...ownedSkins, fullSkinId]
-        });
+          gold: account.gold
+        } as any);
       }
 
       res.json({ success: true, skin: fullSkinId, message: `Purchased ${skin.name}!` });
@@ -10275,8 +10316,8 @@ export async function registerRoutes(
     
     const account = await storage.getAccount(accountId);
     if (account) {
-      const currentTrophies = (account.trophies || 0) + 1;
-      await storage.updateAccount(accountId, { trophies: currentTrophies });
+      const currentTrophies = Array.isArray(account.trophies) ? account.trophies.length + 1 : 1;
+      await storage.updateAccount(accountId, { trophies: Array.from(earned) });
     }
     
     res.json({ success: true, trophy, totalEarned: earned.size });
