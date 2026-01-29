@@ -1424,6 +1424,45 @@ export async function registerRoutes(
     }
   });
 
+  // NPC challenge rate limiting: 2 challenges per NPC per player per day
+  const npcChallengeTracker = new Map<string, { count: number; resetAt: number }>();
+  const NPC_CHALLENGE_LIMIT = 2;
+  
+  function getNpcChallengeKey(playerId: string, npcId: string): string {
+    return `${playerId}:${npcId}`;
+  }
+  
+  function canChallengeNpc(playerId: string, npcId: string): { allowed: boolean; remaining: number } {
+    const key = getNpcChallengeKey(playerId, npcId);
+    const now = Date.now();
+    const tracker = npcChallengeTracker.get(key);
+    
+    if (!tracker || now > tracker.resetAt) {
+      return { allowed: true, remaining: NPC_CHALLENGE_LIMIT - 1 };
+    }
+    
+    if (tracker.count >= NPC_CHALLENGE_LIMIT) {
+      return { allowed: false, remaining: 0 };
+    }
+    
+    return { allowed: true, remaining: NPC_CHALLENGE_LIMIT - tracker.count - 1 };
+  }
+  
+  function recordNpcChallenge(playerId: string, npcId: string): void {
+    const key = getNpcChallengeKey(playerId, npcId);
+    const now = Date.now();
+    const midnight = new Date();
+    midnight.setHours(24, 0, 0, 0);
+    const resetAt = midnight.getTime();
+    
+    const tracker = npcChallengeTracker.get(key);
+    if (!tracker || now > tracker.resetAt) {
+      npcChallengeTracker.set(key, { count: 1, resetAt });
+    } else {
+      tracker.count++;
+    }
+  }
+
   // Challenge routes
   app.post("/api/challenges", async (req, res) => {
     try {
@@ -1443,6 +1482,20 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Player not found" });
       }
 
+      // Check NPC challenge rate limit
+      const { isNPCAccount, autoAcceptNPCChallenge } = await import("./npc-accounts");
+      const isNPC = isNPCAccount(challenged.username);
+      
+      if (isNPC) {
+        const { allowed } = canChallengeNpc(challengerId, challengedId);
+        if (!allowed) {
+          return res.status(429).json({ 
+            error: `You can only challenge this NPC ${NPC_CHALLENGE_LIMIT} times per day. Try again tomorrow!` 
+          });
+        }
+        recordNpcChallenge(challengerId, challengedId);
+      }
+
       const challenge = await storage.createChallenge({
         challengerId,
         challengedId,
@@ -1456,8 +1509,7 @@ export async function registerRoutes(
       });
       
       // Auto-accept if challenged player is an NPC
-      const { isNPCAccount, autoAcceptNPCChallenge } = await import("./npc-accounts");
-      if (isNPCAccount(challenged.username)) {
+      if (isNPC) {
         await autoAcceptNPCChallenge(challenge.id);
       }
 
