@@ -1,142 +1,156 @@
-# Legend of Valor - RPG Item Shop
+# Legends of Valor V2
 
 ## Overview
 
-Legend of Valor is a fantasy RPG item shop web application where players can browse, purchase, and manage inventory items across multiple rarity tiers. The system supports two user roles: players who shop and manage their inventory, and admins who can manage items and give items to players. The application features a dark fantasy gaming aesthetic inspired by games like Diablo and Path of Exile.
+Legends of Valor is a text-based fantasy RPG with trading, combat, guild systems, and extensive progression mechanics. Players choose from 14 races with unique bonuses, progress through 15 ranks from Novice to Mythical Legend, explore 12 zones, climb a 10,000-battle Mystic Tower, and work toward endgame content with quintillion-scale power.
 
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
 
-## System Architecture
+## Tech Stack
 
-### Frontend Architecture
-- **Framework**: React 18 with TypeScript
-- **Routing**: Wouter (lightweight React router)
-- **State Management**: React Context API for game state (accounts, inventory, gold), TanStack Query for server state
-- **UI Components**: shadcn/ui component library built on Radix UI primitives
-- **Styling**: Tailwind CSS with custom dark fantasy theme, Cinzel font for headings, Inter for body text
+- **Frontend**: React 18 with Vite, TailwindCSS, shadcn/ui components
+- **Backend**: Express.js with TypeScript
+- **Database**: PostgreSQL with Drizzle ORM
+- **AI**: OpenAI (via Replit AI Integrations) for AI Game Master
 
-### Backend Architecture
-- **Runtime**: Node.js with Express
-- **API Design**: RESTful JSON API with routes for accounts, inventory, and items
-- **Validation**: Zod schemas for request/response validation
-- **Build System**: Vite for frontend bundling, esbuild for server bundling
+## Project Structure
 
-### Data Layer
-- **ORM**: Drizzle ORM with PostgreSQL dialect
-- **Schema Location**: `shared/schema.ts` contains all database tables and Zod schemas
-- **Tables**: `accounts` (users with roles and gold), `inventory_items` (purchased items linked to accounts)
-- **Items Data**: Static item definitions stored in `client/src/lib/items-data.ts` (not in database)
+```
+Legends-Of-Valor/
+├── client/           # React frontend
+│   └── src/          # React components and pages
+├── server/           # Express backend
+│   ├── index.ts      # Server entry point
+│   ├── routes.ts     # API routes (8000+ lines)
+│   ├── db.ts         # Database connection
+│   ├── storage.ts    # Data access layer
+│   └── game-ai.ts    # AI Game Master integration
+├── shared/           # Shared schemas and types
+│   └── schema.ts     # Drizzle schema definitions
+└── dist/             # Production build output
+```
 
-### Key Design Patterns
-- **Shared Types**: The `shared/` directory contains schema definitions used by both client and server
-- **Path Aliases**: `@/` maps to client source, `@shared/` maps to shared directory
-- **Component Structure**: UI primitives in `components/ui/`, feature components at `components/` root
-- **Page-based Routing**: Pages in `pages/` directory (landing, shop, inventory, admin)
+## V2 Features (All Implemented)
 
-### Item Tier System
-Items are categorized into five rarity tiers with distinct visual styling:
-- Normal (gray/green)
-- Super Rare (purple)
-- X-tier (gold)
-- UMR (red)
-- SSUMR (pink) - highest tier
+### PHASE 1: Race & Rank System
+- 14 playable races (Human, Elf, Dwarf, Orc, Beastfolk, Mystic, Fae, Elemental, Undead, Demon, Draconic, Celestial, Aquatic, Titan)
+- Male/female gender options per race (28 character variants)
+- Max 2 players per race (28 players per server)
+- Race-specific stat modifiers and elemental affinities
+- 15 ranks: Novice → Mythical Legend with quintillion-safe power tiers
 
-### Authentication Model
-Username and password authentication. New accounts are created on first login with the chosen password. Existing accounts require the correct password. The admin account has specific credentials (username: "Napoleon", password: "Iamadmin").
+### PHASE 2: Combat System
+- V2 turn-based combat with Attack/Defend/Trick/Dodge actions
+- Initiative system based on Speed stat
+- Damage, defense, critical hit, and dodge mechanics
+- Elemental stacking (x2 for 2 elements, x5 for 3+)
+- Death/revival mechanics with PvP drops and respawn
 
-### Player Resources
-Players have multiple resources tracked:
-- **Gold**: Main currency for purchasing items
-- **Rubies**: Premium currency
-- **Soul Shards**: Used to train pet stats (10 shards per stat point)
-- **Focused Shards**: Rare crafting resource  
-- **Training Points (TP)**: Used to train base stats (10 TP per stat point)
-- **Pets**: Collection of pet companions
+### PHASE 3: Pet/Bird/Fish Systems
+- Unlimited pet ownership with 1 active in battle
+- Pet bonding, evolution, and AI personalities
+- Bird system with Beak Coins and tier progression
+- Fish system for pet stat transfers
 
-All resources can be modified by admins through the admin panel.
+### PHASE 4: Base System
+- 5 base tiers (Humble Camp → Fortress Castle)
+- 6 room types (Storage, Rest, Crafting, Training, Vault, Defenses)
+- Auto-craft, auto-level, auto-upgrade automation
+- Base raids scaling with Mystic Tower progress
+- Weekly Hero/Joker events
 
-### Stat Training System
-**Base Stats (Inventory Page)**:
-- Players can spend Training Points to permanently increase base stats
-- Stats: Str, Def, Spd, Int, Luck
-- Cost: 10 TP per stat point
-- Buttons: +1, +10, +100, +1000
+### PHASE 5: World Map & Zones
+- 12 interactive zones with unique activities
+- Zone mechanics: PvP toggle, fast travel gates, dynamic events
+- 5-tier zone difficulty (Starter → Hell)
+- Hunting and gathering with efficiency scaling
 
-**Pet Stats (Pets Page)**:
-- Players can spend Soul Shards to permanently increase pet stats
-- Stats: Str, Spd, Luck, ElementalPower  
-- Cost: 10 Soul Shards per stat point
-- Buttons: +1, +10, +100
+### PHASE 6: Economy
+- Player trading system
+- Admin auction house (8hr bidding)
+- Guild shops with progressive unlocks
+- $Valor currency packs
 
-### Guild Dungeon System
-Guilds have a two-phase dungeon system:
-- **The Great Dungeon** (Floors 1-50): 10x NPC tower strength, no pets allowed, guild bank rewards
-- **The Demon Lord's Dungeon** (Floors 51-100): 15x NPC tower strength, pets allowed, 3x rewards
+### PHASE 7: AI Story Guide
+- 4-Act storyline (Awakening, Fractured Realms, Hell Zone, Convergence War)
+- Companion personalities (friendly/sarcastic/serious/mysterious)
+- Act gates enforcing rank/floor/previous act requirements
+- Replay logic preventing duplicate rewards
 
-### Guild Battles
-Guilds can challenge other guilds to battles:
-- Guild master selects fighters and order
-- Admin judges each round, winner gets 1 point
-- First fighter to win earns the point for their guild
-- Guild wins are tracked on the leaderboard
+### PHASE 8: Achievements & Hidden Mechanics
+- 27 achievements with auto-unlock checking
+- Claimed tracking to prevent duplicate rewards
+- Hidden triggers with one-time and repeatable events
+- Quintillion-safe BigInt stat formulas
 
-### Player Challenges (Turn-Based Combat)
-Players can challenge each other to turn-based battles.
+### PHASE 9: QoL & Expanded Content
+- Auto-loot/gather player settings
+- Notification preferences
+- Mystic Tower: 100 floors × 100 levels (10,000 battles)
+- Rank-gated progression with floor bosses
+- Hell Zone: 10% death tax, 50% anti-heal, mythic drops
 
-**Combat Stats Include:**
-- Base player stats (Str, Def, Spd, Int, Luck)
-- Equipped pet stats (Str, Spd, Luck added directly; ElementalPower adds to Int)
-- All bird stats (Def and Spd from all owned birds)
+### PHASE 10: Admin & Endgame
+- Admin dashboard with server stats
+- Full account/stats/story/ban management
+- Resource granting and rank setting
+- 8 cosmetic mounts with unlock requirements
+- Mythical Legend ascension requirements
+- Quintillion power milestones
 
-**NPC Opponents:**
-When challenging an NPC, the NPC automatically selects combat actions based on their total stats (including pets/birds). Actions are weighted by stat strength with some randomness. Admins can also manually select NPC actions in the Challenges tab of the admin panel.
+## Running the Project
 
-**NPC Power Scaling:**
-NPCs scale their stats to match the player power range:
-- Guardian_Kira: 100% power (matches strongest player)
-- Shadow_Vex: 70% power (upper-mid tier)
-- Iron_Magnus: 40% power (lower-mid tier)
-- Storm_Lyra: 0% power (matches weakest player)
+Development:
+```bash
+cd Legends-Of-Valor && npm run dev
+```
 
-Players can challenge each other to turn-based battles:
+Production build:
+```bash
+cd Legends-Of-Valor && npm run build && npm run start
+```
 
-**Combat Actions:**
-- **Attack**: Deal damage based on STR stat. Beats Trick, reduced by Defend.
-- **Defend**: Reduce incoming damage using DEF stat. Beaten by Trick.
-- **Dodge**: Attempt to avoid attacks using SPD stat. Counters Trick if successful.
-- **Trick**: Outsmart opponent using INT stat. Beats Defend, loses to Attack.
+## Key API Endpoints
 
-**Combat Mechanics:**
-- Each player has HP based on all their stats: 100 + (STR * 2) + (DEF * 3) + (SPD * 1) + (INT * 1) + (LUCK * 1)
-- Both players select actions simultaneously each round (like chess - waits for both moves)
-- Actions resolve based on stat matchups and critical hits (affected by LUCK)
-- Battle continues until one player's HP reaches 0
-- Winner earns a win on the leaderboard
-- UI shows "Your Turn" / "Waiting for opponent" status
+### Accounts & Characters
+- `GET /api/races/availability` - Race selection and modifiers
+- `POST /api/accounts` - Create account with race/gender
+- `GET /api/accounts/:id` - Get account details
 
-### Leaderboard Types
-- Wins, Losses, NPC Progress, Rank, Guild Dungeon, Guild Wins
+### Combat
+- `POST /api/v2/combat/battle` - Turn-based combat
+- `POST /api/accounts/:id/tower-battle` - Mystic Tower battles
 
-## External Dependencies
+### World & Zones
+- `GET /api/world-map` - Zone information
+- `POST /api/zones/:id/hunt` - Hunt in zones
+- `POST /api/zones/:id/gather` - Gather resources
 
-### Database
-- **PostgreSQL**: Primary database via `DATABASE_URL` environment variable
-- **connect-pg-simple**: Session storage for Express sessions
+### Hell Zone
+- `POST /api/hell-zone/enter` - Enter Hell Zone
+- `POST /api/hell-zone/battle` - Battle in Hell Zone
+- `POST /api/hell-zone/heal` - Heal with anti-heal penalty
 
-### UI Libraries
-- **Radix UI**: Full suite of accessible component primitives (dialogs, dropdowns, tabs, etc.)
-- **Lucide React**: Icon library
-- **class-variance-authority**: Component variant management
-- **embla-carousel-react**: Carousel functionality
+### Story & Progression
+- `GET /api/story/acts` - Get story acts
+- `POST /api/story/advance` - Advance story with gate checks
+- `GET /api/accounts/:id/endgame-progress` - Endgame progress
 
-### Development Tools
-- **Vite**: Frontend dev server and bundler with HMR
-- **Drizzle Kit**: Database migration and push tooling
-- **TypeScript**: Full type coverage across client, server, and shared code
+### Admin
+- `GET /api/admin/dashboard` - Server stats and analytics
+- `POST /api/admin/set-story-progress` - Modify story progress
+- `POST /api/admin/grant-resources` - Grant resources
+- `POST /api/admin/broadcast` - Server-wide announcements
 
-### Replit-specific
-- **@replit/vite-plugin-runtime-error-modal**: Error overlay for development
-- **@replit/vite-plugin-cartographer**: Development tooling
-- **@replit/vite-plugin-dev-banner**: Development environment indicator
+## Recent Changes
+
+- January 2026: Complete V2 implementation
+- 14 races × 2 genders with stat modifiers
+- 15-rank progression system
+- Mystic Tower expanded to 100×100 (10K battles)
+- Hell Zone with battle royale mechanics
+- Endgame Mythical Legend ascension
+- Comprehensive admin dashboard
+- Quintillion-safe stat formulas with BigInt
