@@ -60,9 +60,15 @@ export function PageLayout({ children, title, backdrop, showPlayerInfo = true }:
                     />
                     <div>
                       <div className="font-serif font-bold text-sm">{account.username}</div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Coins className="w-3 h-3 text-yellow-400" />
-                        <span>{(account.gold || 0).toLocaleString()}</span>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-1">
+                          <Coins className="w-3 h-3 text-yellow-400" />
+                          <span>{(account.gold || 0).toLocaleString()}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-red-400 font-bold">$V</span>
+                          <span className="text-red-300">{(account.valorTokens || 0).toLocaleString()}</span>
+                        </div>
                       </div>
                     </div>
                   </CardContent>

@@ -541,6 +541,9 @@ export default function Admin() {
 
   const [disbandGuildDialog, setDisbandGuildDialog] = useState<GuildWithDetails | null>(null);
   const [guildSearchQuery, setGuildSearchQuery] = useState("");
+  const [grantValorUsername, setGrantValorUsername] = useState("");
+  const [grantValorAmount, setGrantValorAmount] = useState(1000);
+  const [grantValorLoading, setGrantValorLoading] = useState(false);
 
   const filteredGuilds = useMemo(() => {
     return guilds.filter(g => 
@@ -2335,15 +2338,58 @@ export default function Admin() {
                   <div className="grid grid-cols-3 gap-4">
                     <div>
                       <Label>Player Username</Label>
-                      <Input placeholder="Enter username..." />
+                      <Input 
+                        placeholder="Enter username..." 
+                        value={grantValorUsername}
+                        onChange={(e) => setGrantValorUsername(e.target.value)}
+                      />
                     </div>
                     <div>
                       <Label>$Valor Amount</Label>
-                      <Input type="number" placeholder="1000" />
+                      <Input 
+                        type="number" 
+                        placeholder="1000"
+                        value={grantValorAmount}
+                        onChange={(e) => setGrantValorAmount(Number(e.target.value))}
+                      />
                     </div>
                     <div className="flex items-end">
-                      <Button className="bg-gradient-to-r from-red-500 to-orange-500">
-                        Grant $Valor
+                      <Button 
+                        className="bg-gradient-to-r from-red-500 to-orange-500"
+                        disabled={grantValorLoading || !grantValorUsername || !grantValorAmount}
+                        onClick={async () => {
+                          setGrantValorLoading(true);
+                          try {
+                            const targetPlayer = players.find(p => p.username.toLowerCase() === grantValorUsername.toLowerCase());
+                            if (!targetPlayer) {
+                              alert("Player not found: " + grantValorUsername);
+                              return;
+                            }
+                            const res = await fetch("/api/admin/grant-valor", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                adminId: account?.id,
+                                accountId: targetPlayer.id,
+                                amount: grantValorAmount
+                              })
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                              alert(`Successfully granted ${grantValorAmount} $Valor to ${grantValorUsername}! New balance: ${data.newBalance}`);
+                              setGrantValorUsername("");
+                              setGrantValorAmount(1000);
+                            } else {
+                              alert("Error: " + (data.error || "Failed to grant $Valor"));
+                            }
+                          } catch (err) {
+                            alert("Failed to grant $Valor");
+                          } finally {
+                            setGrantValorLoading(false);
+                          }
+                        }}
+                      >
+                        {grantValorLoading ? "Granting..." : "Grant $Valor"}
                       </Button>
                     </div>
                   </div>
