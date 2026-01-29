@@ -2868,14 +2868,23 @@ export async function registerRoutes(
   
   // Rank requirements for NPC levels
   const getNpcRankRequirement = (globalLevel: number): string | null => {
-    if (globalLevel <= 100) return null; // Anyone can fight levels 1-100
-    if (globalLevel <= 200) return "Apprentice";
-    if (globalLevel <= 500) return "Journeyman";
-    if (globalLevel <= 1000) return "Expert";
-    if (globalLevel <= 2000) return "Master";
-    if (globalLevel <= 3000) return "Grandmaster";
-    if (globalLevel <= 4000) return "Legend";
-    return "Elite"; // 4001+
+    // V2 15-rank system: Novice, Apprentice, Initiate, Journeyman, Adept, Expert, Master, 
+    // Grandmaster, Champion, Overlord, Sovereign, Ascendant, Legend, Mythic, Mythical Legend
+    if (globalLevel <= 100) return null; // Anyone can fight levels 1-100 (Floor 1)
+    if (globalLevel <= 200) return "Apprentice"; // Floor 2 (index 1)
+    if (globalLevel <= 500) return "Initiate"; // Floors 3-5 (index 2)
+    if (globalLevel <= 1000) return "Journeyman"; // Floors 6-10 (index 3)
+    if (globalLevel <= 2000) return "Adept"; // Floors 11-20 (index 4)
+    if (globalLevel <= 3000) return "Expert"; // Floors 21-30 (index 5)
+    if (globalLevel <= 4000) return "Master"; // Floors 31-40 (index 6)
+    if (globalLevel <= 5000) return "Grandmaster"; // Floors 41-50 (index 7)
+    if (globalLevel <= 6000) return "Champion"; // Floors 51-60 (index 8)
+    if (globalLevel <= 7000) return "Overlord"; // Floors 61-70 (index 9)
+    if (globalLevel <= 8000) return "Sovereign"; // Floors 71-80 (index 10)
+    if (globalLevel <= 9000) return "Ascendant"; // Floors 81-90 (index 11)
+    if (globalLevel <= 9500) return "Legend"; // Floors 91-95 (index 12)
+    if (globalLevel <= 9900) return "Mythic"; // Floors 96-99 (index 13)
+    return "Mythical Legend"; // Floor 100 (index 14)
   };
   
   // Challenge NPC
@@ -7699,12 +7708,12 @@ export async function registerRoutes(
     levelsPerFloor: 100,
     totalBattles: 10000,
     rankGates: [
-      { floor: 1, minRank: 0 },
-      { floor: 10, minRank: 2 },
-      { floor: 25, minRank: 4 },
-      { floor: 50, minRank: 7 },
-      { floor: 75, minRank: 10 },
-      { floor: 100, minRank: 13 },
+      { floor: 1, minRank: 0 },   // Novice
+      { floor: 10, minRank: 3 },  // Journeyman
+      { floor: 25, minRank: 5 },  // Expert
+      { floor: 50, minRank: 7 },  // Grandmaster
+      { floor: 75, minRank: 10 }, // Sovereign
+      { floor: 100, minRank: 14 }, // Mythical Legend
     ],
     floorBosses: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
     rewards: {

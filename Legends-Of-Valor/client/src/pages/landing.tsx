@@ -52,7 +52,7 @@ const raceDisplayNames: Record<string, string> = {
 
 export default function Landing() {
   const [, navigate] = useLocation();
-  const { login, isLoading } = useGame();
+  const { login, isLoading, account } = useGame();
   const [playerName, setPlayerName] = useState("");
   const [playerPassword, setPlayerPassword] = useState("");
   const [adminName, setAdminName] = useState("");
@@ -63,6 +63,16 @@ export default function Landing() {
   const [selectedGender, setSelectedGender] = useState<"male" | "female">("male");
   const [raceData, setRaceData] = useState<RaceData | null>(null);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!isLoading && account) {
+      if (account.role === "admin") {
+        navigate("/admin");
+      } else {
+        navigate("/world-map");
+      }
+    }
+  }, [account, isLoading, navigate]);
 
   useEffect(() => {
     fetch("/api/races/availability")
