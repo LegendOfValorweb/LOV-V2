@@ -10,7 +10,7 @@ import {
   Castle, Mountain, Skull, FlaskConical, Sword, Swords,
   Trees, Gem, Fish, Shield, Flame, Map, Home, Lock,
   Package, ShoppingBag, Users, LogOut, MessageCircle,
-  Crown, Coins, Heart, Target, Zap, Sparkles, Palette
+  Crown, Coins, Heart, Target, Zap, Sparkles, Palette, Trophy
 } from "lucide-react";
 import { useGame } from "@/lib/game-context";
 import { LoadingScreen } from "@/components/loading-screen";
@@ -144,9 +144,20 @@ const zones: Zone[] = [
     icon: <Sword className="w-6 h-6" />,
     difficulty: "hard",
     pvpEnabled: true,
-    activities: ["PvP Duels", "Tournaments", "Rankings"],
+    activities: ["PvP Duels", "Rankings"],
     coordinates: { x: 65, y: 35 },
     route: "/leaderboard",
+  },
+  {
+    id: "tournament-grounds",
+    name: "Tournament Grounds",
+    description: "Compete in grand tournaments for glory and legendary rewards!",
+    icon: <Trophy className="w-6 h-6" />,
+    difficulty: "hard",
+    pvpEnabled: true,
+    activities: ["Tournaments", "Brackets", "Championships"],
+    coordinates: { x: 70, y: 25 },
+    route: "/tournaments",
   },
   {
     id: "pet-arena",

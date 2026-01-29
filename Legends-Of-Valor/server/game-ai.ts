@@ -187,14 +187,29 @@ export async function updatePlayerStoryline(
   accountId: string,
   updates: Partial<{
     currentChapter: number;
+    currentAct: number;
+    guidePersonality: string;
+    tutorialCompleted: boolean;
     storyProgress: Record<string, any>;
     conversationHistory: Array<{ role: string; content: string }>;
     pendingRewards: Array<{ type: string; amount: number; reason: string }>;
   }>
 ) {
-  await db.update(playerStorylines)
-    .set({ ...updates, updatedAt: new Date() })
-    .where(eq(playerStorylines.accountId, accountId));
+  // First ensure the player has a storyline entry
+  const existing = await db.select().from(playerStorylines).where(eq(playerStorylines.accountId, accountId));
+  
+  if (existing.length === 0) {
+    // Create a new storyline entry first
+    await db.insert(playerStorylines).values({
+      accountId,
+      ...updates,
+    });
+  } else {
+    // Update existing
+    await db.update(playerStorylines)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(playerStorylines.accountId, accountId));
+  }
 }
 
 // Parse AI response for special commands
@@ -246,7 +261,7 @@ export async function setGuidePersonality(accountId: string, personality: string
   const validPersonalities = ["friendly", "sarcastic", "serious", "mysterious"];
   if (!validPersonalities.includes(personality)) return false;
   
-  await updatePlayerStoryline(accountId, { guidePersonality: personality } as any);
+  await updatePlayerStoryline(accountId, { guidePersonality: personality });
   return true;
 }
 
