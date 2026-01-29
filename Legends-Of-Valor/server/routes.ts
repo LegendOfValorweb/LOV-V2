@@ -9630,22 +9630,62 @@ export async function registerRoutes(
         grantedItems.push(`${contents.mysticShards} Mystic Shards`);
       }
       
-      // Pet Eggs
+      // Pet Eggs - Auto-hatch into pets immediately
+      const hatchEggs = async (count: number, eggType: string) => {
+        const tierChances: Record<string, Record<string, number>> = {
+          basic: { common: 0.5, uncommon: 0.35, rare: 0.12, epic: 0.03 },
+          rare: { common: 0.1, uncommon: 0.4, rare: 0.35, epic: 0.15 },
+          epic: { common: 0, uncommon: 0.1, rare: 0.5, epic: 0.4 },
+          mythic: { common: 0, uncommon: 0, rare: 0.2, epic: 0.5, mythic: 0.3 },
+        };
+        const chances = tierChances[eggType] || tierChances.basic;
+        const elements = Object.keys(PET_NAMES_BY_ELEMENT);
+        const tierMultipliers: Record<string, number> = { common: 1, uncommon: 1.5, rare: 2, epic: 3, mythic: 5 };
+        
+        for (let i = 0; i < count; i++) {
+          const roll = Math.random();
+          let tier = "common";
+          let cumulative = 0;
+          for (const [t, chance] of Object.entries(chances)) {
+            cumulative += chance;
+            if (roll < cumulative) { tier = t; break; }
+          }
+          
+          const element = elements[Math.floor(Math.random() * elements.length)] as keyof typeof PET_NAMES_BY_ELEMENT;
+          const names = PET_NAMES_BY_ELEMENT[element];
+          const name = names[Math.floor(Math.random() * names.length)];
+          const mult = tierMultipliers[tier] || 1;
+          
+          await storage.createPet({
+            accountId,
+            name,
+            tier: tier as any,
+            element: element as any,
+            elements: [element] as any,
+            baseStr: Math.floor((5 + Math.random() * 10) * mult),
+            baseDef: Math.floor((5 + Math.random() * 10) * mult),
+            baseSpd: Math.floor((5 + Math.random() * 10) * mult),
+            currentHp: 100,
+            maxHp: 100,
+            exp: 0,
+            bondLevel: 1,
+            skin: "default",
+          });
+          grantedItems.push(`${tier} ${element} pet: ${name}`);
+        }
+      };
+      
       if (contents.petEggs) {
-        updates.petEggs = (account.petEggs || 0) + contents.petEggs;
-        grantedItems.push(`${contents.petEggs} Pet Egg(s)`);
+        await hatchEggs(contents.petEggs, "basic");
       }
       if (contents.rarePetEggs) {
-        updates.rarePetEggs = (account.rarePetEggs || 0) + contents.rarePetEggs;
-        grantedItems.push(`${contents.rarePetEggs} Rare Pet Egg(s)`);
+        await hatchEggs(contents.rarePetEggs, "rare");
       }
       if (contents.epicPetEggs) {
-        updates.epicPetEggs = (account.epicPetEggs || 0) + contents.epicPetEggs;
-        grantedItems.push(`${contents.epicPetEggs} Epic Pet Egg(s)`);
+        await hatchEggs(contents.epicPetEggs, "epic");
       }
       if (contents.mythicPetEggs) {
-        updates.mythicPetEggs = (account.mythicPetEggs || 0) + contents.mythicPetEggs;
-        grantedItems.push(`${contents.mythicPetEggs} Mythic Pet Egg(s)`);
+        await hatchEggs(contents.mythicPetEggs, "mythic");
       }
       
       // Skin Tickets

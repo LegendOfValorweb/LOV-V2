@@ -56,19 +56,31 @@ export function GameProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(GLOBAL_ACCOUNTS_KEY, JSON.stringify(globalAccounts));
   };
 
-  const loadAccountData = (username: string) => {
+  const loadAccountData = async (username: string) => {
     const savedAccount = localStorage.getItem(ACCOUNT_STORAGE_PREFIX + username);
-    const savedInventory = localStorage.getItem(INVENTORY_STORAGE_PREFIX + username);
     
     if (savedAccount) {
       const acc = JSON.parse(savedAccount);
       setAccountState(acc);
       syncToGlobal(acc);
-    }
-    if (savedInventory) {
-      setInventory(JSON.parse(savedInventory));
-    } else {
-      setInventory([]);
+      
+      // Fetch inventory from API
+      try {
+        const response = await fetch(`/api/accounts/${acc.id}/inventory`);
+        if (response.ok) {
+          const data = await response.json();
+          setInventory(data);
+          localStorage.setItem(INVENTORY_STORAGE_PREFIX + username, JSON.stringify(data));
+        }
+      } catch (error) {
+        console.error("Failed to load inventory from API:", error);
+        const savedInventory = localStorage.getItem(INVENTORY_STORAGE_PREFIX + username);
+        if (savedInventory) {
+          setInventory(JSON.parse(savedInventory));
+        } else {
+          setInventory([]);
+        }
+      }
     }
   };
 
@@ -180,9 +192,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const refreshInventory = useCallback(async () => {
     if (account) {
-      const savedInventory = localStorage.getItem(INVENTORY_STORAGE_PREFIX + account.username);
-      if (savedInventory) {
-        setInventory(JSON.parse(savedInventory));
+      try {
+        const response = await fetch(`/api/accounts/${account.id}/inventory`);
+        if (response.ok) {
+          const data = await response.json();
+          setInventory(data);
+          localStorage.setItem(INVENTORY_STORAGE_PREFIX + account.username, JSON.stringify(data));
+        }
+      } catch (error) {
+        console.error("Failed to refresh inventory:", error);
+        const savedInventory = localStorage.getItem(INVENTORY_STORAGE_PREFIX + account.username);
+        if (savedInventory) {
+          setInventory(JSON.parse(savedInventory));
+        }
       }
     }
   }, [account]);
