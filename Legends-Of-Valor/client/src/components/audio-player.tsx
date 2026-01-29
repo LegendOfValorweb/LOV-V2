@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 
 const MUSIC_TRACKS = [
   { name: "Epic Adventure", src: "/music.mp3" },
-  { name: "Legends of Valor", src: "/game-music.mp3" },
 ];
 
 export default function AudioPlayer() {
