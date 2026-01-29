@@ -267,15 +267,40 @@ export default function Landing() {
   return (
     <div className="min-h-screen relative overflow-hidden">
       <div
-        className="absolute inset-0 bg-gradient-to-br from-background via-background to-accent/20"
+        className="absolute inset-0"
         style={{
-          backgroundImage: `
-            radial-gradient(ellipse at 20% 30%, hsl(var(--tier-super-rare) / 0.1) 0%, transparent 50%),
-            radial-gradient(ellipse at 80% 70%, hsl(var(--tier-x) / 0.15) 0%, transparent 50%),
-            radial-gradient(ellipse at 50% 50%, hsl(var(--primary) / 0.05) 0%, transparent 70%)
+          background: `
+            linear-gradient(135deg, 
+              hsl(240, 30%, 8%) 0%,
+              hsl(270, 25%, 12%) 25%,
+              hsl(220, 35%, 10%) 50%,
+              hsl(250, 30%, 8%) 75%,
+              hsl(280, 20%, 6%) 100%
+            )
           `,
         }}
       />
+      <div
+        className="absolute inset-0 opacity-40"
+        style={{
+          backgroundImage: `
+            radial-gradient(ellipse at 10% 20%, hsl(280, 80%, 40%) 0%, transparent 40%),
+            radial-gradient(ellipse at 90% 80%, hsl(220, 90%, 50%) 0%, transparent 35%),
+            radial-gradient(ellipse at 50% 10%, hsl(40, 100%, 50%) 0%, transparent 30%),
+            radial-gradient(ellipse at 30% 70%, hsl(350, 80%, 45%) 0%, transparent 35%),
+            radial-gradient(ellipse at 70% 40%, hsl(180, 70%, 40%) 0%, transparent 30%)
+          `,
+        }}
+      />
+      <div className="absolute top-4 left-4 w-32 h-32 opacity-20">
+        <div className="w-full h-full rounded-full bg-gradient-to-br from-yellow-500 to-orange-600 blur-xl animate-pulse" />
+      </div>
+      <div className="absolute bottom-10 right-10 w-24 h-24 opacity-15">
+        <div className="w-full h-full rounded-full bg-gradient-to-br from-purple-500 to-pink-600 blur-xl" />
+      </div>
+      <div className="absolute top-1/4 right-1/4 w-16 h-16 opacity-10">
+        <div className="w-full h-full rounded-full bg-gradient-to-br from-blue-400 to-cyan-500 blur-lg" />
+      </div>
 
       <div className="relative z-10 min-h-screen flex flex-col">
         <header className="p-6 flex items-center justify-center">

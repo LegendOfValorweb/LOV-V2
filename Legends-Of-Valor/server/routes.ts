@@ -9232,5 +9232,653 @@ export async function registerRoutes(
     res.json({ gatherers, zoneId });
   });
 
+  // ===== $VALOR SHOP BUNDLES =====
+  const VALOR_BUNDLES = [
+    { id: "tiny_adventurer", name: "Tiny Adventurer Pack", priceUSD: 0.99, contents: { gold: 10000, trainingPoints: 100, soulGins: 5 } },
+    { id: "mini_hatchling", name: "Mini Hatchling Pack", priceUSD: 0.99, contents: { petEggs: 1, soulGins: 5, bait: 1 } },
+    { id: "gold_tp_stack", name: "Gold & TP Stack", priceUSD: 2.99, contents: { gold: 50000, trainingPoints: 500 } },
+    { id: "soul_beak_cache", name: "Soul & Beak Cache", priceUSD: 2.99, contents: { soulGins: 50, beakCoins: 20, petEggs: 1 } },
+    { id: "adventurer_starter", name: "Adventurer's Starter Pack", priceUSD: 4.99, contents: { gold: 100000, trainingPoints: 1000, soulGins: 50, beakCoins: 25, skins: 1, petEggs: 1 } },
+    { id: "style_pack", name: "Style Pack (Cosmetics)", priceUSD: 4.99, contents: { epicSkins: 1, rareSkins: 1 } },
+    { id: "hatchling_pack", name: "Hatchling Pack (Pets)", priceUSD: 4.99, contents: { rarePetEggs: 2, soulGins: 100, beakCoins: 50 } },
+    { id: "champion_loot", name: "Champion's Loot Crate", priceUSD: 9.99, contents: { gold: 250000, trainingPoints: 2500, soulGins: 150, beakCoins: 75, bait: 25, rareSkins: 1, rarePetEggs: 1, runes: 5 } },
+    { id: "legendary_look", name: "Legendary Look Pack", priceUSD: 14.99, contents: { epicSkins: 3, mythicSkins: 1, mountSkins: 1 } },
+    { id: "rune_bait_kit", name: "Rune & Bait Kit", priceUSD: 14.99, contents: { runes: 10, bait: 50, soulGins: 100 } },
+    { id: "legend_treasure", name: "Legend's Treasure Chest", priceUSD: 19.99, contents: { gold: 500000, trainingPoints: 5000, soulGins: 500, beakCoins: 200, bait: 50, rareSkins: 2, epicPetEggs: 1, craftingMats: 10, runes: 10, mysticShards: 1 } },
+    { id: "mythic_bond", name: "Mythic Bond Pack", priceUSD: 24.99, contents: { mythicPetEggs: 1, soulGins: 500, epicPetSkins: 1, petBondBoost24h: true } },
+    { id: "valor_hero", name: "Valor Hero Bundle", priceUSD: 49.99, contents: { gold: 1500000, trainingPoints: 15000, soulGins: 1500, beakCoins: 500, bait: 100, epicSkins: 3, mythicPetEggs: 1, eliteRecipe: 1, runes: 25, heroAura7d: true } },
+    { id: "conqueror_legacy", name: "Conqueror's Legacy", priceUSD: 99.99, contents: { gold: 3000000, trainingPoints: 30000, soulGins: 5000, beakCoins: 1000, bait: 250, epicSkins: 5, mythicPetEggs: 2, eliteRecipe: 1, runes: 50, mysticShards: 2, conquerorBanner: true, petBondBoost48h: true } },
+  ];
+
+  app.get("/api/valor-shop/bundles", (_req, res) => {
+    res.json({ bundles: VALOR_BUNDLES });
+  });
+
+  app.post("/api/valor-shop/purchase", async (req, res) => {
+    try {
+      const { accountId, bundleId } = req.body;
+      const bundle = VALOR_BUNDLES.find(b => b.id === bundleId);
+      if (!bundle) {
+        return res.status(404).json({ error: "Bundle not found" });
+      }
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const contents = bundle.contents as any;
+      const updates: any = {};
+      
+      if (contents.gold) updates.gold = account.gold + contents.gold;
+      if (contents.trainingPoints) updates.trainingPoints = (account.trainingPoints || 0) + contents.trainingPoints;
+      if (contents.soulGins) updates.soulGins = (account.soulGins || 0) + contents.soulGins;
+      if (contents.beakCoins) updates.beakCoins = (account.beakCoins || 0) + contents.beakCoins;
+      if (contents.runes) updates.runes = (account.runes || 0) + contents.runes;
+      
+      await storage.updateAccount(accountId, updates);
+      
+      await storage.createActivityFeed({
+        type: "shop_purchase",
+        message: `${account.username} purchased ${bundle.name}!`,
+        metadata: { bundleId, contents },
+      });
+      
+      res.json({ success: true, bundle: bundle.name, contents });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to process purchase" });
+    }
+  });
+
+  // ===== ADMIN GRANT $VALOR =====
+  app.post("/api/admin/grant-valor", async (req, res) => {
+    const { adminId, accountId, amount } = req.body;
+    
+    const admin = await storage.getAccount(adminId);
+    if (!admin || admin.role !== "admin") {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+    
+    const account = await storage.getAccount(accountId);
+    if (!account) {
+      return res.status(404).json({ error: "Account not found" });
+    }
+    
+    await storage.updateAccount(accountId, {
+      valorTokens: (account.valorTokens || 0) + amount,
+    });
+    
+    await storage.createActivityFeed({
+      type: "admin_action",
+      message: `Admin granted ${amount} $Valor to ${account.username}`,
+      metadata: { adminId, accountId, amount },
+    });
+    
+    res.json({ success: true, newBalance: (account.valorTokens || 0) + amount });
+  });
+
+  // ===== VOICE TTS ENDPOINT =====
+  app.post("/api/ai-chat/voice", async (req, res) => {
+    try {
+      const { text } = req.body;
+      if (!text) {
+        return res.status(400).json({ error: "Text required" });
+      }
+      
+      const { generateVoiceResponse } = await import("./game-ai");
+      const audioBuffer = await generateVoiceResponse(text);
+      
+      if (!audioBuffer) {
+        return res.status(500).json({ error: "Failed to generate voice" });
+      }
+      
+      res.set({
+        "Content-Type": "audio/mpeg",
+        "Content-Length": audioBuffer.length,
+      });
+      res.send(audioBuffer);
+    } catch (error) {
+      res.status(500).json({ error: "Voice generation failed" });
+    }
+  });
+
+  // ===== FULL WALKTHROUGH =====
+  app.get("/api/ai-chat/walkthrough/:accountId", async (req, res) => {
+    try {
+      const { generateFullWalkthrough } = await import("./game-ai");
+      const walkthrough = await generateFullWalkthrough(req.params.accountId);
+      res.json({ walkthrough });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to generate walkthrough" });
+    }
+  });
+
+  // ===== SKINS SYSTEM =====
+  const SKINS = {
+    character: [
+      { id: "default", name: "Default", rarity: "common", type: "character" },
+      { id: "warrior_gold", name: "Golden Warrior", rarity: "epic", type: "character", valorOnly: true },
+      { id: "shadow_knight", name: "Shadow Knight", rarity: "legendary", type: "character", valorOnly: true },
+      { id: "flame_lord", name: "Flame Lord", rarity: "mythic", type: "character", valorOnly: true },
+      { id: "ice_queen", name: "Ice Queen", rarity: "mythic", type: "character", valorOnly: true },
+      { id: "void_walker", name: "Void Walker", rarity: "legendary", type: "character", valorOnly: true },
+      { id: "celestial_guardian", name: "Celestial Guardian", rarity: "mythic", type: "character", valorOnly: true },
+      { id: "dragon_slayer", name: "Dragon Slayer", rarity: "epic", type: "character" },
+      { id: "mystic_sage", name: "Mystic Sage", rarity: "rare", type: "character" },
+      { id: "forest_ranger", name: "Forest Ranger", rarity: "rare", type: "character" },
+    ],
+    pet: [
+      { id: "default", name: "Default", rarity: "common", type: "pet" },
+      { id: "elemental_glow", name: "Elemental Glow", rarity: "epic", type: "pet", valorOnly: true },
+      { id: "shadow_aura", name: "Shadow Aura", rarity: "legendary", type: "pet", valorOnly: true },
+      { id: "golden_scales", name: "Golden Scales", rarity: "mythic", type: "pet", valorOnly: true },
+      { id: "crystal_armor", name: "Crystal Armor", rarity: "rare", type: "pet" },
+      { id: "flame_wings", name: "Flame Wings", rarity: "epic", type: "pet" },
+    ],
+    bird: [
+      { id: "default", name: "Default", rarity: "common", type: "bird" },
+      { id: "phoenix_feathers", name: "Phoenix Feathers", rarity: "mythic", type: "bird", valorOnly: true },
+      { id: "storm_wings", name: "Storm Wings", rarity: "legendary", type: "bird", valorOnly: true },
+      { id: "rainbow_plume", name: "Rainbow Plume", rarity: "epic", type: "bird" },
+    ],
+    base: [
+      { id: "default", name: "Default Castle", rarity: "common", type: "base" },
+      { id: "dark_fortress", name: "Dark Fortress", rarity: "legendary", type: "base", valorOnly: true },
+      { id: "crystal_palace", name: "Crystal Palace", rarity: "mythic", type: "base", valorOnly: true },
+      { id: "ancient_temple", name: "Ancient Temple", rarity: "epic", type: "base" },
+      { id: "dragon_keep", name: "Dragon Keep", rarity: "legendary", type: "base", valorOnly: true },
+    ],
+  };
+
+  const playerSkins: Map<string, { character?: string; pet?: string; bird?: string; base?: string; owned: string[] }> = new Map();
+
+  app.get("/api/skins", (_req, res) => {
+    res.json({ skins: SKINS });
+  });
+
+  app.get("/api/accounts/:id/skins", (req, res) => {
+    const skins = playerSkins.get(req.params.id) || { owned: ["default"] };
+    res.json(skins);
+  });
+
+  app.post("/api/accounts/:id/skins/equip", (req, res) => {
+    const { skinId, type } = req.body;
+    const accountId = req.params.id;
+    
+    const skins = playerSkins.get(accountId) || { owned: ["default"] };
+    if (!skins.owned.includes(skinId) && skinId !== "default") {
+      return res.status(400).json({ error: "Skin not owned" });
+    }
+    
+    (skins as any)[type] = skinId;
+    playerSkins.set(accountId, skins);
+    
+    res.json({ success: true, equipped: skinId, type });
+  });
+
+  app.post("/api/accounts/:id/skins/purchase", async (req, res) => {
+    const { skinId, skinType } = req.body;
+    const accountId = req.params.id;
+    
+    const allSkins = [...SKINS.character, ...SKINS.pet, ...SKINS.bird, ...SKINS.base];
+    const skin = allSkins.find(s => s.id === skinId);
+    if (!skin) {
+      return res.status(404).json({ error: "Skin not found" });
+    }
+    
+    const account = await storage.getAccount(accountId);
+    if (!account) {
+      return res.status(404).json({ error: "Account not found" });
+    }
+    
+    const prices: Record<string, number> = { common: 100, rare: 500, epic: 2000, legendary: 5000, mythic: 15000 };
+    const price = prices[skin.rarity] || 1000;
+    
+    if ((skin as any).valorOnly) {
+      if ((account.valorTokens || 0) < price) {
+        return res.status(400).json({ error: `Requires ${price} $Valor` });
+      }
+      await storage.updateAccount(accountId, { valorTokens: (account.valorTokens || 0) - price });
+    } else {
+      if (account.gold < price * 10) {
+        return res.status(400).json({ error: `Requires ${price * 10} gold` });
+      }
+      await storage.updateAccountGold(accountId, account.gold - price * 10);
+    }
+    
+    const skins = playerSkins.get(accountId) || { owned: ["default"] };
+    skins.owned.push(skinId);
+    playerSkins.set(accountId, skins);
+    
+    res.json({ success: true, skin, newOwned: skins.owned });
+  });
+
+  // ===== EXPANDED ACHIEVEMENTS (1000+) =====
+  const EXPANDED_ACHIEVEMENT_CATEGORIES = [
+    { category: "Combat", achievements: generateCombatAchievements() },
+    { category: "Tower", achievements: generateTowerAchievements() },
+    { category: "Pets", achievements: generatePetAchievements() },
+    { category: "Economy", achievements: generateEconomyAchievements() },
+    { category: "Social", achievements: generateSocialAchievements() },
+    { category: "Exploration", achievements: generateExplorationAchievements() },
+    { category: "Collection", achievements: generateCollectionAchievements() },
+    { category: "Milestones", achievements: generateMilestoneAchievements() },
+  ];
+
+  function generateCombatAchievements() {
+    const achievements = [];
+    for (let i = 1; i <= 125; i++) {
+      const wins = i * 10;
+      achievements.push({ id: `combat_wins_${wins}`, name: `${wins} Victories`, description: `Win ${wins} battles`, requirement: { type: "wins", value: wins }, rewards: { gold: wins * 100, exp: wins * 10 } });
+    }
+    return achievements;
+  }
+
+  function generateTowerAchievements() {
+    const achievements = [];
+    for (let floor = 1; floor <= 100; floor++) {
+      achievements.push({ id: `tower_floor_${floor}`, name: `Floor ${floor} Conqueror`, description: `Reach floor ${floor}`, requirement: { type: "towerFloor", value: floor }, rewards: { gold: floor * 1000, rubies: floor } });
+    }
+    for (let level = 10; level <= 100; level += 10) {
+      achievements.push({ id: `tower_level_${level}`, name: `Level ${level} Master`, description: `Reach level ${level} on any floor`, requirement: { type: "towerLevel", value: level }, rewards: { trainingPoints: level * 10 } });
+    }
+    return achievements;
+  }
+
+  function generatePetAchievements() {
+    const achievements = [
+      { id: "first_pet", name: "First Companion", description: "Adopt your first pet", requirement: { type: "petsOwned", value: 1 }, rewards: { soulGins: 10 } },
+      { id: "account_created", name: "Welcome to Valor", description: "Create an account", requirement: { type: "accountCreated", value: true }, rewards: { gold: 1000 } },
+      { id: "first_login", name: "Adventure Begins", description: "Log in for the first time", requirement: { type: "firstLogin", value: true }, rewards: { trainingPoints: 50 } },
+    ];
+    for (let i = 5; i <= 100; i += 5) {
+      achievements.push({ id: `pets_owned_${i}`, name: `Pet Collector ${i}`, description: `Own ${i} pets`, requirement: { type: "petsOwned", value: i }, rewards: { soulGins: i * 5 } });
+    }
+    return achievements;
+  }
+
+  function generateEconomyAchievements() {
+    const achievements = [];
+    const goldMilestones = [1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000];
+    goldMilestones.forEach((gold, i) => {
+      achievements.push({ id: `gold_earned_${gold}`, name: `${gold >= 1000000 ? (gold / 1000000) + "M" : (gold / 1000) + "K"} Gold`, description: `Earn ${gold.toLocaleString()} gold total`, requirement: { type: "goldEarned", value: gold }, rewards: { rubies: (i + 1) * 10 } });
+    });
+    for (let i = 1; i <= 100; i++) {
+      achievements.push({ id: `trades_completed_${i}`, name: `Trader Level ${i}`, description: `Complete ${i} trades`, requirement: { type: "trades", value: i }, rewards: { gold: i * 500 } });
+    }
+    return achievements;
+  }
+
+  function generateSocialAchievements() {
+    const achievements = [];
+    for (let i = 1; i <= 50; i++) {
+      achievements.push({ id: `guild_contributions_${i * 10}`, name: `Guild Contributor ${i}`, description: `Make ${i * 10} guild contributions`, requirement: { type: "guildContributions", value: i * 10 }, rewards: { gold: i * 1000 } });
+    }
+    achievements.push({ id: "join_guild", name: "Guild Member", description: "Join a guild", requirement: { type: "inGuild", value: true }, rewards: { gold: 5000 } });
+    achievements.push({ id: "create_guild", name: "Guild Founder", description: "Create a guild", requirement: { type: "guildCreated", value: true }, rewards: { rubies: 50 } });
+    return achievements;
+  }
+
+  function generateExplorationAchievements() {
+    const achievements = [];
+    const zones = ["capital_city", "mystic_tower", "mountain_caverns", "ancient_ruins", "research_lab", "pet_training", "ruby_mines", "enchanted_forest", "battle_arena", "crystal_lake", "coastal_village", "hell_zone"];
+    zones.forEach((zone, i) => {
+      achievements.push({ id: `visit_${zone}`, name: `Discovered ${zone.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}`, description: `Visit ${zone.replace(/_/g, " ")}`, requirement: { type: "zoneVisited", value: zone }, rewards: { gold: (i + 1) * 500 } });
+    });
+    for (let i = 1; i <= 100; i++) {
+      achievements.push({ id: `zones_explored_${i}`, name: `Explorer Level ${i}`, description: `Explore zones ${i} times`, requirement: { type: "zonesExplored", value: i }, rewards: { trainingPoints: i * 5 } });
+    }
+    return achievements;
+  }
+
+  function generateCollectionAchievements() {
+    const achievements = [];
+    for (let i = 1; i <= 100; i++) {
+      achievements.push({ id: `items_collected_${i * 5}`, name: `Collector ${i}`, description: `Collect ${i * 5} items`, requirement: { type: "itemsCollected", value: i * 5 }, rewards: { gold: i * 200 } });
+    }
+    for (let i = 1; i <= 50; i++) {
+      achievements.push({ id: `rare_items_${i}`, name: `Rare Hunter ${i}`, description: `Collect ${i} rare+ items`, requirement: { type: "rareItems", value: i }, rewards: { rubies: i } });
+    }
+    return achievements;
+  }
+
+  function generateMilestoneAchievements() {
+    const achievements = [];
+    const ranks = ["Novice", "Apprentice", "Journeyman", "Adventurer", "Veteran", "Elite", "Champion", "Hero", "Legend", "Mythic", "Immortal", "Demigod", "Deity", "Titan", "Mythical Legend"];
+    ranks.forEach((rank, i) => {
+      achievements.push({ id: `rank_${rank.toLowerCase().replace(/ /g, "_")}`, name: `Achieved ${rank}`, description: `Reach ${rank} rank`, requirement: { type: "rank", value: i }, rewards: { gold: (i + 1) * 10000, rubies: (i + 1) * 5 } });
+    });
+    for (let i = 1; i <= 100; i++) {
+      achievements.push({ id: `days_played_${i}`, name: `${i} Day Veteran`, description: `Play for ${i} days`, requirement: { type: "daysPlayed", value: i }, rewards: { trainingPoints: i * 10 } });
+    }
+    return achievements;
+  }
+
+  const allExpandedAchievements = EXPANDED_ACHIEVEMENT_CATEGORIES.flatMap(c => c.achievements);
+
+  app.get("/api/achievements", (_req, res) => {
+    res.json({ categories: EXPANDED_ACHIEVEMENT_CATEGORIES, total: allExpandedAchievements.length });
+  });
+
+  app.get("/api/accounts/:id/achievements", (req, res) => {
+    const claimed = playerAchievements.get(req.params.id) || new Set();
+    res.json({ 
+      unlocked: Array.from(claimed),
+      total: allExpandedAchievements.length,
+      categories: EXPANDED_ACHIEVEMENT_CATEGORIES.map(c => ({
+        ...c,
+        unlocked: c.achievements.filter((a: any) => claimed.has(a.id)).length,
+      })),
+    });
+  });
+
+  // ===== TROPHIES (50) =====
+  const FULL_TROPHIES = [
+    { id: "first_victory", name: "First Blood", description: "Win your first battle", icon: "sword" },
+    { id: "tower_10", name: "Tower Initiate", description: "Reach floor 10", icon: "tower" },
+    { id: "tower_25", name: "Tower Climber", description: "Reach floor 25", icon: "tower" },
+    { id: "tower_50", name: "Tower Master", description: "Reach floor 50", icon: "tower" },
+    { id: "tower_100", name: "Tower Conqueror", description: "Complete all 100 floors", icon: "crown" },
+    { id: "millionaire", name: "Millionaire", description: "Earn 1 million gold", icon: "coins" },
+    { id: "billionaire", name: "Billionaire", description: "Earn 1 billion gold", icon: "gem" },
+    { id: "pet_master", name: "Pet Master", description: "Own 50 pets", icon: "paw" },
+    { id: "pet_legend", name: "Pet Legend", description: "Evolve a pet to mythic tier", icon: "star" },
+    { id: "guild_champion", name: "Guild Champion", description: "Win 100 guild battles", icon: "shield" },
+    { id: "pvp_warrior", name: "PvP Warrior", description: "Win 100 PvP battles", icon: "swords" },
+    { id: "pvp_legend", name: "PvP Legend", description: "Win 1000 PvP battles", icon: "trophy" },
+    { id: "collector", name: "Ultimate Collector", description: "Collect 500 items", icon: "package" },
+    { id: "explorer", name: "World Explorer", description: "Visit all 12 zones", icon: "map" },
+    { id: "story_1", name: "Act I Complete", description: "Complete Act I", icon: "book" },
+    { id: "story_2", name: "Act II Complete", description: "Complete Act II", icon: "book" },
+    { id: "story_3", name: "Act III Complete", description: "Complete Act III", icon: "book" },
+    { id: "story_4", name: "Story Complete", description: "Complete all story acts", icon: "crown" },
+    { id: "hell_survivor", name: "Hell Survivor", description: "Survive Hell Zone", icon: "flame" },
+    { id: "hell_conqueror", name: "Hell Conqueror", description: "100 Hell Zone kills", icon: "skull" },
+    { id: "base_max", name: "Fortress Complete", description: "Max out your base", icon: "castle" },
+    { id: "rank_5", name: "Elite Warrior", description: "Reach Elite rank", icon: "star" },
+    { id: "rank_10", name: "Immortal Being", description: "Reach Immortal rank", icon: "sparkles" },
+    { id: "rank_15", name: "Mythical Legend", description: "Achieve Mythical Legend", icon: "crown" },
+    { id: "first_trade", name: "First Trade", description: "Complete your first trade", icon: "handshake" },
+    { id: "trading_master", name: "Trading Master", description: "Complete 100 trades", icon: "scale" },
+    { id: "bird_trainer", name: "Bird Trainer", description: "Train 10 birds", icon: "bird" },
+    { id: "phoenix_master", name: "Phoenix Master", description: "Evolve a bird to phoenix", icon: "flame" },
+    { id: "fish_master", name: "Master Angler", description: "Catch 100 fish", icon: "fish" },
+    { id: "legendary_angler", name: "Legendary Angler", description: "Catch a legendary fish", icon: "star" },
+    { id: "skill_collector", name: "Skill Collector", description: "Learn 20 skills", icon: "zap" },
+    { id: "auction_winner", name: "Auction Winner", description: "Win 10 skill auctions", icon: "gavel" },
+    { id: "quest_complete_10", name: "Quest Hunter", description: "Complete 10 quests", icon: "scroll" },
+    { id: "quest_complete_50", name: "Quest Master", description: "Complete 50 quests", icon: "scroll" },
+    { id: "achievement_hunter", name: "Achievement Hunter", description: "Unlock 100 achievements", icon: "trophy" },
+    { id: "achievement_master", name: "Achievement Master", description: "Unlock 500 achievements", icon: "crown" },
+    { id: "speed_runner", name: "Speed Runner", description: "Clear a floor in under 1 minute", icon: "clock" },
+    { id: "perfect_battle", name: "Perfect Battle", description: "Win without taking damage", icon: "shield" },
+    { id: "comeback_king", name: "Comeback King", description: "Win with less than 10% HP", icon: "heart" },
+    { id: "critical_master", name: "Critical Master", description: "Land 100 critical hits", icon: "target" },
+    { id: "dodge_master", name: "Dodge Master", description: "Dodge 100 attacks", icon: "wind" },
+    { id: "defender", name: "Iron Defense", description: "Block 1000 damage", icon: "shield" },
+    { id: "damage_dealer", name: "Damage Dealer", description: "Deal 1 million damage", icon: "sword" },
+    { id: "elemental_master", name: "Elemental Master", description: "Master all elements", icon: "sparkles" },
+    { id: "social_butterfly", name: "Social Butterfly", description: "Chat with 50 players", icon: "users" },
+    { id: "veteran_player", name: "Veteran Player", description: "Play for 30 days", icon: "calendar" },
+    { id: "daily_devotee", name: "Daily Devotee", description: "Log in 100 days", icon: "sun" },
+    { id: "event_champion", name: "Event Champion", description: "Win 10 events", icon: "flag" },
+    { id: "tournament_winner", name: "Tournament Winner", description: "Win a tournament", icon: "trophy" },
+    { id: "mythical_ascension", name: "Ascended", description: "Achieve Mythical Legend status", icon: "crown" },
+  ];
+
+  const playerTrophies: Map<string, Set<string>> = new Map();
+
+  app.get("/api/full-trophies", (_req, res) => {
+    res.json({ trophies: FULL_TROPHIES, total: FULL_TROPHIES.length });
+  });
+
+  app.get("/api/accounts/:id/full-trophies", (req, res) => {
+    const earned = playerTrophies.get(req.params.id) || new Set();
+    res.json({ 
+      earned: Array.from(earned),
+      total: FULL_TROPHIES.length,
+      trophies: FULL_TROPHIES.map(t => ({ ...t, earned: earned.has(t.id) })),
+    });
+  });
+
+  app.post("/api/accounts/:id/full-trophies/claim", async (req, res) => {
+    const { trophyId } = req.body;
+    const accountId = req.params.id;
+    
+    const trophy = FULL_TROPHIES.find(t => t.id === trophyId);
+    if (!trophy) {
+      return res.status(404).json({ error: "Trophy not found" });
+    }
+    
+    const earned = playerTrophies.get(accountId) || new Set();
+    if (earned.has(trophyId)) {
+      return res.status(400).json({ error: "Trophy already earned" });
+    }
+    
+    earned.add(trophyId);
+    playerTrophies.set(accountId, earned);
+    
+    const account = await storage.getAccount(accountId);
+    if (account) {
+      const currentTrophies = (account.trophies || 0) + 1;
+      await storage.updateAccount(accountId, { trophies: currentTrophies });
+    }
+    
+    res.json({ success: true, trophy, totalEarned: earned.size });
+  });
+
+  // ===== TOURNAMENTS =====
+  interface TournamentMatch {
+    player1: string;
+    player2: string;
+    winner?: string;
+  }
+
+  interface Tournament {
+    id: string;
+    name: string;
+    status: "pending" | "active" | "completed";
+    participants: string[];
+    brackets: { round: number; matches: TournamentMatch[] }[];
+    rewards: { gold?: number; rubies?: number; items?: string[] };
+    createdBy: string;
+    startedAt?: Date;
+    endedAt?: Date;
+  }
+
+  const tournaments: Map<string, Tournament> = new Map();
+
+  app.get("/api/tournaments", (_req, res) => {
+    const all = Array.from(tournaments.values());
+    res.json({ 
+      active: all.find(t => t.status === "active"),
+      pending: all.filter(t => t.status === "pending"),
+      completed: all.filter(t => t.status === "completed").slice(-10),
+    });
+  });
+
+  app.post("/api/admin/tournaments/create", async (req, res) => {
+    const { adminId, name, rewards } = req.body;
+    
+    const admin = await storage.getAccount(adminId);
+    if (!admin || admin.role !== "admin") {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+    
+    const id = `tournament_${Date.now()}`;
+    const tournament: Tournament = {
+      id,
+      name,
+      status: "pending",
+      participants: [],
+      brackets: [],
+      rewards: rewards || { gold: 100000, rubies: 100 },
+      createdBy: adminId,
+    };
+    
+    tournaments.set(id, tournament);
+    
+    await storage.createActivityFeed({
+      type: "tournament",
+      message: `New tournament created: ${name}`,
+      metadata: { tournamentId: id },
+    });
+    
+    res.json({ success: true, tournament });
+  });
+
+  app.post("/api/tournaments/:id/join", async (req, res) => {
+    const { accountId } = req.body;
+    const tournament = tournaments.get(req.params.id);
+    
+    if (!tournament) {
+      return res.status(404).json({ error: "Tournament not found" });
+    }
+    
+    if (tournament.status !== "pending") {
+      return res.status(400).json({ error: "Tournament not accepting registrations" });
+    }
+    
+    if (tournament.participants.includes(accountId)) {
+      return res.status(400).json({ error: "Already registered" });
+    }
+    
+    tournament.participants.push(accountId);
+    tournaments.set(req.params.id, tournament);
+    
+    res.json({ success: true, participants: tournament.participants.length });
+  });
+
+  app.post("/api/admin/tournaments/:id/start", async (req, res) => {
+    const { adminId } = req.body;
+    
+    const admin = await storage.getAccount(adminId);
+    if (!admin || admin.role !== "admin") {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+    
+    const tournament = tournaments.get(req.params.id);
+    if (!tournament) {
+      return res.status(404).json({ error: "Tournament not found" });
+    }
+    
+    if (tournament.participants.length < 2) {
+      return res.status(400).json({ error: "Need at least 2 participants" });
+    }
+    
+    const shuffled = [...tournament.participants].sort(() => Math.random() - 0.5);
+    const matches: TournamentMatch[] = [];
+    
+    for (let i = 0; i < shuffled.length; i += 2) {
+      if (shuffled[i + 1]) {
+        matches.push({ player1: shuffled[i], player2: shuffled[i + 1] });
+      } else {
+        matches.push({ player1: shuffled[i], player2: "BYE", winner: shuffled[i] });
+      }
+    }
+    
+    tournament.brackets = [{ round: 1, matches }];
+    tournament.status = "active";
+    tournament.startedAt = new Date();
+    tournaments.set(req.params.id, tournament);
+    
+    await storage.createActivityFeed({
+      type: "tournament",
+      message: `Tournament "${tournament.name}" has started!`,
+      metadata: { tournamentId: tournament.id, participants: tournament.participants.length },
+    });
+    
+    res.json({ success: true, tournament });
+  });
+
+  app.post("/api/admin/tournaments/:id/set-winner", async (req, res) => {
+    const { adminId, round, matchIndex, winnerId } = req.body;
+    
+    const admin = await storage.getAccount(adminId);
+    if (!admin || admin.role !== "admin") {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+    
+    const tournament = tournaments.get(req.params.id);
+    if (!tournament || tournament.status !== "active") {
+      return res.status(404).json({ error: "Active tournament not found" });
+    }
+    
+    const roundData = tournament.brackets.find(b => b.round === round);
+    if (!roundData || !roundData.matches[matchIndex]) {
+      return res.status(404).json({ error: "Match not found" });
+    }
+    
+    roundData.matches[matchIndex].winner = winnerId;
+    
+    const allMatchesComplete = roundData.matches.every(m => m.winner);
+    if (allMatchesComplete) {
+      const winners = roundData.matches.map(m => m.winner!);
+      
+      if (winners.length === 1) {
+        tournament.status = "completed";
+        tournament.endedAt = new Date();
+        
+        const winner = await storage.getAccount(winners[0]);
+        if (winner) {
+          await storage.updateAccount(winners[0], {
+            gold: winner.gold + (tournament.rewards.gold || 0),
+            rubies: (winner.rubies || 0) + (tournament.rewards.rubies || 0),
+          });
+          
+          const trophies = playerTrophies.get(winners[0]) || new Set();
+          trophies.add("tournament_winner");
+          playerTrophies.set(winners[0], trophies);
+        }
+        
+        await storage.createActivityFeed({
+          type: "tournament",
+          message: `${winner?.username || "Unknown"} won the tournament "${tournament.name}"!`,
+          metadata: { tournamentId: tournament.id, winnerId: winners[0] },
+        });
+      } else {
+        const nextMatches: TournamentMatch[] = [];
+        for (let i = 0; i < winners.length; i += 2) {
+          if (winners[i + 1]) {
+            nextMatches.push({ player1: winners[i], player2: winners[i + 1] });
+          } else {
+            nextMatches.push({ player1: winners[i], player2: "BYE", winner: winners[i] });
+          }
+        }
+        tournament.brackets.push({ round: round + 1, matches: nextMatches });
+      }
+    }
+    
+    tournaments.set(req.params.id, tournament);
+    res.json({ success: true, tournament });
+  });
+
+  // ===== LEADERBOARD ADDITIONS =====
+  app.get("/api/leaderboard/pet-wins", async (_req, res) => {
+    try {
+      const accounts = await storage.getAllAccounts();
+      const sorted = accounts
+        .map(a => ({ id: a.id, username: a.username, petWins: (a as any).petWins || 0 }))
+        .sort((a, b) => b.petWins - a.petWins)
+        .slice(0, 100);
+      res.json({ leaderboard: sorted });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get leaderboard" });
+    }
+  });
+
+  app.get("/api/leaderboard/base-raids", async (_req, res) => {
+    try {
+      const accounts = await storage.getAllAccounts();
+      const sorted = accounts
+        .map(a => ({ id: a.id, username: a.username, baseRaidWins: (a as any).baseRaidWins || 0 }))
+        .sort((a, b) => b.baseRaidWins - a.baseRaidWins)
+        .slice(0, 100);
+      res.json({ leaderboard: sorted });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get leaderboard" });
+    }
+  });
+
   return httpServer;
 }

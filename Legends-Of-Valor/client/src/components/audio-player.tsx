@@ -3,6 +3,7 @@ import { Volume2, VolumeX, Play, Pause, SkipForward, Music } from "lucide-react"
 import { Button } from "@/components/ui/button";
 
 const MUSIC_TRACKS = [
+  { name: "Legends of Valor", src: "/game-music.mp3" },
   { name: "Epic Adventure", src: "/music.mp3" },
 ];
 
@@ -78,8 +79,8 @@ export default function AudioPlayer() {
   };
 
   return (
-    <div className="fixed bottom-4 left-4 z-50 flex flex-col items-start gap-1">
-      <div className="bg-card/80 backdrop-blur p-2 rounded-full border border-border shadow-lg flex items-center gap-2">
+    <div className="fixed bottom-4 left-4 z-50 flex flex-col items-start gap-1 pointer-events-auto">
+      <div className="bg-card/40 backdrop-blur-sm p-2 rounded-full border border-border/50 shadow-lg flex items-center gap-2 opacity-70 hover:opacity-100 transition-opacity">
         <audio
           ref={audioRef}
           src={MUSIC_TRACKS[currentTrack].src}

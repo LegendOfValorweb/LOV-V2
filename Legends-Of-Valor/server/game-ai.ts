@@ -400,3 +400,70 @@ export async function resolveAdminRequest(
 export async function getPlayerAIRequests(accountId: string) {
   return db.select().from(aiAdminRequests).where(eq(aiAdminRequests.accountId, accountId));
 }
+
+// Text-to-Speech voice response
+export async function generateVoiceResponse(text: string): Promise<Buffer | null> {
+  try {
+    const response = await openai.audio.speech.create({
+      model: "tts-1",
+      voice: "onyx",
+      input: text.slice(0, 4096),
+    });
+    
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch (error) {
+    console.error("TTS Error:", error);
+    return null;
+  }
+}
+
+// Full game walkthrough for new players
+export async function generateFullWalkthrough(accountId: string): Promise<string> {
+  const account = await storage.getAccount(accountId);
+  if (!account) return "Welcome, adventurer!";
+  
+  const walkthroughPrompt = `Give ${account.username} a complete walkthrough of Legends of Valor. Cover:
+
+1. **World Map** - The central hub after login. Click zones to travel.
+2. **Capital City** - Shop for weapons/armor, access trading, find NPCs
+3. **Mystic Tower** - 100 floors x 100 levels of combat. Main progression path.
+4. **Pet Training Grounds** - Adopt, train, and evolve pets
+5. **Base/Home** - Your personal fortress. Upgrade rooms: Storage, Crafting, Training, Vault, Defenses
+6. **Battle Arena** - PvP challenges against other players
+7. **Hell Zone** - High-risk endgame area with permadeath mechanics
+8. **Achievements** - Track your progress and earn rewards
+9. **Guilds** - Join others for group content and dungeons
+10. **AI Guide (me!)** - Ask questions anytime for help and quests
+
+Keep it friendly, comprehensive but not overwhelming. About 300-400 words.`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: GAME_SYSTEM_PROMPT },
+        { role: "user", content: walkthroughPrompt }
+      ],
+      max_tokens: 600,
+      temperature: 0.7,
+    });
+    
+    return response.choices[0]?.message?.content || "Welcome to Legends of Valor! Explore the World Map to begin your adventure.";
+  } catch (error) {
+    console.error("Walkthrough error:", error);
+    return `Welcome to Legends of Valor, ${account.username}!
+
+**Quick Start Guide:**
+- **World Map**: Your central hub - click zones to explore
+- **Capital City**: Buy gear and trade with players
+- **Mystic Tower**: Battle through 10,000 levels for progression
+- **Pet Training**: Adopt and evolve combat companions
+- **Your Base**: Upgrade rooms for bonuses and storage
+- **Battle Arena**: Challenge other players to PvP
+- **Achievements**: Complete challenges for rewards
+- **AI Guide**: Chat with me anytime for help!
+
+Good luck on your adventure!`;
+  }
+}

@@ -1145,15 +1145,20 @@ export default function Admin() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <div className="min-h-screen bg-gradient-to-br from-red-950/30 via-background to-orange-950/20">
+      <header className="sticky top-0 z-50 border-b-2 border-red-500/30 bg-gradient-to-r from-red-950/80 via-background/95 to-orange-950/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <Crown className="w-6 h-6 text-tier-x" />
-              <h1 className="font-serif text-xl font-bold text-foreground" data-testid="text-admin-title">
-                Admin Panel
-              </h1>
+              <div className="p-2 rounded-lg bg-gradient-to-br from-red-500 to-orange-500 shadow-lg shadow-red-500/30">
+                <Crown className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="font-serif text-xl font-bold bg-gradient-to-r from-red-400 to-orange-400 bg-clip-text text-transparent" data-testid="text-admin-title">
+                  ADMIN CONTROL CENTER
+                </h1>
+                <p className="text-[10px] text-red-400/70 uppercase tracking-widest">Full Server Access</p>
+              </div>
             </div>
 
             <div className="flex items-center gap-4">
@@ -1176,8 +1181,16 @@ export default function Admin() {
       </header>
 
       <main className="container mx-auto px-4 py-6">
+        <div className="mb-4 p-3 rounded-lg bg-gradient-to-r from-red-500/10 to-orange-500/10 border border-red-500/20">
+          <div className="flex items-center gap-2 text-sm">
+            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            <span className="text-red-400 font-medium">Admin Mode Active</span>
+            <span className="text-muted-foreground">|</span>
+            <span className="text-muted-foreground">Full access to all accounts, resources, events, tournaments, and server controls</span>
+          </div>
+        </div>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-6">
+          <TabsList className="mb-6 bg-red-950/30 border border-red-500/20">
             <TabsTrigger value="items" className="gap-2">
               <Gift className="w-4 h-4" />
               Items
@@ -1222,6 +1235,14 @@ export default function Admin() {
             <TabsTrigger value="auctions" className="gap-2">
               <Gavel className="w-4 h-4" />
               Auctions
+            </TabsTrigger>
+            <TabsTrigger value="tournaments" className="gap-2">
+              <Trophy className="w-4 h-4" />
+              Tournaments
+            </TabsTrigger>
+            <TabsTrigger value="valor" className="gap-2">
+              <Sparkles className="w-4 h-4" />
+              $Valor
             </TabsTrigger>
           </TabsList>
 
@@ -2266,6 +2287,82 @@ export default function Admin() {
 
           <TabsContent value="auctions">
             <SkillAuctionManagement account={account} toast={toast} />
+          </TabsContent>
+
+          <TabsContent value="tournaments">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-red-400">
+                  <Trophy className="w-5 h-5" />
+                  Tournament Management
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-4 border border-red-500/20 rounded-lg bg-red-950/10">
+                  <h3 className="font-medium mb-2">Create Tournament</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Tournament Name</Label>
+                      <Input placeholder="Enter tournament name..." />
+                    </div>
+                    <div>
+                      <Label>Gold Reward</Label>
+                      <Input type="number" placeholder="100000" />
+                    </div>
+                  </div>
+                  <Button className="mt-4 bg-gradient-to-r from-red-500 to-orange-500">
+                    Create Tournament
+                  </Button>
+                </div>
+                <p className="text-muted-foreground text-sm">
+                  Tournaments use knockout format. Players register, admin starts the tournament, and selects winners for each match.
+                </p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="valor">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-red-400">
+                  <Sparkles className="w-5 h-5" />
+                  $Valor Currency Management
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-4 border border-red-500/20 rounded-lg bg-red-950/10">
+                  <h3 className="font-medium mb-2">Grant $Valor to Player</h3>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <Label>Player Username</Label>
+                      <Input placeholder="Enter username..." />
+                    </div>
+                    <div>
+                      <Label>$Valor Amount</Label>
+                      <Input type="number" placeholder="1000" />
+                    </div>
+                    <div className="flex items-end">
+                      <Button className="bg-gradient-to-r from-red-500 to-orange-500">
+                        Grant $Valor
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-4 border border-border rounded-lg">
+                  <h3 className="font-medium mb-2">$Valor Shop Bundles</h3>
+                  <p className="text-sm text-muted-foreground mb-4">Players can purchase these bundles with real money via $Valor.</p>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="p-2 bg-muted rounded">Tiny Adventurer - $0.99</div>
+                    <div className="p-2 bg-muted rounded">Gold & TP Stack - $2.99</div>
+                    <div className="p-2 bg-muted rounded">Adventurer's Starter - $4.99</div>
+                    <div className="p-2 bg-muted rounded">Champion's Loot - $9.99</div>
+                    <div className="p-2 bg-muted rounded">Legend's Treasure - $19.99</div>
+                    <div className="p-2 bg-muted rounded">Valor Hero Bundle - $49.99</div>
+                    <div className="p-2 bg-muted rounded col-span-3 bg-gradient-to-r from-yellow-500/20 to-orange-500/20">Conqueror's Legacy - $99.99 (Ultimate)</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </main>
