@@ -3,7 +3,7 @@ import { pgTable, text, varchar, integer, bigint, timestamp, jsonb, boolean } fr
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const itemTiers = ["normal", "super_rare", "x_tier", "umr", "ssumr", "divine", "journeyman", "expert", "master", "grandmaster", "legend", "elite"] as const;
+export const itemTiers = ["normal", "super_rare", "x_tier", "umr", "ssumr", "divine", "initiate", "journeyman", "adept", "expert", "master", "grandmaster", "champion", "overlord", "sovereign", "ascendant", "legend", "elite", "mythical_legend"] as const;
 export type ItemTier = typeof itemTiers[number];
 
 export const itemTypes = ["weapon", "armor", "accessory"] as const;

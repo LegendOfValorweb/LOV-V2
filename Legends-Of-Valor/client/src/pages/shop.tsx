@@ -44,18 +44,25 @@ export default function Shop() {
     umr: "Novice",
     ssumr: "Novice",
     divine: "Apprentice",
+    initiate: "Initiate",
     journeyman: "Journeyman",
+    adept: "Adept",
     expert: "Expert",
     master: "Master",
     grandmaster: "Grandmaster",
+    champion: "Champion",
+    overlord: "Overlord",
+    sovereign: "Sovereign",
+    ascendant: "Ascendant",
     legend: "Legend",
     elite: "Mythic",
+    mythical_legend: "Mythical Legend",
   };
 
   const excludedTiers = useMemo(() => {
     if (!account) {
       // While loading, only show basic tiers (Novice level)
-      return ["divine", "journeyman", "expert", "master", "grandmaster", "legend", "elite"] as ItemTier[];
+      return ["divine", "initiate", "journeyman", "adept", "expert", "master", "grandmaster", "champion", "overlord", "sovereign", "ascendant", "legend", "elite", "mythical_legend"] as ItemTier[];
     }
     const playerRankIndex = playerRanks.indexOf(account.rank);
     return (Object.entries(tierRankRequirements) as [ItemTier, typeof playerRanks[number]][])

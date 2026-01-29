@@ -96,6 +96,17 @@ const tier6Items: Omit<Item, "id" | "tier">[] = [
   {"name": "Gauntlets of the Divine", "type": "armor", "stats": {"Str": 250, "Spd": 180}, "special": "Crushing Divinity", "price": 580000},
 ];
 
+const initiateItems: Omit<Item, "id" | "tier">[] = [
+  {"name": "Initiate's Training Blade", "type": "weapon", "stats": {"Str": 380, "Luck": 220}, "special": "Novice Strike", "price": 800000},
+  {"name": "Learner's Longbow", "type": "weapon", "stats": {"Spd": 380, "Luck": 220}, "special": "Focused Shot", "price": 800000},
+  {"name": "Staff of Beginning Wisdom", "type": "weapon", "stats": {"Int": 420}, "special": "Arcane Spark", "price": 850000},
+  {"name": "Initiate's Ward Armor", "type": "armor", "stats": {"Str": 280, "Spd": 280, "Int": 150, "Luck": 150}, "special": "Training Shield", "price": 900000},
+  {"name": "Pendant of New Beginnings", "type": "accessory", "stats": {"Int": 320, "Luck": 200}, "special": "Fresh Start", "price": 750000},
+  {"name": "Blade of First Blood", "type": "weapon", "stats": {"Str": 420, "Spd": 150}, "special": "Initiate Fury", "price": 880000},
+  {"name": "Initiate's Cloak", "type": "armor", "stats": {"Spd": 350, "Luck": 220}, "special": "Quick Step", "price": 820000},
+  {"name": "Ring of Potential", "type": "accessory", "stats": {"Luck": 350, "Str": 150}, "special": "Growth Surge", "price": 850000},
+];
+
 const journeymanItems: Omit<Item, "id" | "tier">[] = [
   {"name": "Journeyman's Warblade", "type": "weapon", "stats": {"Str": 500, "Luck": 300}, "special": "Veteran Strike", "price": 1500000},
   {"name": "Wanderer's Longbow", "type": "weapon", "stats": {"Spd": 500, "Luck": 300}, "special": "Precision Shot", "price": 1500000},
@@ -105,6 +116,17 @@ const journeymanItems: Omit<Item, "id" | "tier">[] = [
   {"name": "Blade of Many Battles", "type": "weapon", "stats": {"Str": 550, "Spd": 200}, "special": "War Memory", "price": 1700000},
   {"name": "Cloak of the Traveler", "type": "armor", "stats": {"Spd": 450, "Luck": 300}, "special": "Swift Passage", "price": 1550000},
   {"name": "Ring of Earned Glory", "type": "accessory", "stats": {"Luck": 450, "Str": 200}, "special": "Glory Surge", "price": 1650000},
+];
+
+const adeptItems: Omit<Item, "id" | "tier">[] = [
+  {"name": "Adept's Waraxe", "type": "weapon", "stats": {"Str": 650, "Luck": 400}, "special": "Skilled Strike", "price": 3000000},
+  {"name": "Marksman's Pride Bow", "type": "weapon", "stats": {"Spd": 650, "Luck": 400}, "special": "Deadly Accuracy", "price": 3000000},
+  {"name": "Staff of Adept Sorcery", "type": "weapon", "stats": {"Int": 720}, "special": "Channeled Power", "price": 3200000},
+  {"name": "Adept's Battle Armor", "type": "armor", "stats": {"Str": 450, "Spd": 450, "Int": 320, "Luck": 320}, "special": "Combat Focus", "price": 3500000},
+  {"name": "Medallion of Proficiency", "type": "accessory", "stats": {"Int": 520, "Luck": 360}, "special": "Skill Mastery", "price": 2800000},
+  {"name": "Blade of Swift Execution", "type": "weapon", "stats": {"Str": 700, "Spd": 320}, "special": "Quick Death", "price": 3400000},
+  {"name": "Adept's Shadow Cloak", "type": "armor", "stats": {"Spd": 580, "Int": 400}, "special": "Fade Away", "price": 3100000},
+  {"name": "Ring of Practiced Art", "type": "accessory", "stats": {"Luck": 580, "Str": 280}, "special": "Refined Technique", "price": 3200000},
 ];
 
 const expertItems: Omit<Item, "id" | "tier">[] = [
@@ -140,6 +162,50 @@ const grandmasterItems: Omit<Item, "id" | "tier">[] = [
   {"name": "Ring of Cosmic Authority", "type": "accessory", "stats": {"Luck": 1700, "Str": 900}, "special": "Cosmic Command", "price": 54000000},
 ];
 
+const championItems: Omit<Item, "id" | "tier">[] = [
+  {"name": "Champion's Glory Blade", "type": "weapon", "stats": {"Str": 2200, "Luck": 1400}, "special": "Victory Strike", "price": 80000000},
+  {"name": "Bow of Arena Champions", "type": "weapon", "stats": {"Spd": 2200, "Luck": 1400}, "special": "Champion's Arrow", "price": 80000000},
+  {"name": "Staff of Tournament Victory", "type": "weapon", "stats": {"Int": 2600}, "special": "Arena Storm", "price": 88000000},
+  {"name": "Champion's Tournament Plate", "type": "armor", "stats": {"Str": 1700, "Spd": 1700, "Int": 1300, "Luck": 1300}, "special": "Undefeated Aura", "price": 95000000},
+  {"name": "Medal of Champions", "type": "accessory", "stats": {"Int": 1900, "Luck": 1300}, "special": "Champion's Will", "price": 75000000},
+  {"name": "Blade of Endless Victories", "type": "weapon", "stats": {"Str": 2400, "Spd": 1200}, "special": "Winning Strike", "price": 90000000},
+  {"name": "Champion's Battle Cloak", "type": "armor", "stats": {"Spd": 2000, "Int": 1500}, "special": "Arena Dodge", "price": 82000000},
+  {"name": "Ring of True Champions", "type": "accessory", "stats": {"Luck": 2000, "Str": 1100}, "special": "Victory Surge", "price": 85000000},
+];
+
+const overlordItems: Omit<Item, "id" | "tier">[] = [
+  {"name": "Overlord's Dominion Blade", "type": "weapon", "stats": {"Str": 3500, "Luck": 2200}, "special": "Tyrant's Slash", "price": 250000000},
+  {"name": "Bow of Absolute Rule", "type": "weapon", "stats": {"Spd": 3500, "Luck": 2200}, "special": "Commanding Shot", "price": 250000000},
+  {"name": "Staff of Supreme Authority", "type": "weapon", "stats": {"Int": 4200}, "special": "Domination Wave", "price": 275000000},
+  {"name": "Overlord's Iron Throne Armor", "type": "armor", "stats": {"Str": 2800, "Spd": 2800, "Int": 2100, "Luck": 2100}, "special": "Ruler's Barrier", "price": 300000000},
+  {"name": "Crown of the Overlord", "type": "accessory", "stats": {"Int": 3200, "Luck": 2100}, "special": "Absolute Command", "price": 240000000},
+  {"name": "Blade of Conquered Realms", "type": "weapon", "stats": {"Str": 3800, "Spd": 1900}, "special": "Realm Breaker", "price": 280000000},
+  {"name": "Overlord's Shadow Mantle", "type": "armor", "stats": {"Spd": 3200, "Int": 2500}, "special": "Dark Dominion", "price": 260000000},
+  {"name": "Ring of Total Control", "type": "accessory", "stats": {"Luck": 3200, "Str": 1800}, "special": "Mind Dominion", "price": 270000000},
+];
+
+const sovereignItems: Omit<Item, "id" | "tier">[] = [
+  {"name": "Sovereign's Royal Blade", "type": "weapon", "stats": {"Str": 4200, "Luck": 2700}, "special": "Royal Decree", "price": 400000000},
+  {"name": "Bow of Divine Mandate", "type": "weapon", "stats": {"Spd": 4200, "Luck": 2700}, "special": "Sovereign Strike", "price": 400000000},
+  {"name": "Staff of Imperial Law", "type": "weapon", "stats": {"Int": 5000}, "special": "Royal Judgment", "price": 440000000},
+  {"name": "Sovereign's Celestial Plate", "type": "armor", "stats": {"Str": 3400, "Spd": 3400, "Int": 2600, "Luck": 2600}, "special": "Divine Right", "price": 480000000},
+  {"name": "Crown of Eternal Sovereignty", "type": "accessory", "stats": {"Int": 3800, "Luck": 2600}, "special": "Royal Authority", "price": 380000000},
+  {"name": "Blade of the First King", "type": "weapon", "stats": {"Str": 4600, "Spd": 2300}, "special": "King's Justice", "price": 450000000},
+  {"name": "Sovereign's Ermine Cloak", "type": "armor", "stats": {"Spd": 3900, "Int": 3000}, "special": "Noble Shield", "price": 420000000},
+  {"name": "Ring of Royal Blood", "type": "accessory", "stats": {"Luck": 3900, "Str": 2200}, "special": "Bloodline Power", "price": 430000000},
+];
+
+const ascendantItems: Omit<Item, "id" | "tier">[] = [
+  {"name": "Ascendant's Transcendent Blade", "type": "weapon", "stats": {"Str": 4800, "Luck": 3100}, "special": "Ascension Strike", "price": 600000000},
+  {"name": "Bow of Heavenly Ascension", "type": "weapon", "stats": {"Spd": 4800, "Luck": 3100}, "special": "Sky Piercer", "price": 600000000},
+  {"name": "Staff of Higher Planes", "type": "weapon", "stats": {"Int": 5800}, "special": "Planar Rift", "price": 660000000},
+  {"name": "Ascendant's Ethereal Armor", "type": "armor", "stats": {"Str": 3900, "Spd": 3900, "Int": 3000, "Luck": 3000}, "special": "Ethereal Shield", "price": 720000000},
+  {"name": "Halo of the Ascended", "type": "accessory", "stats": {"Int": 4400, "Luck": 3000}, "special": "Enlightenment", "price": 580000000},
+  {"name": "Blade of Broken Limits", "type": "weapon", "stats": {"Str": 5200, "Spd": 2700}, "special": "Limit Break", "price": 680000000},
+  {"name": "Ascendant's Wings Cloak", "type": "armor", "stats": {"Spd": 4500, "Int": 3400}, "special": "Heavenly Flight", "price": 640000000},
+  {"name": "Ring of Transcendence", "type": "accessory", "stats": {"Luck": 4500, "Str": 2500}, "special": "Beyond Mortal", "price": 650000000},
+];
+
 const legendItems: Omit<Item, "id" | "tier">[] = [
   {"name": "Legendary Realm Splitter", "type": "weapon", "stats": {"Str": 2800, "Luck": 1800}, "special": "Dimension Breaker", "price": 150000000},
   {"name": "Bow of Mythic Legends", "type": "weapon", "stats": {"Spd": 2800, "Luck": 1800}, "special": "Legend's Arrow", "price": 150000000},
@@ -162,6 +228,19 @@ const eliteItems: Omit<Item, "id" | "tier">[] = [
   {"name": "Ring of Ultimate Supremacy", "type": "accessory", "stats": {"Luck": 4700, "Str": 2500}, "special": "Supreme Authority", "price": 540000000},
 ];
 
+const mythicalLegendItems: Omit<Item, "id" | "tier">[] = [
+  {"name": "Mythical Legend's Worldsplitter", "type": "weapon", "stats": {"Str": 10000, "Luck": 6000}, "special": "Universe Cleave", "price": 2000000000},
+  {"name": "Bow of Eternal Myths", "type": "weapon", "stats": {"Spd": 10000, "Luck": 6000}, "special": "Mythic Storm Arrow", "price": 2000000000},
+  {"name": "Staff of Creation's End", "type": "weapon", "stats": {"Int": 12000}, "special": "Genesis Collapse", "price": 2200000000},
+  {"name": "Armor of Mythical Perfection", "type": "armor", "stats": {"Str": 8000, "Spd": 8000, "Int": 6000, "Luck": 6000}, "special": "Myth Shield", "price": 2500000000},
+  {"name": "Crown of Mythical Legends", "type": "accessory", "stats": {"Int": 9000, "Luck": 6000}, "special": "Legendary Wisdom", "price": 1800000000},
+  {"name": "Blade of Infinite Myths", "type": "weapon", "stats": {"Str": 11000, "Spd": 5500}, "special": "Endless Legend", "price": 2300000000},
+  {"name": "Mythical Legend's Starweave", "type": "armor", "stats": {"Spd": 9500, "Int": 7000}, "special": "Star Barrier", "price": 2100000000},
+  {"name": "Ring of Legendary Eternity", "type": "accessory", "stats": {"Luck": 9500, "Str": 5000}, "special": "Eternal Legend", "price": 2150000000},
+  {"name": "The Final Blade", "type": "weapon", "stats": {"Str": 15000, "Spd": 8000, "Luck": 8000}, "special": "Finality", "price": 5000000000},
+  {"name": "Armor of the One True Legend", "type": "armor", "stats": {"Str": 12000, "Spd": 12000, "Int": 10000, "Luck": 10000}, "special": "Invincibility", "price": 5000000000},
+];
+
 function generateItems(items: Omit<Item, "id" | "tier">[], tier: ItemTier): Item[] {
   return items.map((item, index) => ({
     ...item,
@@ -177,12 +256,19 @@ export const ALL_ITEMS: Item[] = [
   ...generateItems(tier4Items, "umr"),
   ...generateItems(tier5Items, "ssumr"),
   ...generateItems(tier6Items, "divine"),
+  ...generateItems(initiateItems, "initiate"),
   ...generateItems(journeymanItems, "journeyman"),
+  ...generateItems(adeptItems, "adept"),
   ...generateItems(expertItems, "expert"),
   ...generateItems(masterItems, "master"),
   ...generateItems(grandmasterItems, "grandmaster"),
+  ...generateItems(championItems, "champion"),
+  ...generateItems(overlordItems, "overlord"),
+  ...generateItems(sovereignItems, "sovereign"),
+  ...generateItems(ascendantItems, "ascendant"),
   ...generateItems(legendItems, "legend"),
   ...generateItems(eliteItems, "elite"),
+  ...generateItems(mythicalLegendItems, "mythical_legend"),
 ];
 
 export function getItemsByTier(tier: ItemTier): Item[] {
@@ -200,10 +286,17 @@ export const TIER_LABELS: Record<ItemTier, string> = {
   umr: "Ultra Mythic Rare",
   ssumr: "SSUMR",
   divine: "Divine",
+  initiate: "Initiate",
   journeyman: "Journeyman",
+  adept: "Adept",
   expert: "Expert",
   master: "Master",
   grandmaster: "Grandmaster",
+  champion: "Champion",
+  overlord: "Overlord",
+  sovereign: "Sovereign",
+  ascendant: "Ascendant",
   legend: "Legend",
   elite: "Elite",
+  mythical_legend: "Mythical Legend",
 };
