@@ -104,6 +104,16 @@ cd Legends-Of-Valor && npm run db:push
 - Zone backdrops: shop (marketplace), fishing (lake), base (castle), arena, tower, pets (training grounds)
 - World map is central hub after login with player avatar display, quick travel, and zone navigation
 
+### Bug Fixes (January 2026)
+- Fixed data persistence: Account data now fetches fresh from server on re-login
+- Fixed base page: Imports canonical playerRanks from schema to prevent rank display drift
+- Fixed tournament system: Full CRUD with multiple reward types (gold, rubies, soulShards, trainingPoints)
+- Fixed null safety: Added proper null checks in cosmetics-shop, achievements, tournaments pages
+- Fixed type safety: Added type guards in pets.tsx to prevent runtime errors
+- Fixed name truncation: Improved display of long names in leaderboard (12 chars) and tournaments (8 chars)
+- Fixed trade batching: addItemsMutation now handles partial failures gracefully
+- Removed unused code: Cleaned up admin.tsx unused functions
+
 ### Planned
 - Enhanced combat formulas
 - AI Story Guide with 4-act storyline
