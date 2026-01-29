@@ -267,18 +267,28 @@ export default function Base() {
     if (!room || currentLevel >= room.maxLevel || !account) return;
     
     const newLevel = currentLevel + 1;
-    setRoomLevels((prev) => ({
-      ...prev,
+    const updatedLevels = {
+      ...roomLevels,
       [roomId]: newLevel,
-    }));
+    };
+    setRoomLevels(updatedLevels);
     
     // Save to database
     try {
-      await fetch(`/api/accounts/${account.id}/room-levels`, {
+      const res = await fetch(`/api/accounts/${account.id}/room-levels`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ roomId, newLevel }),
       });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.roomLevels) {
+          setAccount({
+            ...account,
+            baseRoomLevels: data.roomLevels
+          });
+        }
+      }
     } catch (error) {
       console.error("Failed to save room level:", error);
     }
@@ -500,10 +510,40 @@ export default function Base() {
               
               <TabsContent value="defenses" className="mt-4">
                 <Card>
-                  <CardContent className="p-6 text-center text-muted-foreground">
-                    <Shield className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>Defense systems unlock at Tier 5</p>
-                    <p className="text-sm mt-2">Upgrade your base to access traps, guards, and magical wards.</p>
+                  <CardContent className="p-6">
+                    {currentTier >= 5 ? (
+                      <div className="space-y-4">
+                        <h3 className="font-serif text-lg font-semibold flex items-center gap-2">
+                          <Shield className="w-5 h-5 text-primary" />
+                          Fortress Defenses
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          Your Fortress Castle is equipped with advanced magical wards and physical traps.
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                          <div className="p-3 rounded-lg bg-secondary/50 border border-primary/20">
+                            <p className="font-medium flex items-center gap-2">
+                              <Target className="w-4 h-4 text-red-400" />
+                              Automatic Sentry
+                            </p>
+                            <p className="text-xs text-muted-foreground">Deals damage to raiders before they enter.</p>
+                          </div>
+                          <div className="p-3 rounded-lg bg-secondary/50 border border-primary/20">
+                            <p className="font-medium flex items-center gap-2">
+                              <Zap className="w-4 h-4 text-yellow-400" />
+                              Magical Wards
+                            </p>
+                            <p className="text-xs text-muted-foreground">Reduces gold lost during failed defenses.</p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center text-muted-foreground py-6">
+                        <Shield className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                        <p>Defense systems unlock at Tier 5</p>
+                        <p className="text-sm mt-2">Upgrade your base to access traps, guards, and magical wards.</p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>

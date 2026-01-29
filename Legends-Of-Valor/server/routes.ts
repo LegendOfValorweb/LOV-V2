@@ -8790,9 +8790,12 @@ export async function registerRoutes(
       const baseTier = (account as any).baseTier || 1;
       const baseDefense = baseTier * 10;
 
-      const eligibleRaids = BASE_RAID_EVENTS.filter(r => r.minTowerFloor <= towerProgress);
+      const eligibleRaids = BASE_RAID_EVENTS.filter(r => {
+        const rankIndex = playerRanks.indexOf(account.rank);
+        return rankIndex >= (r.minRank || 0);
+      });
       if (eligibleRaids.length === 0) {
-        return res.json({ result: "no_raid", message: "No raids available for your tower progress" });
+        return res.json({ result: "no_raid", message: "No raids available for your rank" });
       }
 
       const raid = eligibleRaids[Math.floor(Math.random() * eligibleRaids.length)];
