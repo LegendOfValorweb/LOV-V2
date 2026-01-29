@@ -15,7 +15,7 @@ import { GoldDisplay } from "@/components/gold-display";
 import { 
   Gavel, Package, LogOut, ShoppingBag, Heart, Users, Swords, Shield, 
   Zap, Clock, Sparkles, Timer, Flame, Snowflake, Eye, Activity, 
-  ArrowLeft, Trophy, ArrowLeftRight
+  ArrowLeft, Trophy, ArrowLeftRight, Map
 } from "lucide-react";
 import {
   Dialog,
@@ -247,6 +247,9 @@ export default function Skills() {
           </div>
         </div>
         <nav className="container mx-auto px-4 py-2 flex gap-2 overflow-x-auto scrollbar-hide no-scrollbar">
+          <Button variant="outline" size="sm" onClick={() => navigate("/world-map")} data-testid="link-world-map">
+            <Map className="h-4 w-4 mr-1" /> World Map
+          </Button>
           <Button variant="ghost" size="sm" onClick={() => navigate("/shop")} data-testid="link-shop">
             <ShoppingBag className="h-4 w-4 mr-1" /> Shop
           </Button>

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar, Package, ShoppingBag, LogOut, AlertTriangle, Check, UserPlus, Clock, Swords, ArrowLeft, Target, ScrollText, Trophy, ArrowLeftRight } from "lucide-react";
+import { Calendar, Package, ShoppingBag, LogOut, AlertTriangle, Check, UserPlus, Clock, Swords, ArrowLeft, Target, ScrollText, Trophy, ArrowLeftRight, Map } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface PlayerEventRegistration extends EventRegistration {
@@ -127,6 +127,16 @@ export default function Events() {
                 Events
               </h1>
               <div className="hidden sm:flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate("/world-map")}
+                  className="toggle-elevate"
+                  data-testid="link-world-map"
+                >
+                  <Map className="w-4 h-4 mr-1.5" />
+                  World Map
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"

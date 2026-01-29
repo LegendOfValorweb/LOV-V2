@@ -399,6 +399,9 @@ export default function GuildPage() {
               Guild
             </h1>
             <nav className="hidden md:flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => navigate("/world-map")} data-testid="link-world-map">
+                <Building2 className="w-4 h-4 mr-1" />World Map
+              </Button>
               <Button variant="ghost" size="sm" onClick={() => navigate("/shop")} data-testid="link-shop">
                 <ShoppingBag className="w-4 h-4 mr-1" />Shop
               </Button>

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Swords, Package, ShoppingBag, LogOut, Calendar, Check, X, Clock, Trophy, User, ArrowLeft, Heart, Target, ScrollText, ArrowLeftRight } from "lucide-react";
+import { Swords, Package, ShoppingBag, LogOut, Calendar, Check, X, Clock, Trophy, User, ArrowLeft, Heart, Target, ScrollText, ArrowLeftRight, Map } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Dialog,
@@ -192,6 +192,15 @@ export default function Challenges() {
                 Challenges
               </h1>
               <div className="hidden sm:flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate("/world-map")}
+                  data-testid="button-nav-world-map"
+                >
+                  <Map className="w-4 h-4 mr-2" />
+                  World Map
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"

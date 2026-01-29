@@ -15,7 +15,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Package, ShoppingBag, LogOut, Backpack, Sword, Shield, Gem, Trophy, Target, Zap, Brain, Clover, FlaskConical, User, Sparkles, Heart, Star, Calendar, Swords, ScrollText, Users, Coins, DollarSign, ArrowLeftRight } from "lucide-react";
+import { Package, ShoppingBag, LogOut, Backpack, Sword, Shield, Gem, Trophy, Target, Zap, Brain, Clover, FlaskConical, User, Sparkles, Heart, Star, Calendar, Swords, ScrollText, Users, Coins, DollarSign, ArrowLeftRight, Compass } from "lucide-react";
 import type { Item, ItemTier, InventoryItem, Stats } from "@shared/schema";
 import { cn } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -411,6 +411,16 @@ export default function Inventory() {
                 My Inventory
               </h1>
               <div className="hidden sm:flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate("/world-map")}
+                  className="toggle-elevate"
+                  data-testid="link-world-map"
+                >
+                  <Compass className="w-4 h-4 mr-1.5" />
+                  World Map
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"

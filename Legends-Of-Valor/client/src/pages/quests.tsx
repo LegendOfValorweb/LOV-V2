@@ -22,6 +22,7 @@ import {
   Lock,
   Shield,
   ArrowLeftRight,
+  Map,
 } from "lucide-react";
 import type { QuestRewards, Quest } from "@shared/schema";
 
@@ -152,6 +153,15 @@ export default function Quests() {
               </h1>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate("/world-map")}
+                data-testid="link-world-map"
+              >
+                <Map className="h-4 w-4 mr-1" />
+                World Map
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
