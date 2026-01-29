@@ -8039,6 +8039,609 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== ADMIN DASHBOARD ====================
+
+  app.get("/api/admin/dashboard", async (req, res) => {
+    try {
+      const adminId = req.query.adminId as string;
+      if (!adminId) {
+        return res.status(401).json({ error: "Admin ID required" });
+      }
+      const admin = await storage.getAccount(adminId);
+      if (!admin || admin.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      
+      const allAccounts = await storage.getAllAccounts();
+      const allGuilds = await storage.getAllGuilds();
+      const activityFeeds = await storage.getAllActivityFeeds();
+      
+      const stats = {
+        totalPlayers: allAccounts.length,
+        onlinePlayers: onlinePlayers.size,
+        totalGuilds: allGuilds.length,
+        totalActivityLogs: activityFeeds.length,
+        hellZoneParticipants: hellZoneParticipants.size,
+        suspiciousAccounts: suspiciousActivity.size,
+        serverUptime: process.uptime(),
+      };
+      
+      const rankDistribution: Record<string, number> = {};
+      for (const acc of allAccounts) {
+        rankDistribution[acc.rank] = (rankDistribution[acc.rank] || 0) + 1;
+      }
+      
+      const raceDistribution: Record<string, number> = {};
+      for (const acc of allAccounts) {
+        raceDistribution[acc.race] = (raceDistribution[acc.race] || 0) + 1;
+      }
+      
+      res.json({
+        stats,
+        rankDistribution,
+        raceDistribution,
+        recentActivity: activityFeeds.slice(-20).reverse(),
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to load dashboard" });
+    }
+  });
+
+  app.post("/api/admin/set-story-progress", async (req, res) => {
+    try {
+      const schema = z.object({
+        adminId: z.string(),
+        accountId: z.string(),
+        act: z.number().min(1).max(4),
+        chapter: z.number().min(1).max(15),
+      });
+      const { adminId, accountId, act, chapter } = schema.parse(req.body);
+      
+      const admin = await storage.getAccount(adminId);
+      if (!admin || admin.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const { updatePlayerStoryline } = await import("./game-ai");
+      await updatePlayerStoryline(accountId, {
+        storyProgress: {
+          currentAct: act,
+          currentChapter: chapter,
+          act1Completed: act >= 1 && chapter >= 15 || act > 1,
+          act2Completed: act >= 2 && chapter >= 12 || act > 2,
+          act3Completed: act >= 3 && chapter >= 10 || act > 3,
+          act4Completed: act >= 4 && chapter >= 15,
+        },
+      });
+      
+      await storage.createActivityFeed({
+        type: "admin_action",
+        message: `Admin set ${account.username}'s story to Act ${act}, Chapter ${chapter}`,
+        metadata: { adminId, accountId, act, chapter },
+      });
+      
+      res.json({ success: true, message: `Set story progress to Act ${act}, Chapter ${chapter}` });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to set story progress" });
+    }
+  });
+
+  app.post("/api/admin/grant-resources", async (req, res) => {
+    try {
+      const schema = z.object({
+        adminId: z.string(),
+        accountId: z.string(),
+        gold: z.number().optional(),
+        rubies: z.number().optional(),
+        soulShards: z.number().optional(),
+        trainingPoints: z.number().optional(),
+        beakCoins: z.number().optional(),
+        valorTokens: z.number().optional(),
+      });
+      const { adminId, accountId, ...resources } = schema.parse(req.body);
+      
+      const admin = await storage.getAccount(adminId);
+      if (!admin || admin.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const updates: Record<string, number> = {};
+      if (resources.gold) updates.gold = (account.gold || 0) + resources.gold;
+      if (resources.rubies) updates.rubies = (account.rubies || 0) + resources.rubies;
+      if (resources.soulShards) updates.soulShards = (account.soulShards || 0) + resources.soulShards;
+      if (resources.trainingPoints) updates.trainingPoints = (account.trainingPoints || 0) + resources.trainingPoints;
+      if (resources.beakCoins) updates.beakCoins = (account.beakCoins || 0) + resources.beakCoins;
+      if (resources.valorTokens) updates.valorTokens = (account.valorTokens || 0) + resources.valorTokens;
+      
+      await storage.updateAccount(accountId, updates);
+      
+      await storage.createActivityFeed({
+        type: "admin_grant",
+        message: `Admin granted resources to ${account.username}`,
+        metadata: { adminId, accountId, resources },
+      });
+      
+      res.json({ success: true, granted: resources });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to grant resources" });
+    }
+  });
+
+  app.post("/api/admin/set-rank", async (req, res) => {
+    try {
+      const schema = z.object({
+        adminId: z.string(),
+        accountId: z.string(),
+        rank: z.string(),
+      });
+      const { adminId, accountId, rank } = schema.parse(req.body);
+      
+      const admin = await storage.getAccount(adminId);
+      if (!admin || admin.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      
+      if (!playerRanks.includes(rank)) {
+        return res.status(400).json({ error: "Invalid rank", validRanks: playerRanks });
+      }
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      await storage.updateAccount(accountId, { rank });
+      
+      await storage.createActivityFeed({
+        type: "admin_rank_change",
+        message: `Admin changed ${account.username}'s rank to ${rank}`,
+        metadata: { adminId, accountId, newRank: rank, oldRank: account.rank },
+      });
+      
+      res.json({ success: true, newRank: rank });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to set rank" });
+    }
+  });
+
+  app.post("/api/admin/set-stats", async (req, res) => {
+    try {
+      const schema = z.object({
+        adminId: z.string(),
+        accountId: z.string(),
+        stats: z.object({
+          Str: z.number().optional(),
+          Def: z.number().optional(),
+          Spd: z.number().optional(),
+          Int: z.number().optional(),
+          Vit: z.number().optional(),
+          Luk: z.number().optional(),
+        }),
+      });
+      const { adminId, accountId, stats } = schema.parse(req.body);
+      
+      const admin = await storage.getAccount(adminId);
+      if (!admin || admin.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const newStats = { ...(account.stats || {}), ...stats };
+      await storage.updateAccount(accountId, { stats: newStats });
+      
+      await storage.createActivityFeed({
+        type: "admin_stat_change",
+        message: `Admin modified ${account.username}'s stats`,
+        metadata: { adminId, accountId, statsChanged: stats },
+      });
+      
+      res.json({ success: true, newStats });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to set stats" });
+    }
+  });
+
+  app.get("/api/admin/all-accounts", async (req, res) => {
+    try {
+      const adminId = req.query.adminId as string;
+      if (!adminId) {
+        return res.status(401).json({ error: "Admin ID required" });
+      }
+      const admin = await storage.getAccount(adminId);
+      if (!admin || admin.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      
+      const accounts = await storage.getAllAccounts();
+      const sanitized = accounts.map(a => ({
+        id: a.id,
+        username: a.username,
+        race: a.race,
+        gender: a.gender,
+        rank: a.rank,
+        gold: a.gold,
+        rubies: a.rubies,
+        npcFloor: a.npcFloor,
+        createdAt: a.createdAt,
+        role: a.role,
+        online: onlinePlayers.has(a.id),
+      }));
+      
+      res.json(sanitized);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get accounts" });
+    }
+  });
+
+  app.post("/api/admin/broadcast", async (req, res) => {
+    try {
+      const schema = z.object({
+        adminId: z.string(),
+        message: z.string(),
+        type: z.enum(["announcement", "maintenance", "event"]).optional(),
+      });
+      const { adminId, message, type } = schema.parse(req.body);
+      
+      const admin = await storage.getAccount(adminId);
+      if (!admin || admin.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      
+      for (const playerId of onlinePlayers.keys()) {
+        broadcastToPlayer(playerId, "admin_broadcast", {
+          message,
+          type: type || "announcement",
+          from: admin.username,
+          timestamp: Date.now(),
+        });
+      }
+      
+      await storage.createActivityFeed({
+        type: "admin_broadcast",
+        message: `Admin broadcast: ${message}`,
+        metadata: { adminId, type },
+      });
+      
+      res.json({ success: true, recipientCount: onlinePlayers.size });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to broadcast" });
+    }
+  });
+
+  // ==================== MOUNTS (COSMETIC) ====================
+
+  const MOUNTS = [
+    { id: "common_horse", name: "Common Horse", rarity: "common", speedBonus: 0, unlockRequirement: { gold: 1000 } },
+    { id: "war_horse", name: "War Horse", rarity: "uncommon", speedBonus: 5, unlockRequirement: { gold: 10000, rank: 3 } },
+    { id: "dire_wolf", name: "Dire Wolf", rarity: "rare", speedBonus: 10, unlockRequirement: { gold: 50000, rank: 5 } },
+    { id: "gryphon", name: "Gryphon", rarity: "epic", speedBonus: 15, unlockRequirement: { gold: 200000, rank: 8 } },
+    { id: "dragon", name: "Dragon", rarity: "legendary", speedBonus: 20, unlockRequirement: { gold: 1000000, rank: 12 } },
+    { id: "phoenix", name: "Phoenix", rarity: "mythic", speedBonus: 25, unlockRequirement: { towerFloor: 100 } },
+    { id: "nightmare", name: "Nightmare", rarity: "mythic", speedBonus: 25, unlockRequirement: { hellZoneKills: 50 } },
+    { id: "celestial_steed", name: "Celestial Steed", rarity: "legendary", speedBonus: 20, unlockRequirement: { allActsComplete: true } },
+  ];
+
+  const playerMounts: Map<string, { owned: string[]; active: string | null }> = new Map();
+
+  app.get("/api/mounts", (_req, res) => {
+    res.json(MOUNTS);
+  });
+
+  app.get("/api/accounts/:id/mounts", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      const mounts = playerMounts.get(accountId) || { owned: [], active: null };
+      res.json(mounts);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get mounts" });
+    }
+  });
+
+  app.post("/api/accounts/:id/mounts/unlock", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      const { mountId } = z.object({ mountId: z.string() }).parse(req.body);
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const mount = MOUNTS.find(m => m.id === mountId);
+      if (!mount) {
+        return res.status(404).json({ error: "Mount not found" });
+      }
+      
+      const mounts = playerMounts.get(accountId) || { owned: [], active: null };
+      if (mounts.owned.includes(mountId)) {
+        return res.status(400).json({ error: "Mount already owned" });
+      }
+      
+      const req_obj = mount.unlockRequirement as { gold?: number; rank?: number; towerFloor?: number; hellZoneKills?: number; allActsComplete?: boolean };
+      if (req_obj.gold && account.gold < req_obj.gold) {
+        return res.status(400).json({ error: `Requires ${req_obj.gold} gold` });
+      }
+      if (req_obj.rank && playerRanks.indexOf(account.rank) < req_obj.rank) {
+        return res.status(400).json({ error: `Requires ${playerRanks[req_obj.rank]} rank` });
+      }
+      if (req_obj.towerFloor && (account.npcFloor || 1) < req_obj.towerFloor) {
+        return res.status(400).json({ error: `Requires Tower Floor ${req_obj.towerFloor}` });
+      }
+      if (req_obj.hellZoneKills) {
+        const participant = hellZoneParticipants.get(accountId);
+        const kills = participant?.kills || 0;
+        if (kills < req_obj.hellZoneKills) {
+          return res.status(400).json({ error: `Requires ${req_obj.hellZoneKills} Hell Zone kills (you have ${kills})` });
+        }
+      }
+      if (req_obj.allActsComplete) {
+        const storyline = await getPlayerStoryline(accountId);
+        if (!storyline.storyProgress?.act4Completed) {
+          return res.status(400).json({ error: "Requires all story acts completed" });
+        }
+      }
+      
+      if (req_obj.gold) {
+        await storage.updateAccountGold(accountId, account.gold - req_obj.gold);
+      }
+      
+      mounts.owned.push(mountId);
+      playerMounts.set(accountId, mounts);
+      
+      res.json({ success: true, mount: mount.name, message: `Unlocked ${mount.name}!` });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to unlock mount" });
+    }
+  });
+
+  app.post("/api/accounts/:id/mounts/equip", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      const { mountId } = z.object({ mountId: z.string().nullable() }).parse(req.body);
+      
+      const mounts = playerMounts.get(accountId) || { owned: [], active: null };
+      
+      if (mountId && !mounts.owned.includes(mountId)) {
+        return res.status(400).json({ error: "Mount not owned" });
+      }
+      
+      mounts.active = mountId;
+      playerMounts.set(accountId, mounts);
+      
+      const mount = MOUNTS.find(m => m.id === mountId);
+      res.json({ 
+        success: true, 
+        activeMount: mountId,
+        message: mountId ? `Equipped ${mount?.name}` : "Dismounted",
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to equip mount" });
+    }
+  });
+
+  // ==================== ENDGAME SYSTEM ====================
+
+  const ENDGAME_CONFIG = {
+    mythicalLegendRequirements: {
+      minRank: 14,
+      towerFloor: 100,
+      towerLevel: 100,
+      allActsComplete: true,
+      minAchievements: 20,
+    },
+    prestigeRewards: {
+      title: "Mythical Legend",
+      gold: 10000000,
+      rubies: 100000,
+      soulShards: 50000,
+      uniqueMount: "celestial_steed",
+    },
+    quintillionMilestones: [
+      { power: 1e15, title: "Quadrillionaire", reward: { gold: 1000000, rubies: 10000 } },
+      { power: 1e16, title: "Pentadeca Power", reward: { gold: 5000000, rubies: 50000 } },
+      { power: 1e17, title: "Hexadeca Hero", reward: { gold: 10000000, rubies: 100000 } },
+      { power: 1e18, title: "Quintillion Conqueror", reward: { gold: 50000000, rubies: 500000 } },
+    ],
+  };
+
+  const mythicalLegends: Set<string> = new Set();
+
+  app.get("/api/endgame/config", (_req, res) => {
+    res.json(ENDGAME_CONFIG);
+  });
+
+  app.get("/api/accounts/:id/endgame-progress", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.id);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const rankIndex = playerRanks.indexOf(account.rank);
+      const storyline = await getPlayerStoryline(req.params.id);
+      const achievements = playerAchievements.get(req.params.id) || new Set();
+      
+      const progress = {
+        rank: {
+          current: rankIndex,
+          required: ENDGAME_CONFIG.mythicalLegendRequirements.minRank,
+          met: rankIndex >= ENDGAME_CONFIG.mythicalLegendRequirements.minRank,
+        },
+        tower: {
+          currentFloor: account.npcFloor || 1,
+          currentLevel: account.npcLevel || 1,
+          requiredFloor: ENDGAME_CONFIG.mythicalLegendRequirements.towerFloor,
+          requiredLevel: ENDGAME_CONFIG.mythicalLegendRequirements.towerLevel,
+          met: (account.npcFloor || 1) >= 100 && (account.npcLevel || 1) >= 100,
+        },
+        story: {
+          actsCompleted: [
+            storyline.storyProgress?.act1Completed,
+            storyline.storyProgress?.act2Completed,
+            storyline.storyProgress?.act3Completed,
+            storyline.storyProgress?.act4Completed,
+          ].filter(Boolean).length,
+          required: 4,
+          met: storyline.storyProgress?.act4Completed || false,
+        },
+        achievements: {
+          current: achievements.size,
+          required: ENDGAME_CONFIG.mythicalLegendRequirements.minAchievements,
+          met: achievements.size >= ENDGAME_CONFIG.mythicalLegendRequirements.minAchievements,
+        },
+      };
+      
+      const allMet = progress.rank.met && progress.tower.met && progress.story.met && progress.achievements.met;
+      const isMythicalLegend = mythicalLegends.has(req.params.id);
+      
+      res.json({
+        progress,
+        allRequirementsMet: allMet,
+        canAscend: allMet && !isMythicalLegend,
+        isMythicalLegend,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get endgame progress" });
+    }
+  });
+
+  const claimedMilestones: Map<string, Set<number>> = new Map();
+
+  app.post("/api/accounts/:id/check-milestones", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      const stats = account.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Vit: 10, Luk: 10 };
+      const power = Object.values(stats).reduce((a, b) => a + b, 0) * 
+        (playerRanks.indexOf(account.rank) + 1) * 1000;
+      
+      const claimed = claimedMilestones.get(accountId) || new Set();
+      const newRewards: { title: string; reward: { gold: number; rubies: number } }[] = [];
+      
+      for (let i = 0; i < ENDGAME_CONFIG.quintillionMilestones.length; i++) {
+        const milestone = ENDGAME_CONFIG.quintillionMilestones[i];
+        if (power >= milestone.power && !claimed.has(i)) {
+          claimed.add(i);
+          newRewards.push({ title: milestone.title, reward: milestone.reward });
+          
+          await storage.updateAccount(accountId, {
+            gold: account.gold + milestone.reward.gold,
+            rubies: (account.rubies || 0) + milestone.reward.rubies,
+            title: milestone.title,
+          });
+        }
+      }
+      
+      claimedMilestones.set(accountId, claimed);
+      
+      res.json({
+        currentPower: power,
+        claimedMilestones: Array.from(claimed),
+        newRewards,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to check milestones" });
+    }
+  });
+
+  app.post("/api/accounts/:id/ascend-mythical", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      
+      if (mythicalLegends.has(accountId)) {
+        return res.status(400).json({ error: "Already a Mythical Legend" });
+      }
+      
+      const rankIndex = playerRanks.indexOf(account.rank);
+      if (rankIndex < ENDGAME_CONFIG.mythicalLegendRequirements.minRank) {
+        return res.status(400).json({ error: "Rank requirement not met" });
+      }
+      if ((account.npcFloor || 1) < 100 || (account.npcLevel || 1) < 100) {
+        return res.status(400).json({ error: "Tower completion required" });
+      }
+      
+      const storyline = await getPlayerStoryline(accountId);
+      if (!storyline.storyProgress?.act4Completed) {
+        return res.status(400).json({ error: "All story acts must be completed" });
+      }
+      
+      const achievements = playerAchievements.get(accountId) || new Set();
+      if (achievements.size < ENDGAME_CONFIG.mythicalLegendRequirements.minAchievements) {
+        return res.status(400).json({ 
+          error: `Requires at least ${ENDGAME_CONFIG.mythicalLegendRequirements.minAchievements} achievements (you have ${achievements.size})`,
+        });
+      }
+      
+      mythicalLegends.add(accountId);
+      
+      const rewards = ENDGAME_CONFIG.prestigeRewards;
+      await storage.updateAccount(accountId, {
+        gold: account.gold + rewards.gold,
+        rubies: (account.rubies || 0) + rewards.rubies,
+        soulShards: (account.soulShards || 0) + rewards.soulShards,
+        title: rewards.title,
+      });
+      
+      const mounts = playerMounts.get(accountId) || { owned: [], active: null };
+      if (!mounts.owned.includes(rewards.uniqueMount)) {
+        mounts.owned.push(rewards.uniqueMount);
+        playerMounts.set(accountId, mounts);
+      }
+      
+      await storage.createActivityFeed({
+        type: "mythical_ascension",
+        message: `${account.username} has ascended to Mythical Legend status!`,
+        metadata: { accountId, rewards },
+      });
+      
+      res.json({
+        success: true,
+        title: rewards.title,
+        rewards,
+        message: `Congratulations! You have ascended to Mythical Legend status!`,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to ascend" });
+    }
+  });
+
+  app.get("/api/mythical-legends", async (_req, res) => {
+    try {
+      const legends: { id: string; username: string; ascendedAt?: number }[] = [];
+      for (const id of mythicalLegends) {
+        const account = await storage.getAccount(id);
+        if (account) {
+          legends.push({ id, username: account.username });
+        }
+      }
+      res.json({ legends, count: legends.length });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get legends" });
+    }
+  });
+
   app.post("/api/accounts/:id/trigger-raid", async (req, res) => {
     try {
       const account = await storage.getAccount(req.params.id);
