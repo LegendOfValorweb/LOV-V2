@@ -192,6 +192,17 @@ const zones: Zone[] = [
     activities: ["High-Risk PvP", "Mythic Drops", "Battle Royale"],
     coordinates: { x: 50, y: 8 },
   },
+  {
+    id: "valor-shop",
+    name: "$Valor Shop",
+    description: "Premium bundles and exclusive rewards. Support the realm!",
+    icon: <Sparkles className="w-6 h-6" />,
+    difficulty: "starter",
+    pvpEnabled: false,
+    activities: ["Premium Bundles", "Exclusive Items", "Special Offers"],
+    coordinates: { x: 85, y: 15 },
+    route: "/valor-shop",
+  },
 ];
 
 const difficultyColors: Record<string, string> = {

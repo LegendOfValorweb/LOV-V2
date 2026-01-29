@@ -26,6 +26,7 @@ import WorldMap from "@/pages/world-map";
 import Base from "@/pages/base";
 import PetArena from "@/pages/pet-arena";
 import Achievements from "@/pages/achievements";
+import ValorShop from "@/pages/valor-shop";
 import NotFound from "@/pages/not-found";
 import { MobileLandscapePrompt } from "@/components/mobile-landscape-prompt";
 import { AppLoadingWrapper } from "@/components/app-loading-wrapper";
@@ -52,6 +53,7 @@ function Router() {
       <Route path="/base" component={Base} />
       <Route path="/pet-arena" component={PetArena} />
       <Route path="/achievements" component={Achievements} />
+      <Route path="/valor-shop" component={ValorShop} />
       <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>
