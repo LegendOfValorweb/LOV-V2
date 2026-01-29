@@ -43,4 +43,4 @@ AI_INTEGRATIONS_OPENAI_API_KEY = "_DUMMY_API_KEY_"
 [deployment]
 deploymentTarget = "autoscale"
 run = ["bash", "-c", "cd Legends-Of-Valor && npm run start"]
-build = ["bash", "-c", "cd Legends-Of-Valor && npm run build"]
+build = ["bash", "-c", "cd Legends-Of-Valor && npm install && npm run build"]
