@@ -74,33 +74,59 @@ const ELEMENT_STRENGTHS: Record<string, string> = {
   Dark: "Light",
 };
 
+function safeNumber(val: any, defaultVal: number = 0): number {
+  const num = Number(val);
+  return isNaN(num) ? defaultVal : num;
+}
+
+function safeStats(stats: CombatStats | null | undefined): CombatStats {
+  const defaultStats: CombatStats = { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 };
+  if (!stats) return defaultStats;
+  return {
+    Str: safeNumber(stats.Str, defaultStats.Str),
+    Def: safeNumber(stats.Def, defaultStats.Def),
+    Spd: safeNumber(stats.Spd, defaultStats.Spd),
+    Int: safeNumber(stats.Int, defaultStats.Int),
+    Luck: safeNumber(stats.Luck, defaultStats.Luck),
+    Pot: safeNumber(stats.Pot, 0),
+    HP: stats.HP !== undefined ? safeNumber(stats.HP) : undefined,
+    maxHP: stats.maxHP !== undefined ? safeNumber(stats.maxHP) : undefined,
+  };
+}
+
 export function calculateMaxHP(stats: CombatStats, level: number): number {
+  const safe = safeStats(stats);
   const baseHP = 100;
-  const strBonus = stats.Str * 5;
-  const defBonus = stats.Def * 3;
-  const levelBonus = level * 10;
+  const strBonus = safe.Str * 5;
+  const defBonus = safe.Def * 3;
+  const levelBonus = safeNumber(level, 1) * 10;
   return Math.floor(baseHP + strBonus + defBonus + levelBonus);
 }
 
 export function calculateInitiative(stats: CombatStats, luck: number): number {
-  const speedBase = stats.Spd * 2;
-  const luckBonus = Math.random() * (luck / 10);
+  const safe = safeStats(stats);
+  const speedBase = safe.Spd * 2;
+  const safeLuck = safeNumber(luck, 0);
+  const luckBonus = safeLuck > 0 ? Math.random() * (safeLuck / 10) : 0;
   return speedBase + luckBonus;
 }
 
 export function calculateBaseDamage(stats: CombatStats): number {
-  return stats.Str * 2 + stats.Int * 1.5 + (stats.Pot || 0) * 3;
+  const safe = safeStats(stats);
+  return safe.Str * 2 + safe.Int * 1.5 + (safe.Pot || 0) * 3;
 }
 
 export function calculateDefenseReduction(damage: number, defenderDef: number): number {
-  const defenseMultiplier = 1 - Math.min(defenderDef / (defenderDef + 100), 0.75);
-  return Math.floor(damage * defenseMultiplier);
+  const safeDef = Math.max(0, Number(defenderDef) || 0);
+  const defenseMultiplier = 1 - Math.min(safeDef / (safeDef + 100), 0.75);
+  return Math.floor(Math.max(0, damage || 0) * defenseMultiplier);
 }
 
 export function calculateCritical(attackerLuck: number): { isCritical: boolean; multiplier: number } {
-  const critChance = Math.min(attackerLuck / 200, 0.25);
+  const safeLuck = safeNumber(attackerLuck, 0);
+  const critChance = Math.min(safeLuck / 200, 0.25);
   const isCritical = Math.random() < critChance;
-  const multiplier = isCritical ? 1.5 + (attackerLuck / 500) : 1;
+  const multiplier = isCritical ? 1.5 + (safeLuck / 500) : 1;
   return { isCritical, multiplier };
 }
 
@@ -128,7 +154,9 @@ export function calculateElementalMultiplier(
 }
 
 export function calculateDodgeChance(defenderSpd: number, attackerSpd: number): number {
-  const spdDiff = defenderSpd - attackerSpd;
+  const safeDefSpd = safeNumber(defenderSpd, 10);
+  const safeAtkSpd = safeNumber(attackerSpd, 10);
+  const spdDiff = safeDefSpd - safeAtkSpd;
   const baseChance = 0.05;
   const spdBonus = Math.max(0, spdDiff / 200);
   return Math.min(baseChance + spdBonus, 0.3);

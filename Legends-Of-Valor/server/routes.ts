@@ -38,12 +38,22 @@ const adminSSEConnections = new Map<string, Response>();
 const playerSSEConnections = new Map<string, Response>();
 const guildSSEConnections = new Map<string, Set<Response>>();
 
+function safeSSEWrite(res: Response, message: string): boolean {
+  try {
+    if (res && !res.writableEnded) {
+      res.write(message);
+      return true;
+    }
+    return false;
+  } catch (error) {
+    return false;
+  }
+}
+
 function broadcastToAdmins(event: string, data: any) {
   const message = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   Array.from(adminSSEConnections.entries()).forEach(([adminId, res]) => {
-    try {
-      res.write(message);
-    } catch (error) {
+    if (!safeSSEWrite(res, message)) {
       adminSSEConnections.delete(adminId);
     }
   });
@@ -52,9 +62,7 @@ function broadcastToAdmins(event: string, data: any) {
 function broadcastToPlayer(playerId: string, event: string, data: any) {
   const res = playerSSEConnections.get(playerId);
   if (res) {
-    try {
-      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-    } catch (error) {
+    if (!safeSSEWrite(res, `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)) {
       playerSSEConnections.delete(playerId);
     }
   }
@@ -65,9 +73,7 @@ function broadcastToGuild(guildId: string, event: string, data: any) {
   if (connections) {
     const message = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
     connections.forEach(res => {
-      try {
-        res.write(message);
-      } catch (error) {
+      if (!safeSSEWrite(res, message)) {
         connections.delete(res);
       }
     });
@@ -77,9 +83,7 @@ function broadcastToGuild(guildId: string, event: string, data: any) {
 function broadcastToAllPlayers(event: string, data: any) {
   const message = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   Array.from(playerSSEConnections.entries()).forEach(([playerId, res]) => {
-    try {
-      res.write(message);
-    } catch (error) {
+    if (!safeSSEWrite(res, message)) {
       playerSSEConnections.delete(playerId);
     }
   });
@@ -10303,6 +10307,19 @@ export async function registerRoutes(
   }
 
   const tournaments: Map<string, Tournament> = new Map();
+  
+  function cleanupOldTournaments() {
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    Array.from(tournaments.entries()).forEach(([id, t]) => {
+      if (t.status === "completed" && t.endedAt && t.endedAt.getTime() < oneDayAgo) {
+        tournaments.delete(id);
+      }
+    });
+  }
+  if (!(globalThis as any).__tournamentCleanupInitialized) {
+    (globalThis as any).__tournamentCleanupInitialized = true;
+    setInterval(cleanupOldTournaments, 60 * 60 * 1000);
+  }
 
   app.get("/api/tournaments", (_req, res) => {
     const all = Array.from(tournaments.values());
