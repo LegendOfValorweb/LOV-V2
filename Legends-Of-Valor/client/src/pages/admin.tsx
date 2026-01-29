@@ -1384,6 +1384,13 @@ export default function Admin() {
                         <span>{player.username}</span>
                         <Badge variant="secondary">{player.rank}</Badge>
                       </CardTitle>
+                      {player.race && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                          <Badge variant="outline" className="capitalize text-xs">
+                            {player.gender === "female" ? "♀" : "♂"} {player.race}
+                          </Badge>
+                        </div>
+                      )}
                     </CardHeader>
                     <CardContent className="space-y-3">
                       {(() => {
