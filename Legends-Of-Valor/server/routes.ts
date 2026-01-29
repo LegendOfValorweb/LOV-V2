@@ -351,10 +351,6 @@ export async function registerRoutes(
   // Respawn at base (free, takes you back to base)
   app.post("/api/accounts/:id/respawn", async (req, res) => {
     try {
-      const session = activeSessions.get(req.params.id);
-      if (!session) {
-        return res.status(401).json({ error: "Active session required" });
-      }
       const account = await storage.getAccount(req.params.id);
       if (!account) {
         return res.status(404).json({ error: "Account not found" });
@@ -383,10 +379,6 @@ export async function registerRoutes(
   // Revive using revive token (instant revive at current location)
   app.post("/api/accounts/:id/revive", async (req, res) => {
     try {
-      const session = activeSessions.get(req.params.id);
-      if (!session) {
-        return res.status(401).json({ error: "Active session required" });
-      }
       const account = await storage.getAccount(req.params.id);
       if (!account) {
         return res.status(404).json({ error: "Account not found" });
@@ -418,10 +410,6 @@ export async function registerRoutes(
   // Pet sacrifice for revival (sacrifice active pet to revive)
   app.post("/api/accounts/:id/sacrifice-pet", async (req, res) => {
     try {
-      const session = activeSessions.get(req.params.id);
-      if (!session) {
-        return res.status(401).json({ error: "Active session required" });
-      }
       const account = await storage.getAccount(req.params.id);
       if (!account) {
         return res.status(404).json({ error: "Account not found" });
@@ -460,13 +448,9 @@ export async function registerRoutes(
     }
   });
   
-  // Check death status - requires active session
+  // Check death status
   app.get("/api/accounts/:id/death-status", async (req, res) => {
     try {
-      const session = activeSessions.get(req.params.id);
-      if (!session) {
-        return res.status(401).json({ error: "Active session required" });
-      }
       const account = await storage.getAccount(req.params.id);
       if (!account) {
         return res.status(404).json({ error: "Account not found" });
@@ -829,9 +813,8 @@ export async function registerRoutes(
       const { skin } = req.body;
       const accountId = req.params.id;
       
-      const session = activeSessions.get(accountId);
-      if (!session) {
-        return res.status(401).json({ error: "Active session required" });
+      if (!accountId) {
+        return res.status(400).json({ error: "Account ID required" });
       }
       
       const skinData = BASE_SKINS.find(s => s.id === skin);
@@ -868,9 +851,8 @@ export async function registerRoutes(
     try {
       const accountId = req.params.id;
       
-      const session = activeSessions.get(accountId);
-      if (!session) {
-        return res.status(401).json({ error: "Active session required" });
+      if (!accountId) {
+        return res.status(400).json({ error: "Account ID required" });
       }
       
       const account = await storage.getAccount(accountId);
@@ -2449,9 +2431,8 @@ export async function registerRoutes(
     try {
       const { accountId } = req.body;
       
-      const session = activeSessions.get(accountId);
-      if (!session) {
-        return res.status(401).json({ error: "Active session required" });
+      if (!accountId) {
+        return res.status(400).json({ error: "Account ID required" });
       }
       
       const pet = await storage.getPet(req.params.id);
@@ -2524,9 +2505,8 @@ export async function registerRoutes(
     try {
       const { accountId } = req.body;
       
-      const session = activeSessions.get(accountId);
-      if (!session) {
-        return res.status(401).json({ error: "Active session required" });
+      if (!accountId) {
+        return res.status(400).json({ error: "Account ID required" });
       }
       
       const pet = await storage.getPet(req.params.id);
@@ -2601,9 +2581,8 @@ export async function registerRoutes(
     try {
       const { accountId, personality } = req.body;
       
-      const session = activeSessions.get(accountId);
-      if (!session) {
-        return res.status(401).json({ error: "Active session required" });
+      if (!accountId) {
+        return res.status(400).json({ error: "Account ID required" });
       }
       
       const { petPersonalities } = await import("@shared/schema");
@@ -2647,9 +2626,8 @@ export async function registerRoutes(
     try {
       const { accountId, skin } = req.body;
       
-      const session = activeSessions.get(accountId);
-      if (!session) {
-        return res.status(401).json({ error: "Active session required" });
+      if (!accountId) {
+        return res.status(400).json({ error: "Account ID required" });
       }
       
       const skinData = PET_SKINS.find(s => s.id === skin);
@@ -5028,10 +5006,6 @@ export async function registerRoutes(
   // Get player's pet battle challenges (pending, active, completed)
   app.get("/api/accounts/:id/pet-battles", async (req, res) => {
     try {
-      const session = activeSessions.get(req.params.id);
-      if (!session) {
-        return res.status(401).json({ error: "Active session required" });
-      }
       const { petBattles } = await import("@shared/schema");
       const { or: orFunc, desc: descFunc } = await import("drizzle-orm");
       const battles = await db.select().from(petBattles).where(
@@ -5083,9 +5057,8 @@ export async function registerRoutes(
       });
       const { challengerId, challengedId, challengerPets, goldWager } = challengeSchema.parse(req.body);
       
-      const session = activeSessions.get(challengerId);
-      if (!session) {
-        return res.status(401).json({ error: "Active session required" });
+      if (!challengerId) {
+        return res.status(400).json({ error: "Challenger ID required" });
       }
       
       const challenger = await storage.getAccount(challengerId);
@@ -5145,9 +5118,8 @@ export async function registerRoutes(
       });
       const { accountId, accept, challengedPets } = responseSchema.parse(req.body);
       
-      const session = activeSessions.get(accountId);
-      if (!session) {
-        return res.status(401).json({ error: "Active session required" });
+      if (!accountId) {
+        return res.status(400).json({ error: "Account ID required" });
       }
       
       const { petBattles } = await import("@shared/schema");
@@ -5219,9 +5191,8 @@ export async function registerRoutes(
     try {
       const { accountId } = req.body;
       
-      const session = activeSessions.get(accountId);
-      if (!session) {
-        return res.status(401).json({ error: "Active session required" });
+      if (!accountId) {
+        return res.status(400).json({ error: "Account ID required" });
       }
       
       const { petBattles, pets } = await import("@shared/schema");
@@ -5354,8 +5325,8 @@ export async function registerRoutes(
   app.get("/api/pet-battles/opponents", async (req, res) => {
     try {
       const { accountId } = req.query;
-      if (!accountId || !activeSessions.has(accountId as string)) {
-        return res.status(401).json({ error: "Active session required" });
+      if (!accountId) {
+        return res.status(400).json({ error: "Account ID required" });
       }
       
       const opponents = [];
@@ -6518,10 +6489,6 @@ export async function registerRoutes(
   app.post("/api/ai/personality/:accountId", async (req, res) => {
     try {
       const { accountId } = req.params;
-      const session = activeSessions.get(accountId);
-      if (!session) {
-        return res.status(401).json({ error: "Active session required" });
-      }
       const account = await storage.getAccount(accountId);
       if (!account) {
         return res.status(401).json({ error: "Invalid account" });
@@ -6542,14 +6509,10 @@ export async function registerRoutes(
     }
   });
   
-  // Get tutorial content for player - requires active session
+  // Get tutorial content for player
   app.get("/api/ai/tutorial/:accountId/:topic", async (req, res) => {
     try {
       const { accountId, topic } = req.params;
-      const session = activeSessions.get(accountId);
-      if (!session) {
-        return res.status(401).json({ error: "Active session required" });
-      }
       const account = await storage.getAccount(accountId);
       if (!account) {
         return res.status(401).json({ error: "Invalid account" });
@@ -6562,14 +6525,10 @@ export async function registerRoutes(
     }
   });
   
-  // Mark tutorial as completed - requires active session
+  // Mark tutorial as completed
   app.post("/api/ai/tutorial/:accountId/complete", async (req, res) => {
     try {
       const { accountId } = req.params;
-      const session = activeSessions.get(accountId);
-      if (!session) {
-        return res.status(401).json({ error: "Active session required" });
-      }
       const account = await storage.getAccount(accountId);
       if (!account) {
         return res.status(401).json({ error: "Invalid account" });
@@ -6583,14 +6542,10 @@ export async function registerRoutes(
     }
   });
   
-  // Get story act info for player - requires active session
+  // Get story act info for player
   app.get("/api/ai/story-act/:accountId", async (req, res) => {
     try {
       const { accountId } = req.params;
-      const session = activeSessions.get(accountId);
-      if (!session) {
-        return res.status(401).json({ error: "Active session required" });
-      }
       const account = await storage.getAccount(accountId);
       if (!account) {
         return res.status(401).json({ error: "Invalid account" });
@@ -7329,9 +7284,8 @@ export async function registerRoutes(
     try {
       const { accountId, skin } = req.body;
       
-      const session = activeSessions.get(accountId);
-      if (!session) {
-        return res.status(401).json({ error: "Active session required" });
+      if (!accountId) {
+        return res.status(400).json({ error: "Account ID required" });
       }
       
       const skinData = BIRD_SKINS.find(s => s.id === skin);
@@ -7790,8 +7744,14 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Auto-gather not enabled" });
       }
       
-      const gatherableZones = ["mountain_caverns", "ruby_mines", "enchanted_forest", "crystal_lake"];
-      if (!gatherableZones.includes(zoneId)) {
+      const gatherableZonesMap: Record<string, { resources: { type: string; chance: number; minAmount: number; maxAmount: number }[] }> = {
+        mountain_caverns: { resources: [{ type: "ore", chance: 0.6, minAmount: 1, maxAmount: 5 }, { type: "gems", chance: 0.2, minAmount: 1, maxAmount: 2 }] },
+        ruby_mines: { resources: [{ type: "rubies", chance: 0.4, minAmount: 1, maxAmount: 3 }, { type: "gold_ore", chance: 0.5, minAmount: 2, maxAmount: 6 }] },
+        enchanted_forest: { resources: [{ type: "herbs", chance: 0.7, minAmount: 2, maxAmount: 8 }, { type: "wood", chance: 0.6, minAmount: 3, maxAmount: 10 }] },
+        crystal_lake: { resources: [{ type: "crystals", chance: 0.3, minAmount: 1, maxAmount: 4 }, { type: "fish", chance: 0.5, minAmount: 1, maxAmount: 3 }] },
+      };
+      const zoneData = gatherableZonesMap[zoneId];
+      if (!zoneData) {
         return res.status(400).json({ error: "Zone not gatherable" });
       }
       
@@ -7803,10 +7763,10 @@ export async function registerRoutes(
       const gathers = Math.min(5, Math.floor(efficiency / 20) + 1);
       
       for (let i = 0; i < gathers; i++) {
-        for (const res of zone.resources) {
-          if (Math.random() < res.chance) {
-            const amount = Math.floor(Math.random() * (res.maxAmount - res.minAmount + 1)) + res.minAmount;
-            resources.push({ type: res.type, amount: Math.floor(amount * efficiency / 10) });
+        for (const resource of zoneData.resources) {
+          if (Math.random() < resource.chance) {
+            const amount = Math.floor(Math.random() * (resource.maxAmount - resource.minAmount + 1)) + resource.minAmount;
+            resources.push({ type: resource.type, amount: Math.floor(amount * efficiency / 10) });
           }
         }
       }
@@ -8385,7 +8345,7 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Admin access required" });
       }
       
-      if (!playerRanks.includes(rank)) {
+      if (!playerRanks.includes(rank as any)) {
         return res.status(400).json({ error: "Invalid rank", validRanks: playerRanks });
       }
       
@@ -8494,7 +8454,7 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Admin access required" });
       }
       
-      for (const playerId of activeSessions.keys()) {
+      for (const playerId of Array.from(activeSessions.keys())) {
         broadcastToPlayer(playerId, "admin_broadcast", {
           message,
           type: type || "announcement",
@@ -10210,7 +10170,7 @@ export async function registerRoutes(
     return achievements;
   }
 
-  const allExpandedAchievements = EXPANDED_ACHIEVEMENT_CATEGORIES.flatMap(c => c.achievements);
+  const allExpandedAchievements = EXPANDED_ACHIEVEMENT_CATEGORIES.flatMap(c => c.achievements) as any[];
 
   app.get("/api/achievements", (_req, res) => {
     res.json({ categories: EXPANDED_ACHIEVEMENT_CATEGORIES, total: allExpandedAchievements.length });
