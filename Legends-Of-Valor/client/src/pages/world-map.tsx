@@ -478,6 +478,9 @@ export default function WorldMap() {
   };
 
   const getPortraitPath = () => {
+    if ((account as any).equippedCharacterSkin && (account as any).equippedCharacterSkin !== 'default') {
+      return `/skins/character/${(account as any).equippedCharacterSkin}.png`;
+    }
     if (account.portrait && account.portrait.includes('/')) {
       return account.portrait;
     }
@@ -490,7 +493,7 @@ export default function WorldMap() {
     return '/portraits/human_male.png';
   };
   const portraitPath = getPortraitPath();
-  const hasEquippedSkin = equippedSkins?.character && equippedSkins.character !== "default";
+  const hasEquippedSkin = (account as any).equippedCharacterSkin && (account as any).equippedCharacterSkin !== "default";
   
   const skinRarityColors: Record<string, string> = {
     common: "border-gray-400",

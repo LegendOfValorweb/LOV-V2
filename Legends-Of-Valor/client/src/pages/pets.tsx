@@ -451,7 +451,6 @@ export default function Pets() {
       const data = await res.json();
       
       await refetchPets();
-      await refetchAccount();
       
       toast({
         title: "Skin Applied!",
@@ -481,12 +480,22 @@ export default function Pets() {
     const expProgress = config.maxExp ? (pet.exp / config.maxExp) * 100 : 100;
     const canEvolve = config.maxExp !== null && pet.exp >= config.maxExp;
 
+    const petSkin = (pet as any).skin || "default";
+    const skinImagePath = `/skins/pet/${petSkin}.png`;
+
     return (
       <Card key={pet.id} className={`border ${tierColors[tier]}`}>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center justify-between gap-2">
             <span className="flex items-center gap-2">
-              <span className="text-xl">{tierEmojis[tier]}</span>
+              <img 
+                src={skinImagePath}
+                alt={`${pet.name} skin`}
+                className="w-12 h-12 rounded-lg border border-primary/50 object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = "/skins/pet/default.png";
+                }}
+              />
               <span className="truncate">{pet.name}</span>
             </span>
             <Badge className={tierColors[tier]} data-testid={`badge-pet-tier-${pet.id}`}>

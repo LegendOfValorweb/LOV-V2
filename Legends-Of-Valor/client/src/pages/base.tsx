@@ -378,8 +378,23 @@ export default function Base() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="aspect-video rounded-lg bg-gradient-to-br from-secondary to-background flex items-center justify-center mb-4">
-                  <Castle className="w-24 h-24 text-muted-foreground/30" />
+                <div className="aspect-video rounded-lg bg-gradient-to-br from-secondary to-background flex items-center justify-center mb-4 overflow-hidden relative">
+                  {(() => {
+                    const baseSkin = (account as any).baseSkin || "default";
+                    const skinPath = baseSkin === "default" 
+                      ? "/backdrops/base.png" 
+                      : `/skins/base/${baseSkin === "dark" ? "dark_fortress" : baseSkin === "golden" ? "golden_throne" : baseSkin === "mythic" ? "void_dimension" : baseSkin === "autumn" ? "nature_sanctuary" : baseSkin === "winter" ? "ice_citadel" : baseSkin === "spring" ? "elven_treehouse" : baseSkin === "summer" ? "desert_oasis" : "crystal_palace"}.png`;
+                    return (
+                      <img 
+                        src={skinPath}
+                        alt="Base"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = "/backdrops/base.png";
+                        }}
+                      />
+                    );
+                  })()}
                 </div>
                 
                 <div className="flex justify-between items-center flex-wrap gap-2">
