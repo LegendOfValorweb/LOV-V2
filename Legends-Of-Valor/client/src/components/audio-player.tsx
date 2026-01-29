@@ -4,7 +4,10 @@ import { Button } from "@/components/ui/button";
 
 const MUSIC_TRACKS = [
   { name: "Epic Adventure", src: "/music.mp3" },
-  { name: "Legends of Valor", src: "/game-music-part00.mp3" },
+  ...Array.from({ length: 48 }, (_, i) => ({
+    name: `Legends of Valor (Part ${i + 1})`,
+    src: `/game-music-part${i.toString().padStart(2, '0')}.mp3`,
+  })),
 ];
 
 export default function AudioPlayer() {
@@ -27,13 +30,15 @@ export default function AudioPlayer() {
     if (!audio) return;
 
     const handleEnded = () => {
-      // With loop enabled, this shouldn't fire, but if it does, restart
-      if (audio.loop && isPlaying) {
-        audio.currentTime = 0;
-        audio.play().catch(console.error);
-      } else {
-        setIsPlaying(false);
-      }
+      // Auto-advance to next track
+      const nextIndex = (currentTrack + 1) % MUSIC_TRACKS.length;
+      setCurrentTrack(nextIndex);
+      setTimeout(() => {
+        if (audio) {
+          audio.src = MUSIC_TRACKS[nextIndex].src;
+          audio.play().catch(console.error);
+        }
+      }, 100);
     };
     const handlePlay = () => {
       setIsPlaying(true);
@@ -81,7 +86,7 @@ export default function AudioPlayer() {
       audio.removeEventListener('canplay', handleCanPlay);
       audio.removeEventListener('waiting', handleWaiting);
     };
-  }, [isPlaying]);
+  }, [isPlaying, currentTrack]);
 
   const togglePlay = () => {
     if (audioRef.current) {
@@ -122,7 +127,6 @@ export default function AudioPlayer() {
         <audio
           ref={audioRef}
           src={MUSIC_TRACKS[currentTrack].src}
-          loop
           preload="auto"
         />
         <Button
