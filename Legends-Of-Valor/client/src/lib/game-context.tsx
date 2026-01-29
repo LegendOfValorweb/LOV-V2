@@ -109,6 +109,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         setAccount(acc);
         localStorage.setItem(SESSION_KEY, JSON.stringify({ username: acc.username }));
         localStorage.setItem(ACCOUNT_STORAGE_PREFIX + acc.username, JSON.stringify(acc));
+        sessionStorage.setItem('lov_just_logged_in', 'true');
         syncToGlobal(acc);
         return { account: acc };
       }
@@ -165,6 +166,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
       setAccount(acc);
       loadAccountData(username);
+      sessionStorage.setItem('lov_just_logged_in', 'true');
       return { account: acc };
     }
   }, [setAccount]);

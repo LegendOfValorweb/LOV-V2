@@ -229,7 +229,12 @@ export default function WorldMap() {
   const welcomeAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    if (account) {
+    const welcomeKey = `lov_welcome_played_${account?.id}`;
+    const justLoggedIn = sessionStorage.getItem('lov_just_logged_in');
+    
+    if (account && justLoggedIn) {
+      sessionStorage.removeItem('lov_just_logged_in');
+      
       const playWelcomeAudio = () => {
         if ('speechSynthesis' in window) {
           window.speechSynthesis.cancel();
