@@ -24,6 +24,23 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+function isValidPetTier(tier: string): tier is PetTier {
+  return petTiers.includes(tier as PetTier);
+}
+
+function isValidPet(data: unknown): data is Pet {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    'id' in data &&
+    'name' in data &&
+    'tier' in data &&
+    typeof (data as Pet).id === 'string' &&
+    typeof (data as Pet).name === 'string' &&
+    typeof (data as Pet).tier === 'string'
+  );
+}
+
 const tierColors: Record<PetTier, string> = {
   egg: "bg-gray-500/20 text-gray-400 border-gray-500/30",
   baby: "bg-green-500/20 text-green-400 border-green-500/30",
@@ -123,8 +140,8 @@ export default function Pets() {
     };
     
     playerPets.forEach(pet => {
-      const tier = pet.tier as PetTier;
-      if (grouped[tier]) {
+      const tier = pet.tier;
+      if (isValidPetTier(tier) && grouped[tier]) {
         grouped[tier].push(pet);
       }
     });
@@ -138,7 +155,9 @@ export default function Pets() {
     const eventSource = new EventSource(`/api/player/events?accountId=${account.id}`);
 
     eventSource.addEventListener("petAdded", (event) => {
-      const newPet = JSON.parse(event.data) as Pet;
+      const parsed = JSON.parse(event.data);
+      if (!isValidPet(parsed)) return;
+      const newPet = parsed;
       queryClient.setQueryData<Pet[]>(["/api/accounts", account.id, "pets"], (old) => {
         if (!old) return [newPet];
         if (old.find(p => p.id === newPet.id)) return old;
@@ -151,7 +170,9 @@ export default function Pets() {
     });
 
     eventSource.addEventListener("petUpdated", (event) => {
-      const updatedPet = JSON.parse(event.data) as Pet;
+      const parsed = JSON.parse(event.data);
+      if (!isValidPet(parsed)) return;
+      const updatedPet = parsed;
       queryClient.setQueryData<Pet[]>(["/api/accounts", account.id, "pets"], (old) => {
         if (!old) return [updatedPet];
         return old.map(p => p.id === updatedPet.id ? updatedPet : p);
@@ -474,13 +495,14 @@ export default function Pets() {
   }
 
   const renderPetCard = (pet: Pet) => {
-    const tier = pet.tier as PetTier;
+    const tier = pet.tier;
+    if (!isValidPetTier(tier)) return null;
     const config = petTierConfig[tier];
-    const stats = pet.stats as { Str: number; Spd: number; Luck: number; ElementalPower: number };
+    const stats = pet.stats ?? { Str: 1, Spd: 1, Luck: 1, ElementalPower: 1 };
     const expProgress = config.maxExp ? (pet.exp / config.maxExp) * 100 : 100;
     const canEvolve = config.maxExp !== null && pet.exp >= config.maxExp;
 
-    const petSkin = (pet as any).skin || "default";
+    const petSkin = pet.skin || "default";
     const skinImagePath = `/skins/pet/${petSkin}.png`;
 
     return (
@@ -505,7 +527,7 @@ export default function Pets() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap gap-1 mb-2">
-            {((pet as any).elements || [pet.element]).map((elem: string) => (
+            {(pet.elements || [pet.element]).map((elem: string) => (
               <Badge key={elem} variant="outline" className={`text-xs ${elementColors[elem] || 'text-muted-foreground'}`}>
                 {elem}
               </Badge>
@@ -614,15 +636,15 @@ export default function Pets() {
             )}
           </div>
           <div className="text-xs text-muted-foreground mt-2 flex items-center gap-2">
-            <span>Bond: {(pet as any).bondLevel || 0}</span>
-            {((pet as any).rebirthCount || 0) > 0 && (
+            <span>Bond: {pet.bondLevel || 0}</span>
+            {(pet.rebirthCount || 0) > 0 && (
               <Badge variant="secondary" className="text-xs">
-                Rebirth x{(pet as any).rebirthCount}
+                Rebirth x{pet.rebirthCount}
               </Badge>
             )}
-            {(pet as any).personality && (
+            {pet.personality && (
               <Badge variant="outline" className="text-xs capitalize">
-                {(pet as any).personality}
+                {pet.personality}
               </Badge>
             )}
           </div>
@@ -803,8 +825,8 @@ export default function Pets() {
                 <p className="text-sm font-medium text-pink-400 mb-2">Combined Elements:</p>
                 <div className="flex flex-wrap gap-1">
                   {Array.from(new Set([
-                    ...(mergePet1.elements || [mergePet1.element]),
-                    ...(mergePet2.elements || [mergePet2.element])
+                    ...(mergePet1.elements ?? [mergePet1.element]),
+                    ...(mergePet2.elements ?? [mergePet2.element])
                   ])).map((elem: string) => (
                     <Badge key={elem} variant="outline" className={`text-xs ${elementColors[elem] || ''}`}>
                       {elem}
@@ -1026,7 +1048,7 @@ export default function Pets() {
                   <Heart className="w-4 h-4 text-pink-400" />
                   Current Bond Level
                 </span>
-                <span className="font-mono font-bold text-pink-400">{(bondDialog as any).bondLevel || 0}</span>
+                <span className="font-mono font-bold text-pink-400">{bondDialog.bondLevel || 0}</span>
               </div>
               <div className="flex items-center justify-between p-3 rounded-md bg-purple-500/10 border border-purple-500/20">
                 <span className="text-sm font-medium flex items-center gap-2">
@@ -1064,10 +1086,10 @@ export default function Pets() {
               <div className="p-3 rounded-md bg-purple-500/10 border border-purple-500/20">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium">Current Rebirth Count</span>
-                  <span className="font-mono font-bold text-purple-400">{(rebirthDialog as any).rebirthCount || 0}</span>
+                  <span className="font-mono font-bold text-purple-400">{rebirthDialog.rebirthCount || 0}</span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Next rebirth will grant: +{((rebirthDialog as any).rebirthCount || 0) + 1}0% stat bonus
+                  Next rebirth will grant: +{(rebirthDialog.rebirthCount || 0) + 1}0% stat bonus
                 </p>
               </div>
               <div className="p-3 rounded-md bg-yellow-500/10 border border-yellow-500/20">
@@ -1107,7 +1129,7 @@ export default function Pets() {
               {["loyal", "playful", "fierce", "calm", "mysterious"].map(personality => (
                 <Button
                   key={personality}
-                  variant={(personalityDialog as any).personality === personality ? "default" : "outline"}
+                  variant={personalityDialog.personality === personality ? "default" : "outline"}
                   className="capitalize"
                   onClick={() => handleSetPersonality(personalityDialog, personality)}
                 >
@@ -1143,11 +1165,11 @@ export default function Pets() {
                 <span className="font-mono font-bold text-yellow-500">{(account?.gold || 0).toLocaleString()}</span>
               </div>
               <div className="text-xs text-muted-foreground">
-                Current Skin: <span className="capitalize font-medium">{(skinDialog as any).skin || "default"}</span>
+                Current Skin: <span className="capitalize font-medium">{skinDialog.skin || "default"}</span>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {petSkins.map(skin => {
-                  const isCurrentSkin = (skinDialog as any).skin === skin.id || (!((skinDialog as any).skin) && skin.id === "default");
+                  const isCurrentSkin = skinDialog.skin === skin.id || (!skinDialog.skin && skin.id === "default");
                   const canAfford = skin.cost === 0 || (account?.gold || 0) >= skin.cost || isCurrentSkin;
                   return (
                     <Button

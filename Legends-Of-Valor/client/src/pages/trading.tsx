@@ -94,18 +94,44 @@ export default function Trading() {
 
   const addItemsMutation = useMutation({
     mutationFn: async ({ tradeId, itemIds }: { tradeId: string; itemIds: string[] }) => {
-      if (!account) return;
+      if (!account) return { succeeded: [], failed: [] };
+      const succeeded: string[] = [];
+      const failed: string[] = [];
+      
       for (const itemId of itemIds) {
-        await apiRequest("POST", `/api/trades/${tradeId}/items`, {
-          ownerId: account.id,
-          type: "item",
-          refId: itemId,
+        try {
+          await apiRequest("POST", `/api/trades/${tradeId}/items`, {
+            ownerId: account.id,
+            type: "item",
+            refId: itemId,
+          });
+          succeeded.push(itemId);
+        } catch (error) {
+          failed.push(itemId);
+        }
+      }
+      
+      return { succeeded, failed };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/trades"] });
+      
+      if (!result) return;
+      
+      const { succeeded, failed } = result;
+      
+      if (failed.length === 0) {
+        toast({ title: "Items added to trade!" });
+      } else if (succeeded.length === 0) {
+        toast({ title: "Failed to add items", variant: "destructive" });
+      } else {
+        toast({ 
+          title: "Partial success", 
+          description: `${succeeded.length} item(s) added, ${failed.length} item(s) failed`,
+          variant: "destructive" 
         });
       }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/trades"] });
-      toast({ title: "Items added to trade!" });
+      
       setAddItemsDialog(false);
       setItemsToAdd([]);
     },

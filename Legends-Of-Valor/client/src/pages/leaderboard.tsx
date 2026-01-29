@@ -86,10 +86,15 @@ export default function Leaderboard() {
     return null;
   }
 
+  const truncateName = (name: string | undefined): string => {
+    if (!name) return "";
+    return name.length > 12 ? `${name.substring(0, 12)}...` : name;
+  };
+
   const renderLeaderboardEntry = (entry: LeaderboardEntry, type: string, key: string) => {
     const isGuildLeaderboard = type === "guild_dungeon" || type === "guild_wins";
     const isCurrentPlayer = !isGuildLeaderboard && entry.accountId === account.id;
-    const displayName = isGuildLeaderboard ? entry.guildName : entry.username;
+    const displayName = truncateName(isGuildLeaderboard ? entry.guildName : entry.username);
     
     const rankBadge = entry.rank <= 3 ? (
       <Badge variant={entry.rank === 1 ? "default" : "secondary"} className={
@@ -120,7 +125,7 @@ export default function Leaderboard() {
               {isCurrentPlayer && <span className="ml-2 text-xs text-muted-foreground">(You)</span>}
             </span>
             {isGuildLeaderboard && entry.masterName && (
-              <span className="text-xs text-muted-foreground">Leader: {entry.masterName}</span>
+              <span className="text-xs text-muted-foreground">Leader: {truncateName(entry.masterName)}</span>
             )}
           </div>
         </div>
