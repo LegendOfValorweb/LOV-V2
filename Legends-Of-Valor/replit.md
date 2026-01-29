@@ -176,3 +176,4 @@ cd Legends-Of-Valor && npm run build && npm run start
 - **Admin $Valor Grant**: Admins can grant $Valor tokens to players
 - **Expanded Cosmetics Shop**: 24 character skins, 22 pet skins, 22 bird skins, 22 base skins (90+ total)
 - **Skin Equip System**: Character skins update the player's portrait when equipped
+- **Tournament Player UI**: Full tournament page at /tournaments with join, view brackets, and auto-refresh. Tournament Grounds zone added to World Map
