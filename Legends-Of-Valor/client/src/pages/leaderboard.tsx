@@ -55,6 +55,8 @@ const leaderboardTypes = [
   { id: "rank", label: "Rank", icon: Crown, color: "text-blue-500" },
   { id: "guild_dungeon", label: "Guild Dungeon", icon: Castle, color: "text-emerald-500" },
   { id: "guild_wins", label: "Guild Wins", icon: Swords, color: "text-orange-500" },
+  { id: "pet_arena", label: "Pet Arena", icon: Sparkles, color: "text-pink-500" },
+  { id: "base_raids", label: "Base Raids", icon: Castle, color: "text-red-600" },
 ];
 
 const rankColors: Record<string, string> = {

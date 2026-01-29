@@ -3328,6 +3328,46 @@ export async function registerRoutes(
           };
         }));
         return guildWinsEntries;
+      case "pet_arena":
+        // Pet arena leaderboard - players with most pet battle wins
+        return players
+          .map(acc => ({
+            accountId: acc.id,
+            username: acc.username,
+            petWins: (acc as any).petBattleWins || 0,
+            petLosses: (acc as any).petBattleLosses || 0,
+          }))
+          .sort((a, b) => b.petWins - a.petWins)
+          .slice(0, 50)
+          .map((entry, idx) => ({
+            accountId: entry.accountId,
+            username: entry.username,
+            value: `${entry.petWins}W / ${entry.petLosses}L`,
+            petWins: entry.petWins,
+            petLosses: entry.petLosses,
+            rank: idx + 1,
+          }));
+      case "base_raids":
+        // Base raids leaderboard - players with most successful raids
+        return players
+          .map(acc => ({
+            accountId: acc.id,
+            username: acc.username,
+            raidsWon: (acc as any).raidsWon || 0,
+            raidsLost: (acc as any).raidsLost || 0,
+            raidsDefended: (acc as any).raidsDefended || 0,
+          }))
+          .sort((a, b) => (b.raidsWon + b.raidsDefended) - (a.raidsWon + a.raidsDefended))
+          .slice(0, 50)
+          .map((entry, idx) => ({
+            accountId: entry.accountId,
+            username: entry.username,
+            value: `${entry.raidsWon} raids won, ${entry.raidsDefended} defended`,
+            raidsWon: entry.raidsWon,
+            raidsLost: entry.raidsLost,
+            raidsDefended: entry.raidsDefended,
+            rank: idx + 1,
+          }));
       default:
         return [];
     }
@@ -3336,7 +3376,7 @@ export async function registerRoutes(
   app.get("/api/leaderboards/:type", async (req, res) => {
     try {
       const type = req.params.type;
-      if (!["wins", "losses", "npc_progress", "rank", "guild_dungeon", "guild_wins"].includes(type)) {
+      if (!["wins", "losses", "npc_progress", "rank", "guild_dungeon", "guild_wins", "pet_arena", "base_raids"].includes(type)) {
         return res.status(400).json({ error: "Invalid leaderboard type" });
       }
 
@@ -3372,7 +3412,7 @@ export async function registerRoutes(
   app.post("/api/admin/leaderboards/:type/refresh", async (req, res) => {
     try {
       const type = req.params.type;
-      if (!["wins", "losses", "npc_progress", "rank", "guild_dungeon", "guild_wins"].includes(type)) {
+      if (!["wins", "losses", "npc_progress", "rank", "guild_dungeon", "guild_wins", "pet_arena", "base_raids"].includes(type)) {
         return res.status(400).json({ error: "Invalid leaderboard type" });
       }
 
