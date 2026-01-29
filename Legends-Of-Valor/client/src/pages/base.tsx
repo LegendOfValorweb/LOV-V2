@@ -8,7 +8,8 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Castle, Hammer, Package, Dumbbell, Shield, Sparkles,
-  Coins, ArrowUp, Lock, Home, Palette, Trophy, Swords, Users, Calendar
+  Coins, ArrowUp, Lock, Home, Palette, Trophy, Swords, Users, Calendar,
+  Target, Zap
 } from "lucide-react";
 import { useGame } from "@/lib/game-context";
 import { useToast } from "@/hooks/use-toast";
@@ -611,14 +612,14 @@ export default function Base() {
 
                     <div className="space-y-3">
                       <p className="text-sm text-muted-foreground mb-3">
-                        Raids scale with your Mystic Tower progress. Higher floors unlock harder raids with better rewards.
+                        Raids scale with your rank. Higher ranks unlock harder raids with better rewards.
                       </p>
                       {raidEvents.map((raid: any) => (
                         <div key={raid.id} className="p-3 rounded-lg bg-secondary/50 flex justify-between items-center">
                           <div>
                             <p className="font-medium">{raid.name}</p>
                             <p className="text-xs text-muted-foreground">
-                              Unlocks at Tower Floor {raid.minTowerFloor} | Difficulty: {"⭐".repeat(raid.difficulty)}
+                              Unlocks at Rank {playerRanks[raid.minRank || 0]} | Difficulty: {"⭐".repeat(raid.difficulty)}
                             </p>
                           </div>
                           <div className="text-right text-sm">

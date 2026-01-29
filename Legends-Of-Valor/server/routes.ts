@@ -7509,12 +7509,12 @@ export async function registerRoutes(
 
   // Base Raids & Visitors System
   const BASE_RAID_EVENTS = [
-    { id: "goblin_raid", name: "Goblin Raid", minTowerFloor: 1, difficulty: 1, rewards: { gold: 500, exp: 100 } },
-    { id: "bandit_attack", name: "Bandit Attack", minTowerFloor: 5, difficulty: 2, rewards: { gold: 1500, exp: 300 } },
-    { id: "orc_siege", name: "Orc Siege", minTowerFloor: 10, difficulty: 3, rewards: { gold: 5000, exp: 800 } },
-    { id: "demon_invasion", name: "Demon Invasion", minTowerFloor: 20, difficulty: 4, rewards: { gold: 15000, exp: 2000 } },
-    { id: "dragon_assault", name: "Dragon Assault", minTowerFloor: 30, difficulty: 5, rewards: { gold: 50000, exp: 5000 } },
-    { id: "void_breach", name: "Void Breach", minTowerFloor: 50, difficulty: 6, rewards: { gold: 200000, exp: 15000 } },
+    { id: "goblin_raid", name: "Goblin Raid", minRank: 0, difficulty: 1, rewards: { gold: 500, exp: 100 } },
+    { id: "bandit_attack", name: "Bandit Attack", minRank: 2, difficulty: 2, rewards: { gold: 1500, exp: 300 } },
+    { id: "orc_siege", name: "Orc Siege", minRank: 4, difficulty: 3, rewards: { gold: 5000, exp: 800 } },
+    { id: "demon_invasion", name: "Demon Invasion", minRank: 7, difficulty: 4, rewards: { gold: 15000, exp: 2000 } },
+    { id: "dragon_assault", name: "Dragon Assault", minRank: 10, difficulty: 5, rewards: { gold: 50000, exp: 5000 } },
+    { id: "void_breach", name: "Void Breach", minRank: 13, difficulty: 6, rewards: { gold: 200000, exp: 15000 } },
   ];
 
   const WEEKLY_EVENTS = [
