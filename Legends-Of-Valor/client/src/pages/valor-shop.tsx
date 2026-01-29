@@ -202,22 +202,86 @@ const tierLabels = {
 
 export default function ValorShop() {
   const [, navigate] = useLocation();
-  const { account } = useGame();
+  const { account, refetchAccount } = useGame();
   const { toast } = useToast();
   const [selectedBundle, setSelectedBundle] = useState<ValorBundle | null>(null);
+  const [isPurchasing, setIsPurchasing] = useState(false);
 
   const handlePurchase = (bundle: ValorBundle) => {
     setSelectedBundle(bundle);
   };
 
-  const confirmPurchase = () => {
-    if (!selectedBundle) return;
+  const confirmPurchase = async () => {
+    if (!selectedBundle || !account) return;
     
-    toast({
-      title: "Purchase Processing",
-      description: `Processing your purchase of ${selectedBundle.name}. Payment integration coming soon!`,
-    });
-    setSelectedBundle(null);
+    const valorCost = Math.ceil(selectedBundle.price);
+    const currentValor = account.valorTokens || 0;
+    
+    if (currentValor < valorCost) {
+      toast({
+        title: "Insufficient $Valor",
+        description: `You need ${valorCost} $Valor tokens but only have ${currentValor}. Get more from the admin!`,
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setIsPurchasing(true);
+    
+    try {
+      const bundleIdMap: Record<string, string> = {
+        "tiny-adventurer": "tiny_adventurer",
+        "gold-tp-stack": "gold_tp_stack",
+        "adventurers-starter": "adventurer_starter",
+        "warriors-arsenal": "champion_loot",
+        "champions-loot": "champion_loot",
+        "elite-guardian": "legend_treasure",
+        "legends-treasure": "legend_treasure",
+        "mythic-hoard": "valor_hero",
+        "valor-hero": "valor_hero",
+        "conquerors-legacy": "conqueror_legacy",
+        "season-pass": "adventurer_starter",
+        "collectors-vault": "conqueror_legacy",
+        "dragon-slayer": "valor_hero",
+        "divine-ascension": "conqueror_legacy",
+      };
+      
+      const backendBundleId = bundleIdMap[selectedBundle.id] || selectedBundle.id.replace(/-/g, "_");
+      
+      const res = await fetch("/api/valor-shop/purchase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountId: account.id,
+          bundleId: backendBundleId
+        })
+      });
+      
+      const data = await res.json();
+      
+      if (data.success) {
+        toast({
+          title: "Purchase Successful!",
+          description: `You purchased ${data.bundle}! Rewards have been added to your account.`,
+        });
+        refetchAccount?.();
+      } else {
+        toast({
+          title: "Purchase Failed",
+          description: data.error || "Something went wrong",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Purchase Failed",
+        description: "Failed to process purchase. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsPurchasing(false);
+      setSelectedBundle(null);
+    }
   };
 
   if (!account || account.role !== "player") {
@@ -421,21 +485,26 @@ export default function ValorShop() {
                     ))}
                   </div>
                 </div>
-                <p className="text-sm text-muted-foreground text-center">
-                  Payment processing will be available soon. Your purchase will be processed securely.
+                <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                  <span className="text-sm">Your $Valor Balance:</span>
+                  <span className="font-bold text-red-400">{account?.valorTokens?.toLocaleString() || 0} $Valor</span>
+                </div>
+                <p className="text-xs text-muted-foreground text-center mt-2">
+                  $Valor tokens will be deducted from your account.
                 </p>
               </div>
             )}
 
             <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => setSelectedBundle(null)}>
+              <Button variant="outline" onClick={() => setSelectedBundle(null)} disabled={isPurchasing}>
                 Cancel
               </Button>
               <Button 
                 onClick={confirmPurchase}
                 className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600"
+                disabled={isPurchasing || (account?.valorTokens || 0) < Math.ceil(selectedBundle?.price || 0)}
               >
-                Purchase for ${selectedBundle?.price}
+                {isPurchasing ? "Processing..." : `Purchase for ${Math.ceil(selectedBundle?.price || 0)} $Valor`}
               </Button>
             </DialogFooter>
           </DialogContent>

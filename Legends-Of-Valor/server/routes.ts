@@ -9272,8 +9272,22 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Account not found" });
       }
       
+      // Calculate cost in valor tokens (1 $Valor token = $1 USD)
+      const valorCost = Math.ceil(bundle.priceUSD);
+      const currentValor = account.valorTokens || 0;
+      
+      if (currentValor < valorCost) {
+        return res.status(400).json({ 
+          error: "Insufficient $Valor tokens", 
+          required: valorCost, 
+          current: currentValor 
+        });
+      }
+      
       const contents = bundle.contents as any;
-      const updates: any = {};
+      const updates: any = {
+        valorTokens: currentValor - valorCost, // Deduct valor tokens
+      };
       const grantedItems: string[] = [];
       
       // Currency rewards
