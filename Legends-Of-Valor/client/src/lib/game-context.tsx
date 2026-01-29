@@ -240,22 +240,53 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const addToInventory = useCallback(async (item: Item): Promise<boolean> => {
     if (!account || account.gold < item.price) return false;
     
-    const newAccount = { ...account, gold: account.gold - item.price };
-    const newItem: InventoryItem = {
-      id: Math.floor(Math.random() * 1000000).toString(),
-      accountId: account.id,
-      itemId: item.id,
-      stats: {},
-      purchasedAt: new Date()
-    };
-
-    const newInventory = [...inventory, newItem];
-    setAccount(newAccount);
-    setInventory(newInventory);
-    localStorage.setItem(INVENTORY_STORAGE_PREFIX + account.username, JSON.stringify(newInventory));
-    
-    return true;
-  }, [account, inventory, setAccount]);
+    try {
+      // First deduct gold from account on server
+      const goldRes = await fetch(`/api/accounts/${account.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gold: account.gold - item.price }),
+      });
+      
+      if (!goldRes.ok) {
+        console.error("Failed to deduct gold");
+        return false;
+      }
+      
+      // Then add item to inventory on server
+      const invRes = await fetch(`/api/accounts/${account.id}/inventory`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemId: item.id,
+          stats: item.stats || {},
+        }),
+      });
+      
+      if (!invRes.ok) {
+        console.error("Failed to add item to inventory");
+        // Refund the gold if inventory add failed
+        await fetch(`/api/accounts/${account.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ gold: account.gold }),
+        });
+        return false;
+      }
+      
+      const newItem = await invRes.json();
+      
+      // Update local state
+      const newAccount = { ...account, gold: account.gold - item.price };
+      setAccount(newAccount);
+      setInventory(prev => [...prev, newItem]);
+      
+      return true;
+    } catch (error) {
+      console.error("Error adding to inventory:", error);
+      return false;
+    }
+  }, [account, setAccount]);
 
   return (
     <GameContext.Provider
