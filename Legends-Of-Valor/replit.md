@@ -144,13 +144,26 @@ cd Legends-Of-Valor && npm run build && npm run start
 - `POST /api/admin/grant-resources` - Grant resources
 - `POST /api/admin/broadcast` - Server-wide announcements
 
+### PHASE 11: Enhanced Features (Jan 2026)
+- **Voice TTS**: OpenAI voice option for AI Guide (tts-1 model)
+- **Welcome Audio**: Personalized welcome message plays on login
+- **Skins System**: Character, pet, bird, and base skins with rarity tiers
+- **$Valor Shop**: 14 bundles ($0.99-$99.99) with auto-add to inventory
+- **Achievements**: 1000+ achievements across 8 categories with progress tracking
+- **Trophies**: 50 collectible trophies with claim system
+- **Tournament System**: Knockout format with admin controls
+- **Leaderboards**: Pet wins and base raid wins sections
+- **Navigation**: World Map button on all game pages
+- **Admin Dashboard**: Red/orange gradient theme with Tournaments and $Valor tabs
+
 ## Recent Changes
 
 - January 2026: Complete V2 implementation
+- Phase 11: Voice TTS, skins, $Valor shop, 1000+ achievements, tournaments
 - 14 races × 2 genders with stat modifiers
 - 15-rank progression system
 - Mystic Tower expanded to 100×100 (10K battles)
 - Hell Zone with battle royale mechanics
 - Endgame Mythical Legend ascension
-- Comprehensive admin dashboard
+- Comprehensive admin dashboard with enhanced styling
 - Quintillion-safe stat formulas with BigInt
