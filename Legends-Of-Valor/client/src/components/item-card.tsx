@@ -25,12 +25,19 @@ const tierStyles: Record<ItemTier, string> = {
   umr: "border-tier-umr/50 hover:border-tier-umr",
   ssumr: "border-tier-ssumr/50 hover:border-tier-ssumr",
   divine: "border-tier-divine/50 hover:border-tier-divine",
+  initiate: "border-tier-initiate/50 hover:border-tier-initiate",
   journeyman: "border-tier-journeyman/50 hover:border-tier-journeyman",
+  adept: "border-tier-adept/50 hover:border-tier-adept",
   expert: "border-tier-expert/50 hover:border-tier-expert",
   master: "border-tier-master/50 hover:border-tier-master",
   grandmaster: "border-tier-grandmaster/50 hover:border-tier-grandmaster",
+  champion: "border-tier-champion/50 hover:border-tier-champion",
+  overlord: "border-tier-overlord/50 hover:border-tier-overlord",
+  sovereign: "border-tier-sovereign/50 hover:border-tier-sovereign",
+  ascendant: "border-tier-ascendant/50 hover:border-tier-ascendant",
   legend: "border-tier-legend/50 hover:border-tier-legend",
   elite: "border-tier-elite/50 hover:border-tier-elite",
+  mythical_legend: "border-tier-mythical-legend/50 hover:border-tier-mythical-legend",
 };
 
 const tierBadgeStyles: Record<ItemTier, string> = {
@@ -40,12 +47,19 @@ const tierBadgeStyles: Record<ItemTier, string> = {
   umr: "bg-tier-umr/20 text-tier-umr border-tier-umr/30",
   ssumr: "bg-tier-ssumr/20 text-tier-ssumr border-tier-ssumr/30",
   divine: "bg-tier-divine/20 text-tier-divine border-tier-divine/30",
+  initiate: "bg-tier-initiate/20 text-tier-initiate border-tier-initiate/30",
   journeyman: "bg-tier-journeyman/20 text-tier-journeyman border-tier-journeyman/30",
+  adept: "bg-tier-adept/20 text-tier-adept border-tier-adept/30",
   expert: "bg-tier-expert/20 text-tier-expert border-tier-expert/30",
   master: "bg-tier-master/20 text-tier-master border-tier-master/30",
   grandmaster: "bg-tier-grandmaster/20 text-tier-grandmaster border-tier-grandmaster/30",
+  champion: "bg-tier-champion/20 text-tier-champion border-tier-champion/30",
+  overlord: "bg-tier-overlord/20 text-tier-overlord border-tier-overlord/30",
+  sovereign: "bg-tier-sovereign/20 text-tier-sovereign border-tier-sovereign/30",
+  ascendant: "bg-tier-ascendant/20 text-tier-ascendant border-tier-ascendant/30",
   legend: "bg-tier-legend/20 text-tier-legend border-tier-legend/30",
   elite: "bg-tier-elite/20 text-tier-elite border-tier-elite/30",
+  mythical_legend: "bg-tier-mythical-legend/20 text-tier-mythical-legend border-tier-mythical-legend/30",
 };
 
 const tierGlowStyles: Record<ItemTier, string> = {
@@ -55,12 +69,19 @@ const tierGlowStyles: Record<ItemTier, string> = {
   umr: "hover:shadow-[0_0_20px_rgba(239,68,68,0.3)]",
   ssumr: "hover:shadow-[0_0_25px_rgba(236,72,153,0.4)]",
   divine: "hover:shadow-[0_0_30px_rgba(56,189,248,0.5)]",
+  initiate: "hover:shadow-[0_0_20px_rgba(148,163,184,0.3)]",
   journeyman: "hover:shadow-[0_0_25px_rgba(245,158,11,0.4)]",
+  adept: "hover:shadow-[0_0_25px_rgba(16,185,129,0.4)]",
   expert: "hover:shadow-[0_0_28px_rgba(192,132,252,0.45)]",
   master: "hover:shadow-[0_0_30px_rgba(249,115,22,0.5)]",
   grandmaster: "hover:shadow-[0_0_32px_rgba(168,85,247,0.55)]",
+  champion: "hover:shadow-[0_0_35px_rgba(239,68,68,0.6)]",
+  overlord: "hover:shadow-[0_0_38px_rgba(15,23,42,0.7)]",
+  sovereign: "hover:shadow-[0_0_40px_rgba(251,191,36,0.75)]",
+  ascendant: "hover:shadow-[0_0_42px_rgba(14,165,233,0.8)]",
   legend: "hover:shadow-[0_0_35px_rgba(250,204,21,0.6)]",
   elite: "hover:shadow-[0_0_40px_rgba(232,121,249,0.7)]",
+  mythical_legend: "hover:shadow-[0_0_50px_rgba(244,63,94,0.9)]",
 };
 
 function ItemIcon({ type }: { type: Item["type"] }) {
@@ -137,7 +158,6 @@ export function ItemCard({
             </h3>
             <Badge
               variant="outline"
-              size="sm"
               className={cn("mt-1", tierBadgeStyles[item.tier])}
               data-testid={`badge-tier-${item.id}`}
             >
@@ -154,7 +174,7 @@ export function ItemCard({
 
         {item.special && (
           <div className="mt-2">
-            <Badge variant="secondary" size="sm" className="text-xs">
+            <Badge variant="secondary" className="text-xs">
               {item.special}
             </Badge>
           </div>
