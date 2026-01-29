@@ -171,6 +171,24 @@ cd Legends-Of-Valor && npm run build && npm run start
 - **Navigation**: World Map button on all game pages
 - **Admin Dashboard**: Red/orange gradient theme with Tournaments and $Valor tabs
 
+### PHASE 12: Battle Royale (Final V2 Feature)
+- **Location**: Hell Zone tab accessible to Grand Master+ players
+- **Admin Controls**: Open registration, start battle, close/cancel
+- **Registration Phase**: Players register when admin opens, can unregister
+- **Battle Phase**: Players locked in until eliminated or victory
+- **Combat**: Manual target selection (choose who to attack)
+- **Mechanics**: 
+  - Damage based on STR, reduced by DEF
+  - Counter damage when attacking
+  - Critical hits based on Luck
+  - Eliminated at 0 HP with placement tracking
+- **Rewards (Top 5)**:
+  - 1st: 10M gold, 5K rubies, 2K shards, 500 focused, 10K TP, 1K soul gins, 500 beak coins, 200 valor tokens
+  - 2nd: 5M gold, 2.5K rubies, 1K shards, 250 focused, 5K TP
+  - 3rd: 2.5M gold, 1.5K rubies, 500 shards, 100 focused, 2.5K TP
+  - 4th: 1M gold, 750 rubies, 250 shards, 50 focused, 1K TP
+  - 5th: 500K gold, 500 rubies, 100 shards, 500 TP
+
 ## Recent Changes
 
 - January 2026: Complete V2 implementation
@@ -192,3 +210,5 @@ cd Legends-Of-Valor && npm run build && npm run start
 - **Expanded Cosmetics Shop**: 24 character skins, 22 pet skins, 22 bird skins, 22 base skins (90+ total)
 - **Skin Equip System**: Character skins update the player's portrait when equipped
 - **Tournament Player UI**: Full tournament page at /tournaments with join, view brackets, and auto-refresh. Tournament Grounds zone added to World Map
+- **Battle Royale**: Full PvP mode in Hell Zone with admin controls, registration, target selection, elimination mechanics, and top 5 rewards (final V2 feature)
+- **Auto-Achievements**: Automatic achievement/trophy unlocking based on player progress

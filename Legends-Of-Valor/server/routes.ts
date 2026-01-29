@@ -10810,5 +10810,435 @@ export async function registerRoutes(
     }
   });
 
+  // ===== BATTLE ROYALE SYSTEM =====
+  interface BattleRoyaleParticipant {
+    accountId: string;
+    username: string;
+    race: string;
+    hp: number;
+    maxHp: number;
+    stats: any;
+    kills: number;
+    eliminated: boolean;
+    eliminatedAt?: number;
+    placement?: number;
+  }
+
+  interface BattleRoyaleState {
+    status: "closed" | "registration" | "active" | "ended";
+    registrations: Map<string, BattleRoyaleParticipant>;
+    participants: Map<string, BattleRoyaleParticipant>;
+    eliminations: string[];
+    startedAt?: number;
+    endedAt?: number;
+    winner?: string;
+  }
+
+  const battleRoyale: BattleRoyaleState = {
+    status: "closed",
+    registrations: new Map(),
+    participants: new Map(),
+    eliminations: [],
+  };
+
+  const BR_REWARDS = {
+    winner: { gold: 10000000, rubies: 5000, soulShards: 2000, focusedShards: 500, trainingPoints: 10000, soulGins: 1000, beakCoins: 500, valorTokens: 200 },
+    second: { gold: 5000000, rubies: 2500, soulShards: 1000, focusedShards: 250, trainingPoints: 5000 },
+    third: { gold: 2500000, rubies: 1500, soulShards: 500, focusedShards: 100, trainingPoints: 2500 },
+    fourth: { gold: 1000000, rubies: 750, soulShards: 250, focusedShards: 50, trainingPoints: 1000 },
+    fifth: { gold: 500000, rubies: 500, soulShards: 100, trainingPoints: 500 },
+  };
+
+  app.get("/api/battle-royale/status", async (_req, res) => {
+    const registrations = Array.from(battleRoyale.registrations.values()).map(p => ({
+      accountId: p.accountId,
+      username: p.username,
+      race: p.race,
+    }));
+    
+    const participants = Array.from(battleRoyale.participants.values()).map(p => ({
+      accountId: p.accountId,
+      username: p.username,
+      race: p.race,
+      hp: p.hp,
+      maxHp: p.maxHp,
+      kills: p.kills,
+      eliminated: p.eliminated,
+      placement: p.placement,
+    }));
+    
+    const aliveCount = participants.filter(p => !p.eliminated).length;
+    
+    res.json({
+      status: battleRoyale.status,
+      registrations,
+      participants,
+      aliveCount,
+      totalParticipants: participants.length,
+      eliminations: battleRoyale.eliminations,
+      winner: battleRoyale.winner,
+      startedAt: battleRoyale.startedAt,
+      endedAt: battleRoyale.endedAt,
+    });
+  });
+
+  app.post("/api/battle-royale/admin/open", async (req, res) => {
+    const { adminId } = req.body;
+    const admin = await storage.getAccount(adminId);
+    if (!admin || admin.role !== "admin") {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+    
+    if (battleRoyale.status !== "closed" && battleRoyale.status !== "ended") {
+      return res.status(400).json({ error: "Battle Royale is already open or in progress" });
+    }
+    
+    battleRoyale.status = "registration";
+    battleRoyale.registrations.clear();
+    battleRoyale.participants.clear();
+    battleRoyale.eliminations = [];
+    battleRoyale.winner = undefined;
+    battleRoyale.startedAt = undefined;
+    battleRoyale.endedAt = undefined;
+    
+    broadcastToAllPlayers("battle_royale_open", { status: "registration" });
+    
+    res.json({ success: true, message: "Battle Royale registration is now open!" });
+  });
+
+  app.post("/api/battle-royale/admin/close", async (req, res) => {
+    const { adminId } = req.body;
+    const admin = await storage.getAccount(adminId);
+    if (!admin || admin.role !== "admin") {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+    
+    battleRoyale.status = "closed";
+    battleRoyale.registrations.clear();
+    battleRoyale.participants.clear();
+    battleRoyale.eliminations = [];
+    
+    broadcastToAllPlayers("battle_royale_closed", { status: "closed" });
+    
+    res.json({ success: true, message: "Battle Royale has been closed" });
+  });
+
+  app.post("/api/battle-royale/admin/start", async (req, res) => {
+    const { adminId } = req.body;
+    const admin = await storage.getAccount(adminId);
+    if (!admin || admin.role !== "admin") {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+    
+    if (battleRoyale.status !== "registration") {
+      return res.status(400).json({ error: "Battle Royale is not in registration phase" });
+    }
+    
+    if (battleRoyale.registrations.size < 2) {
+      return res.status(400).json({ error: "Need at least 2 participants to start" });
+    }
+    
+    battleRoyale.status = "active";
+    battleRoyale.startedAt = Date.now();
+    battleRoyale.participants = new Map(battleRoyale.registrations);
+    battleRoyale.registrations.clear();
+    
+    broadcastToAllPlayers("battle_royale_started", { 
+      status: "active", 
+      participantCount: battleRoyale.participants.size 
+    });
+    
+    res.json({ 
+      success: true, 
+      message: `Battle Royale started with ${battleRoyale.participants.size} participants!` 
+    });
+  });
+
+  app.post("/api/battle-royale/register", async (req, res) => {
+    const { accountId } = req.body;
+    
+    if (battleRoyale.status !== "registration") {
+      return res.status(400).json({ error: "Battle Royale registration is not open" });
+    }
+    
+    const account = await storage.getAccount(accountId);
+    if (!account) {
+      return res.status(404).json({ error: "Account not found" });
+    }
+    
+    const requiredRankIndex = playerRanks.indexOf("Grand Master");
+    const playerRankIndex = playerRanks.indexOf(account.rank);
+    if (playerRankIndex < requiredRankIndex) {
+      return res.status(403).json({ error: "Hell Zone requires Grand Master rank or higher" });
+    }
+    
+    if (battleRoyale.registrations.has(accountId)) {
+      return res.status(400).json({ error: "Already registered" });
+    }
+    
+    const stats = account.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10 };
+    const maxHp = calculateMaxHP(stats as CombatStats, playerRanks.indexOf(account.rank));
+    
+    battleRoyale.registrations.set(accountId, {
+      accountId,
+      username: account.username,
+      race: account.race || "human",
+      hp: maxHp,
+      maxHp,
+      stats,
+      kills: 0,
+      eliminated: false,
+    });
+    
+    broadcastToAllPlayers("battle_royale_registration", { 
+      username: account.username,
+      totalRegistered: battleRoyale.registrations.size 
+    });
+    
+    res.json({ success: true, message: "Registered for Battle Royale!" });
+  });
+
+  app.post("/api/battle-royale/unregister", async (req, res) => {
+    const { accountId } = req.body;
+    
+    if (battleRoyale.status !== "registration") {
+      return res.status(400).json({ error: "Cannot unregister outside registration phase" });
+    }
+    
+    if (!battleRoyale.registrations.has(accountId)) {
+      return res.status(400).json({ error: "Not registered" });
+    }
+    
+    battleRoyale.registrations.delete(accountId);
+    res.json({ success: true, message: "Unregistered from Battle Royale" });
+  });
+
+  app.post("/api/battle-royale/attack", async (req, res) => {
+    const { attackerId, targetId } = req.body;
+    
+    if (battleRoyale.status !== "active") {
+      return res.status(400).json({ error: "Battle Royale is not active" });
+    }
+    
+    const attacker = battleRoyale.participants.get(attackerId);
+    const target = battleRoyale.participants.get(targetId);
+    
+    if (!attacker || attacker.eliminated) {
+      return res.status(400).json({ error: "You are not in the battle or already eliminated" });
+    }
+    
+    if (!target || target.eliminated) {
+      return res.status(400).json({ error: "Target is not in the battle or already eliminated" });
+    }
+    
+    if (attackerId === targetId) {
+      return res.status(400).json({ error: "Cannot attack yourself" });
+    }
+    
+    const aliveBeforeAttack = Array.from(battleRoyale.participants.values()).filter(p => !p.eliminated).length;
+    
+    const attackerStats = attacker.stats as CombatStats;
+    const targetStats = target.stats as CombatStats;
+    
+    const baseDamage = (attackerStats.Str || 10) * 2;
+    const defense = (targetStats.Def || 10) * 0.5;
+    const critChance = (attackerStats.Luck || 10) / 200;
+    const isCrit = Math.random() < critChance;
+    const damage = Math.max(1, Math.floor((baseDamage - defense) * (isCrit ? 2 : 1)));
+    
+    const counterDamage = Math.floor(((targetStats.Str || 10) - (attackerStats.Def || 10) * 0.5) * 0.5);
+    const actualCounter = Math.max(0, counterDamage);
+    
+    target.hp = Math.max(0, target.hp - damage);
+    attacker.hp = Math.max(0, attacker.hp - actualCounter);
+    
+    const results: any = {
+      attacker: attacker.username,
+      target: target.username,
+      damage,
+      isCrit,
+      counterDamage: actualCounter,
+      attackerHp: attacker.hp,
+      targetHp: target.hp,
+      targetEliminated: false,
+      attackerEliminated: false,
+    };
+    
+    const targetDied = target.hp <= 0;
+    const attackerDied = attacker.hp <= 0;
+    const bothDied = targetDied && attackerDied;
+    
+    if (bothDied) {
+      target.eliminated = true;
+      target.eliminatedAt = Date.now();
+      attacker.eliminated = true;
+      attacker.eliminatedAt = Date.now();
+      
+      attacker.kills++;
+      target.kills++;
+      
+      battleRoyale.eliminations.push(target.accountId);
+      battleRoyale.eliminations.push(attacker.accountId);
+      
+      if (aliveBeforeAttack === 2) {
+        attacker.placement = 1;
+        target.placement = 2;
+        battleRoyale.winner = attacker.accountId;
+      } else {
+        const nextPlacement = aliveBeforeAttack - 1;
+        attacker.placement = nextPlacement;
+        target.placement = nextPlacement;
+      }
+      
+      results.targetEliminated = true;
+      results.attackerEliminated = true;
+      results.targetPlacement = target.placement;
+      results.attackerPlacement = attacker.placement;
+      results.mutualElimination = true;
+      
+      broadcastToAllPlayers("battle_royale_elimination", {
+        eliminated: `${target.username} & ${attacker.username}`,
+        eliminator: "each other",
+        aliveCount: aliveBeforeAttack - 2,
+        placement: `${target.placement} (tie)`,
+      });
+    } else if (targetDied) {
+      target.eliminated = true;
+      target.eliminatedAt = Date.now();
+      attacker.kills++;
+      battleRoyale.eliminations.push(target.accountId);
+      
+      target.placement = aliveBeforeAttack;
+      results.targetEliminated = true;
+      results.targetPlacement = target.placement;
+      
+      broadcastToAllPlayers("battle_royale_elimination", {
+        eliminated: target.username,
+        eliminator: attacker.username,
+        aliveCount: aliveBeforeAttack - 1,
+        placement: target.placement,
+      });
+    } else if (attackerDied) {
+      attacker.eliminated = true;
+      attacker.eliminatedAt = Date.now();
+      battleRoyale.eliminations.push(attacker.accountId);
+      
+      attacker.placement = aliveBeforeAttack;
+      results.attackerEliminated = true;
+      results.attackerPlacement = attacker.placement;
+      
+      broadcastToAllPlayers("battle_royale_elimination", {
+        eliminated: attacker.username,
+        eliminator: target.username,
+        aliveCount: aliveBeforeAttack - 1,
+        placement: attacker.placement,
+      });
+    }
+    
+    const aliveAfterAttack = Array.from(battleRoyale.participants.values()).filter(p => !p.eliminated);
+    
+    if (aliveAfterAttack.length === 1) {
+      const winner = aliveAfterAttack[0];
+      battleRoyale.status = "ended";
+      battleRoyale.endedAt = Date.now();
+      battleRoyale.winner = winner.accountId;
+      winner.placement = 1;
+      
+      await distributeBattleRoyaleRewards();
+      
+      broadcastToAllPlayers("battle_royale_winner", {
+        winner: winner.username,
+        kills: winner.kills,
+      });
+      
+      results.battleEnded = true;
+      results.winner = winner.username;
+    } else if (aliveAfterAttack.length === 0) {
+      battleRoyale.status = "ended";
+      battleRoyale.endedAt = Date.now();
+      
+      await distributeBattleRoyaleRewards();
+      
+      broadcastToAllPlayers("battle_royale_ended", {
+        message: "Mutual elimination! Attacker wins by last hit.",
+        winner: attacker.username,
+      });
+      
+      results.battleEnded = true;
+      results.winner = attacker.username;
+    }
+    
+    res.json(results);
+  });
+
+  async function distributeBattleRoyaleRewards() {
+    const sorted = Array.from(battleRoyale.participants.values())
+      .sort((a, b) => (a.placement || 999) - (b.placement || 999));
+    
+    for (let i = 0; i < Math.min(5, sorted.length); i++) {
+      const participant = sorted[i];
+      const account = await storage.getAccount(participant.accountId);
+      if (!account) continue;
+      
+      let rewards: any = {};
+      if (i === 0) rewards = BR_REWARDS.winner;
+      else if (i === 1) rewards = BR_REWARDS.second;
+      else if (i === 2) rewards = BR_REWARDS.third;
+      else if (i === 3) rewards = BR_REWARDS.fourth;
+      else if (i === 4) rewards = BR_REWARDS.fifth;
+      
+      const updates: any = {};
+      if (rewards.gold) updates.gold = (account.gold || 0) + rewards.gold;
+      if (rewards.rubies) updates.rubies = (account.rubies || 0) + rewards.rubies;
+      if (rewards.soulShards) updates.soulShards = (account.soulShards || 0) + rewards.soulShards;
+      if (rewards.focusedShards) updates.focusedShards = (account.focusedShards || 0) + rewards.focusedShards;
+      if (rewards.trainingPoints) updates.trainingPoints = (account.trainingPoints || 0) + rewards.trainingPoints;
+      if (rewards.soulGins) updates.soulGins = (account.soulGins || 0) + rewards.soulGins;
+      if (rewards.beakCoins) updates.beakCoins = (account.beakCoins || 0) + rewards.beakCoins;
+      if (rewards.valorTokens) updates.valorTokens = (account.valorTokens || 0) + rewards.valorTokens;
+      
+      await storage.updateAccount(participant.accountId, updates);
+      
+      broadcastToPlayer(participant.accountId, "battle_royale_reward", {
+        placement: i + 1,
+        rewards,
+      });
+    }
+  }
+
+  app.get("/api/battle-royale/my-status", async (req, res) => {
+    const accountId = req.query.accountId as string;
+    if (!accountId) {
+      return res.status(400).json({ error: "Account ID required" });
+    }
+    
+    const isRegistered = battleRoyale.registrations.has(accountId);
+    const participant = battleRoyale.participants.get(accountId);
+    
+    res.json({
+      battleStatus: battleRoyale.status,
+      isRegistered,
+      isParticipant: !!participant,
+      myData: participant ? {
+        hp: participant.hp,
+        maxHp: participant.maxHp,
+        kills: participant.kills,
+        eliminated: participant.eliminated,
+        placement: participant.placement,
+      } : null,
+      targets: participant && !participant.eliminated 
+        ? Array.from(battleRoyale.participants.values())
+            .filter(p => p.accountId !== accountId && !p.eliminated)
+            .map(p => ({
+              accountId: p.accountId,
+              username: p.username,
+              race: p.race,
+              hp: p.hp,
+              maxHp: p.maxHp,
+            }))
+        : [],
+    });
+  });
+
   return httpServer;
 }
