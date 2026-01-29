@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import {
   Castle, Mountain, Skull, FlaskConical, Sword, Swords,
   Trees, Gem, Fish, Shield, Flame, Map, Home, Lock,
   Package, ShoppingBag, Users, LogOut, MessageCircle,
-  Crown, Coins, Heart, Target, Zap
+  Crown, Coins, Heart, Target, Zap, Sparkles
 } from "lucide-react";
 import { useGame } from "@/lib/game-context";
 import { useToast } from "@/hooks/use-toast";
@@ -225,6 +225,48 @@ export default function WorldMap() {
   const [isGathering, setIsGathering] = useState(false);
   const [gatherResult, setGatherResult] = useState<any>(null);
   const [zoneResources, setZoneResources] = useState<any>(null);
+  const welcomeAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const welcomeKey = `lov_welcome_${account?.id}`;
+    const hasPlayedWelcome = sessionStorage.getItem(welcomeKey);
+    
+    if (account && !hasPlayedWelcome) {
+      sessionStorage.setItem(welcomeKey, 'true');
+      
+      const playWelcomeAudio = async () => {
+        try {
+          const response = await fetch('/api/ai-chat/voice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              text: `Welcome to Legends of Valor, ${account.username}! Your adventure awaits. Explore the world, battle fearsome foes, and become a legend!`
+            })
+          });
+          
+          if (response.ok) {
+            const audioBlob = await response.blob();
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = new Audio(audioUrl);
+            audio.volume = 0.7;
+            welcomeAudioRef.current = audio;
+            await audio.play();
+          }
+        } catch (err) {
+          console.log('Welcome audio not available');
+        }
+      };
+      
+      setTimeout(() => playWelcomeAudio(), 500);
+    }
+    
+    return () => {
+      if (welcomeAudioRef.current) {
+        welcomeAudioRef.current.pause();
+        welcomeAudioRef.current = null;
+      }
+    };
+  }, [account?.id, account?.username]);
 
   const { data: zoneDifficulties } = useQuery<any>({
     queryKey: ["/api/zone-difficulties"],
@@ -240,6 +282,15 @@ export default function WorldMap() {
       const res = await fetch("/api/enemy-archetypes");
       return res.json();
     },
+  });
+
+  const { data: equippedSkins } = useQuery<{ character?: string; pet?: string; bird?: string; base?: string }>({
+    queryKey: [`/api/accounts/${account?.id}/skins`],
+    queryFn: async () => {
+      const res = await fetch(`/api/accounts/${account?.id}/skins`);
+      return res.json();
+    },
+    enabled: !!account,
   });
 
   if (!account) {
@@ -400,6 +451,15 @@ export default function WorldMap() {
   };
 
   const portraitPath = account.portrait || `/portraits/${account.race}_${account.gender}.png`;
+  const hasEquippedSkin = equippedSkins?.character && equippedSkins.character !== "default";
+  
+  const skinRarityColors: Record<string, string> = {
+    common: "border-gray-400",
+    rare: "border-blue-500",
+    epic: "border-purple-500",
+    legendary: "border-orange-500",
+    mythic: "border-pink-500 shadow-lg shadow-pink-500/50"
+  };
 
   return (
     <div className="min-h-screen relative">
@@ -418,11 +478,23 @@ export default function WorldMap() {
                   <img 
                     src={portraitPath}
                     alt={account.username}
-                    className="w-16 h-16 rounded-lg border-2 border-primary object-cover"
+                    className={`w-16 h-16 rounded-lg border-2 object-cover ${
+                      hasEquippedSkin ? skinRarityColors[
+                        equippedSkins?.character === "warrior_gold" || equippedSkins?.character === "dragon_slayer" ? "epic" :
+                        equippedSkins?.character === "shadow_knight" || equippedSkins?.character === "void_walker" ? "legendary" :
+                        equippedSkins?.character === "flame_lord" || equippedSkins?.character === "ice_queen" || equippedSkins?.character === "celestial_guardian" ? "mythic" :
+                        equippedSkins?.character === "mystic_sage" || equippedSkins?.character === "forest_ranger" ? "rare" : "common"
+                      ] : "border-primary"
+                    }`}
                     onError={(e) => {
                       (e.target as HTMLImageElement).src = "/portraits/human_male.png";
                     }}
                   />
+                  {hasEquippedSkin && (
+                    <div className="absolute -top-1 -left-1 w-4 h-4 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                      <Sparkles className="w-2.5 h-2.5 text-white" />
+                    </div>
+                  )}
                   <Badge className="absolute -bottom-1 -right-1 text-xs">
                     {account.rank || "Novice"}
                   </Badge>
