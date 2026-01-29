@@ -7266,20 +7266,27 @@ export async function registerRoutes(
   
   app.post("/api/fishing/cast", async (req, res) => {
     try {
-      const schema = z.object({ accountId: z.string() });
-      const { accountId } = schema.parse(req.body);
+      const schema = z.object({ accountId: z.string(), useBait: z.boolean().optional() });
+      const { accountId, useBait } = schema.parse(req.body);
       
       const account = await storage.getAccount(accountId);
       if (!account) {
         return res.status(404).json({ error: "Account not found" });
       }
       
-      // Random fish based on rarity
+      // Check if player wants to use bait
+      let baitBonus = 0;
+      if (useBait && (account.bait || 0) > 0) {
+        await storage.updateAccount(accountId, { bait: (account.bait || 0) - 1 });
+        baitBonus = 0.15; // 15% boost to better fish chances
+      }
+      
+      // Random fish based on rarity (bait improves chances)
       const roll = Math.random();
       let rarityFilter: string;
-      if (roll < 0.5) rarityFilter = "common";
-      else if (roll < 0.8) rarityFilter = "uncommon";
-      else if (roll < 0.95) rarityFilter = "rare";
+      if (roll < 0.5 - baitBonus * 2) rarityFilter = "common";
+      else if (roll < 0.8 - baitBonus) rarityFilter = "uncommon";
+      else if (roll < 0.95 - baitBonus / 2) rarityFilter = "rare";
       else if (roll < 0.99) rarityFilter = "epic";
       else rarityFilter = "legendary";
       
@@ -9235,6 +9242,229 @@ export async function registerRoutes(
       .length;
 
     res.json({ gatherers, zoneId });
+  });
+
+  // ===== PET EGG HATCHING SYSTEM =====
+  const PET_NAMES_BY_ELEMENT = {
+    Fire: ["Ember", "Blaze", "Cinder", "Inferno", "Phoenix"],
+    Water: ["Splash", "Tide", "Marina", "Coral", "Tsunami"],
+    Earth: ["Rocky", "Boulder", "Terra", "Quake", "Granite"],
+    Air: ["Zephyr", "Gust", "Breeze", "Storm", "Cyclone"],
+    Lightning: ["Spark", "Volt", "Thunder", "Flash", "Bolt"],
+    Ice: ["Frost", "Glacier", "Blizzard", "Crystal", "Icicle"],
+    Nature: ["Leaf", "Bloom", "Vine", "Fern", "Thorn"],
+    Dark: ["Shadow", "Dusk", "Void", "Phantom", "Eclipse"],
+    Light: ["Ray", "Glow", "Dawn", "Radiant", "Halo"],
+    Arcana: ["Mystic", "Arcane", "Rune", "Sage", "Oracle"],
+  };
+
+  app.post("/api/hatch-egg", async (req, res) => {
+    try {
+      const { accountId, eggType } = req.body;
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      // Check which egg type to hatch
+      let eggField = "petEggs";
+      let tierChances = { common: 0.5, uncommon: 0.35, rare: 0.12, epic: 0.03 };
+      
+      if (eggType === "rare") {
+        eggField = "rarePetEggs";
+        tierChances = { common: 0.1, uncommon: 0.4, rare: 0.35, epic: 0.15 };
+      } else if (eggType === "epic") {
+        eggField = "epicPetEggs";
+        tierChances = { common: 0, uncommon: 0.1, rare: 0.5, epic: 0.4 };
+      } else if (eggType === "mythic") {
+        eggField = "mythicPetEggs";
+        tierChances = { common: 0, uncommon: 0, rare: 0.2, epic: 0.5, mythic: 0.3 };
+      }
+
+      const eggCount = (account as any)[eggField] || 0;
+      if (eggCount <= 0) {
+        return res.status(400).json({ error: `No ${eggType || "basic"} pet eggs available` });
+      }
+
+      // Deduct egg
+      await storage.updateAccount(accountId, { [eggField]: eggCount - 1 });
+
+      // Determine tier
+      const roll = Math.random();
+      let tier = "common";
+      let cumulative = 0;
+      for (const [t, chance] of Object.entries(tierChances)) {
+        cumulative += chance as number;
+        if (roll < cumulative) { tier = t; break; }
+      }
+
+      // Random element and name
+      const elements = Object.keys(PET_NAMES_BY_ELEMENT);
+      const element = elements[Math.floor(Math.random() * elements.length)] as keyof typeof PET_NAMES_BY_ELEMENT;
+      const names = PET_NAMES_BY_ELEMENT[element];
+      const name = names[Math.floor(Math.random() * names.length)];
+
+      // Base stats scale with tier
+      const tierMultipliers: Record<string, number> = { common: 1, uncommon: 1.5, rare: 2, epic: 3, mythic: 5 };
+      const mult = tierMultipliers[tier] || 1;
+
+      const pet = await storage.createPet({
+        accountId,
+        name,
+        tier: tier as any,
+        element: element as any,
+        elements: [element] as any,
+        baseStr: Math.floor((5 + Math.random() * 10) * mult),
+        baseDef: Math.floor((5 + Math.random() * 10) * mult),
+        baseSpd: Math.floor((5 + Math.random() * 10) * mult),
+        currentHp: 100,
+        maxHp: 100,
+        exp: 0,
+        bondLevel: 1,
+        skin: "default",
+      });
+
+      res.json({ success: true, pet, message: `Hatched a ${tier} ${element} pet named ${name}!` });
+    } catch (error) {
+      console.error("Hatch error:", error);
+      res.status(500).json({ error: "Failed to hatch egg" });
+    }
+  });
+
+  // ===== COSMETICS SHOP =====
+  const COSMETICS_SHOP = {
+    character: [
+      { id: "warrior_gold", name: "Golden Warrior", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
+      { id: "shadow_knight", name: "Shadow Knight", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
+      { id: "flame_lord", name: "Flame Lord", rarity: "mythic", skinTicketCost: 200, rubyPrice: 2500 },
+      { id: "ice_queen", name: "Ice Queen", rarity: "mythic", skinTicketCost: 200, rubyPrice: 2500 },
+      { id: "dragon_slayer", name: "Dragon Slayer", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
+      { id: "mystic_sage", name: "Mystic Sage", rarity: "rare", skinTicketCost: 25, rubyPrice: 250 },
+      { id: "forest_ranger", name: "Forest Ranger", rarity: "rare", skinTicketCost: 25, rubyPrice: 250 },
+      { id: "void_walker", name: "Void Walker", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
+      { id: "celestial_guardian", name: "Celestial Guardian", rarity: "mythic", skinTicketCost: 200, rubyPrice: 2500 },
+    ],
+    pet: [
+      { id: "elemental_glow", name: "Elemental Glow", rarity: "epic", skinTicketCost: 30, rubyPrice: 300 },
+      { id: "shadow_aura", name: "Shadow Aura", rarity: "legendary", skinTicketCost: 75, rubyPrice: 750 },
+      { id: "golden_scales", name: "Golden Scales", rarity: "mythic", skinTicketCost: 150, rubyPrice: 1500 },
+      { id: "crystal_armor", name: "Crystal Armor", rarity: "rare", skinTicketCost: 20, rubyPrice: 200 },
+      { id: "flame_wings", name: "Flame Wings", rarity: "epic", skinTicketCost: 30, rubyPrice: 300 },
+      { id: "ice_scales", name: "Ice Scales", rarity: "rare", skinTicketCost: 20, rubyPrice: 200 },
+      { id: "nature_vines", name: "Nature Vines", rarity: "rare", skinTicketCost: 20, rubyPrice: 200 },
+    ],
+    bird: [
+      { id: "phoenix_feathers", name: "Phoenix Feathers", rarity: "mythic", skinTicketCost: 125, rubyPrice: 1250 },
+      { id: "storm_wings", name: "Storm Wings", rarity: "legendary", skinTicketCost: 60, rubyPrice: 600 },
+      { id: "rainbow_plume", name: "Rainbow Plume", rarity: "epic", skinTicketCost: 35, rubyPrice: 350 },
+      { id: "shadow_feathers", name: "Shadow Feathers", rarity: "rare", skinTicketCost: 15, rubyPrice: 150 },
+      { id: "golden_wings", name: "Golden Wings", rarity: "epic", skinTicketCost: 35, rubyPrice: 350 },
+    ],
+    base: [
+      { id: "dark_fortress", name: "Dark Fortress", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
+      { id: "crystal_palace", name: "Crystal Palace", rarity: "mythic", skinTicketCost: 200, rubyPrice: 2000 },
+      { id: "ancient_temple", name: "Ancient Temple", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
+      { id: "dragon_keep", name: "Dragon Keep", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
+      { id: "nature_sanctuary", name: "Nature Sanctuary", rarity: "rare", skinTicketCost: 25, rubyPrice: 250 },
+      { id: "ice_citadel", name: "Ice Citadel", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
+    ],
+  };
+
+  app.get("/api/cosmetics-shop", (_req, res) => {
+    res.json({ shop: COSMETICS_SHOP });
+  });
+
+  app.post("/api/cosmetics-shop/purchase", async (req, res) => {
+    try {
+      const { accountId, skinId, category, paymentType } = req.body;
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const categoryItems = COSMETICS_SHOP[category as keyof typeof COSMETICS_SHOP];
+      if (!categoryItems) return res.status(400).json({ error: "Invalid category" });
+
+      const skin = categoryItems.find((s: any) => s.id === skinId);
+      if (!skin) return res.status(404).json({ error: "Skin not found" });
+
+      // Check if already owned
+      const ownedSkins = account.unlockedSkins || [];
+      const fullSkinId = `${category}_${skinId}`;
+      if (ownedSkins.includes(fullSkinId)) {
+        return res.status(400).json({ error: "You already own this skin" });
+      }
+
+      // Payment
+      if (paymentType === "tickets") {
+        const ticketField = skin.rarity === "mythic" ? "mythicSkinTickets" :
+                           skin.rarity === "legendary" ? "epicSkinTickets" :
+                           skin.rarity === "epic" ? "epicSkinTickets" :
+                           skin.rarity === "rare" ? "rareSkinTickets" : "skinTickets";
+        const tickets = (account as any)[ticketField] || 0;
+        if (tickets < 1) {
+          return res.status(400).json({ error: `Insufficient ${skin.rarity} skin tickets` });
+        }
+        await storage.updateAccount(accountId, { 
+          [ticketField]: tickets - 1,
+          unlockedSkins: [...ownedSkins, fullSkinId]
+        });
+      } else {
+        // Ruby payment
+        if ((account.rubies || 0) < skin.rubyPrice) {
+          return res.status(400).json({ error: "Insufficient rubies", required: skin.rubyPrice });
+        }
+        await storage.updateAccount(accountId, { 
+          rubies: (account.rubies || 0) - skin.rubyPrice,
+          unlockedSkins: [...ownedSkins, fullSkinId]
+        });
+      }
+
+      res.json({ success: true, skin: fullSkinId, message: `Purchased ${skin.name}!` });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to purchase skin" });
+    }
+  });
+
+  app.post("/api/cosmetics/equip", async (req, res) => {
+    try {
+      const { accountId, skinId, category } = req.body;
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const fullSkinId = `${category}_${skinId}`;
+      const ownedSkins = account.unlockedSkins || [];
+      
+      if (skinId !== "default" && !ownedSkins.includes(fullSkinId)) {
+        return res.status(400).json({ error: "You don't own this skin" });
+      }
+
+      // Store equipped skin based on category
+      if (category === "character") {
+        await storage.updateAccount(accountId, { portrait: skinId !== "default" ? skinId : null });
+      } else if (category === "base") {
+        await storage.updateAccount(accountId, { baseSkin: skinId });
+      }
+      // For pet/bird, would need petId to update
+
+      res.json({ success: true, equipped: skinId });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to equip skin" });
+    }
+  });
+
+  // ===== VIP STATUS CHECK =====
+  app.get("/api/accounts/:id/vip-status", async (req, res) => {
+    const account = await storage.getAccount(req.params.id);
+    if (!account) return res.status(404).json({ error: "Account not found" });
+
+    const now = new Date();
+    const vipUntil = account.vipUntil ? new Date(account.vipUntil) : null;
+    const isVip = vipUntil && vipUntil > now;
+    const activeBuffs = (account.activeBuffs || []).filter((b: any) => new Date(b.expiresAt) > now);
+
+    res.json({ 
+      isVip, 
+      vipUntil: isVip ? vipUntil : null,
+      activeBuffs,
+      daysRemaining: isVip ? Math.ceil((vipUntil!.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : 0
+    });
   });
 
   // ===== $VALOR SHOP BUNDLES =====

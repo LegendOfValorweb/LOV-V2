@@ -59,7 +59,12 @@ export function PageLayout({ children, title, backdrop, showPlayerInfo = true }:
                       }}
                     />
                     <div>
-                      <div className="font-serif font-bold text-sm">{account.username}</div>
+                      <div className="font-serif font-bold text-sm flex items-center gap-1">
+                        {account.username}
+                        {account.vipUntil && new Date(account.vipUntil) > new Date() && (
+                          <Crown className="w-3 h-3 text-yellow-400" />
+                        )}
+                      </div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground">
                         <div className="flex items-center gap-1">
                           <Coins className="w-3 h-3 text-yellow-400" />

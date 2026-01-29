@@ -10,7 +10,7 @@ import {
   Castle, Mountain, Skull, FlaskConical, Sword, Swords,
   Trees, Gem, Fish, Shield, Flame, Map, Home, Lock,
   Package, ShoppingBag, Users, LogOut, MessageCircle,
-  Crown, Coins, Heart, Target, Zap, Sparkles
+  Crown, Coins, Heart, Target, Zap, Sparkles, Palette
 } from "lucide-react";
 import { useGame } from "@/lib/game-context";
 import { LoadingScreen } from "@/components/loading-screen";
@@ -202,6 +202,17 @@ const zones: Zone[] = [
     activities: ["Premium Bundles", "Exclusive Items", "Special Offers"],
     coordinates: { x: 85, y: 15 },
     route: "/valor-shop",
+  },
+  {
+    id: "cosmetics-shop",
+    name: "Cosmetics Shop",
+    description: "Customize your character, pets, birds, and base with unique skins!",
+    icon: <Palette className="w-6 h-6" />,
+    difficulty: "starter",
+    pvpEnabled: false,
+    activities: ["Character Skins", "Pet Skins", "Bird Skins", "Base Skins"],
+    coordinates: { x: 15, y: 15 },
+    route: "/cosmetics-shop",
   },
 ];
 
