@@ -180,6 +180,10 @@ export const accounts = pgTable("accounts", {
   baseTier: integer("base_tier").notNull().default(1), // Current base tier (1-5)
   baseSkin: text("base_skin").default("default"), // Cosmetic base skin
   trophies: text("trophies").array().default(sql`ARRAY[]::text[]`), // Earned trophies
+  // V2: Equipped cosmetic skins
+  equippedCharacterSkin: text("equipped_character_skin").default("default"),
+  equippedPetSkin: text("equipped_pet_skin").default("default"),
+  equippedBirdSkin: text("equipped_bird_skin").default("default"),
 });
 
 export const inventoryItems = pgTable("inventory_items", {

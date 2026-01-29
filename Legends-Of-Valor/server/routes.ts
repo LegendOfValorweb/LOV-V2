@@ -9341,6 +9341,21 @@ export async function registerRoutes(
       { id: "forest_ranger", name: "Forest Ranger", rarity: "rare", skinTicketCost: 25, rubyPrice: 250 },
       { id: "void_walker", name: "Void Walker", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
       { id: "celestial_guardian", name: "Celestial Guardian", rarity: "mythic", skinTicketCost: 200, rubyPrice: 2500 },
+      { id: "crimson_berserker", name: "Crimson Berserker", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
+      { id: "ocean_warden", name: "Ocean Warden", rarity: "rare", skinTicketCost: 25, rubyPrice: 250 },
+      { id: "thunder_champion", name: "Thunder Champion", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
+      { id: "blood_monarch", name: "Blood Monarch", rarity: "mythic", skinTicketCost: 200, rubyPrice: 2500 },
+      { id: "starlight_paladin", name: "Starlight Paladin", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
+      { id: "desert_nomad", name: "Desert Nomad", rarity: "rare", skinTicketCost: 25, rubyPrice: 250 },
+      { id: "crystal_mage", name: "Crystal Mage", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
+      { id: "undead_warlord", name: "Undead Warlord", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
+      { id: "demon_hunter", name: "Demon Hunter", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
+      { id: "holy_crusader", name: "Holy Crusader", rarity: "rare", skinTicketCost: 25, rubyPrice: 250 },
+      { id: "storm_caller", name: "Storm Caller", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
+      { id: "plague_doctor", name: "Plague Doctor", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
+      { id: "arcane_emperor", name: "Arcane Emperor", rarity: "mythic", skinTicketCost: 200, rubyPrice: 2500 },
+      { id: "primal_beast", name: "Primal Beast", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
+      { id: "ancient_pharaoh", name: "Ancient Pharaoh", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
     ],
     pet: [
       { id: "elemental_glow", name: "Elemental Glow", rarity: "epic", skinTicketCost: 30, rubyPrice: 300 },
@@ -9350,6 +9365,21 @@ export async function registerRoutes(
       { id: "flame_wings", name: "Flame Wings", rarity: "epic", skinTicketCost: 30, rubyPrice: 300 },
       { id: "ice_scales", name: "Ice Scales", rarity: "rare", skinTicketCost: 20, rubyPrice: 200 },
       { id: "nature_vines", name: "Nature Vines", rarity: "rare", skinTicketCost: 20, rubyPrice: 200 },
+      { id: "void_essence", name: "Void Essence", rarity: "mythic", skinTicketCost: 150, rubyPrice: 1500 },
+      { id: "thunder_crackle", name: "Thunder Crackle", rarity: "epic", skinTicketCost: 30, rubyPrice: 300 },
+      { id: "starlit_fur", name: "Starlit Fur", rarity: "legendary", skinTicketCost: 75, rubyPrice: 750 },
+      { id: "blood_mark", name: "Blood Mark", rarity: "epic", skinTicketCost: 30, rubyPrice: 300 },
+      { id: "ocean_shimmer", name: "Ocean Shimmer", rarity: "rare", skinTicketCost: 20, rubyPrice: 200 },
+      { id: "forest_moss", name: "Forest Moss", rarity: "rare", skinTicketCost: 20, rubyPrice: 200 },
+      { id: "lava_veins", name: "Lava Veins", rarity: "legendary", skinTicketCost: 75, rubyPrice: 750 },
+      { id: "spectral_mist", name: "Spectral Mist", rarity: "mythic", skinTicketCost: 150, rubyPrice: 1500 },
+      { id: "diamond_shell", name: "Diamond Shell", rarity: "legendary", skinTicketCost: 75, rubyPrice: 750 },
+      { id: "toxic_ooze", name: "Toxic Ooze", rarity: "epic", skinTicketCost: 30, rubyPrice: 300 },
+      { id: "holy_halo", name: "Holy Halo", rarity: "legendary", skinTicketCost: 75, rubyPrice: 750 },
+      { id: "demon_horns", name: "Demon Horns", rarity: "epic", skinTicketCost: 30, rubyPrice: 300 },
+      { id: "ancient_runes", name: "Ancient Runes", rarity: "rare", skinTicketCost: 20, rubyPrice: 200 },
+      { id: "mechanical_parts", name: "Mechanical Parts", rarity: "epic", skinTicketCost: 30, rubyPrice: 300 },
+      { id: "celestial_glow", name: "Celestial Glow", rarity: "mythic", skinTicketCost: 150, rubyPrice: 1500 },
     ],
     bird: [
       { id: "phoenix_feathers", name: "Phoenix Feathers", rarity: "mythic", skinTicketCost: 125, rubyPrice: 1250 },
@@ -9357,6 +9387,23 @@ export async function registerRoutes(
       { id: "rainbow_plume", name: "Rainbow Plume", rarity: "epic", skinTicketCost: 35, rubyPrice: 350 },
       { id: "shadow_feathers", name: "Shadow Feathers", rarity: "rare", skinTicketCost: 15, rubyPrice: 150 },
       { id: "golden_wings", name: "Golden Wings", rarity: "epic", skinTicketCost: 35, rubyPrice: 350 },
+      { id: "ice_crystal_wings", name: "Ice Crystal Wings", rarity: "legendary", skinTicketCost: 60, rubyPrice: 600 },
+      { id: "nature_leaf", name: "Nature Leaf Plumage", rarity: "rare", skinTicketCost: 15, rubyPrice: 150 },
+      { id: "volcanic_ember", name: "Volcanic Ember", rarity: "epic", skinTicketCost: 35, rubyPrice: 350 },
+      { id: "void_raven", name: "Void Raven", rarity: "mythic", skinTicketCost: 125, rubyPrice: 1250 },
+      { id: "celestial_dove", name: "Celestial Dove", rarity: "legendary", skinTicketCost: 60, rubyPrice: 600 },
+      { id: "blood_hawk", name: "Blood Hawk", rarity: "epic", skinTicketCost: 35, rubyPrice: 350 },
+      { id: "ocean_spray", name: "Ocean Spray Feathers", rarity: "rare", skinTicketCost: 15, rubyPrice: 150 },
+      { id: "thunderbird", name: "Thunderbird Spark", rarity: "legendary", skinTicketCost: 60, rubyPrice: 600 },
+      { id: "spirit_owl", name: "Spirit Owl", rarity: "epic", skinTicketCost: 35, rubyPrice: 350 },
+      { id: "neon_parrot", name: "Neon Parrot", rarity: "rare", skinTicketCost: 15, rubyPrice: 150 },
+      { id: "demon_crow", name: "Demon Crow", rarity: "legendary", skinTicketCost: 60, rubyPrice: 600 },
+      { id: "aurora_wings", name: "Aurora Wings", rarity: "mythic", skinTicketCost: 125, rubyPrice: 1250 },
+      { id: "jade_peacock", name: "Jade Peacock", rarity: "epic", skinTicketCost: 35, rubyPrice: 350 },
+      { id: "royal_falcon", name: "Royal Falcon", rarity: "legendary", skinTicketCost: 60, rubyPrice: 600 },
+      { id: "ancient_condor", name: "Ancient Condor", rarity: "epic", skinTicketCost: 35, rubyPrice: 350 },
+      { id: "cosmic_eagle", name: "Cosmic Eagle", rarity: "mythic", skinTicketCost: 125, rubyPrice: 1250 },
+      { id: "frost_swan", name: "Frost Swan", rarity: "rare", skinTicketCost: 15, rubyPrice: 150 },
     ],
     base: [
       { id: "dark_fortress", name: "Dark Fortress", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
@@ -9365,6 +9412,22 @@ export async function registerRoutes(
       { id: "dragon_keep", name: "Dragon Keep", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
       { id: "nature_sanctuary", name: "Nature Sanctuary", rarity: "rare", skinTicketCost: 25, rubyPrice: 250 },
       { id: "ice_citadel", name: "Ice Citadel", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
+      { id: "volcanic_stronghold", name: "Volcanic Stronghold", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
+      { id: "skyward_tower", name: "Skyward Tower", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
+      { id: "underwater_dome", name: "Underwater Dome", rarity: "mythic", skinTicketCost: 200, rubyPrice: 2000 },
+      { id: "desert_oasis", name: "Desert Oasis", rarity: "rare", skinTicketCost: 25, rubyPrice: 250 },
+      { id: "haunted_manor", name: "Haunted Manor", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
+      { id: "celestial_shrine", name: "Celestial Shrine", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
+      { id: "demon_lair", name: "Demon Lair", rarity: "mythic", skinTicketCost: 200, rubyPrice: 2000 },
+      { id: "floating_island", name: "Floating Island", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
+      { id: "mechanical_factory", name: "Mechanical Factory", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
+      { id: "elven_treehouse", name: "Elven Treehouse", rarity: "rare", skinTicketCost: 25, rubyPrice: 250 },
+      { id: "dwarven_mine", name: "Dwarven Mine", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
+      { id: "pirate_cove", name: "Pirate Cove", rarity: "rare", skinTicketCost: 25, rubyPrice: 250 },
+      { id: "void_dimension", name: "Void Dimension", rarity: "mythic", skinTicketCost: 200, rubyPrice: 2000 },
+      { id: "golden_throne", name: "Golden Throne Room", rarity: "legendary", skinTicketCost: 100, rubyPrice: 1000 },
+      { id: "storm_castle", name: "Storm Castle", rarity: "epic", skinTicketCost: 50, rubyPrice: 500 },
+      { id: "arcane_library", name: "Arcane Library", rarity: "rare", skinTicketCost: 25, rubyPrice: 250 },
     ],
   };
 
@@ -9436,14 +9499,27 @@ export async function registerRoutes(
       }
 
       // Store equipped skin based on category
+      const updates: any = {};
       if (category === "character") {
-        await storage.updateAccount(accountId, { portrait: skinId !== "default" ? skinId : null });
+        updates.equippedCharacterSkin = skinId;
+        // Update portrait to show the skin (format: skins/skinId.png)
+        if (skinId !== "default") {
+          updates.portrait = `skins/${skinId}`;
+        } else {
+          // Reset to race/gender portrait
+          updates.portrait = account.race && account.gender ? `${account.race}_${account.gender}` : null;
+        }
       } else if (category === "base") {
-        await storage.updateAccount(accountId, { baseSkin: skinId });
+        updates.baseSkin = skinId;
+      } else if (category === "pet") {
+        updates.equippedPetSkin = skinId;
+      } else if (category === "bird") {
+        updates.equippedBirdSkin = skinId;
       }
-      // For pet/bird, would need petId to update
 
-      res.json({ success: true, equipped: skinId });
+      await storage.updateAccount(accountId, updates);
+
+      res.json({ success: true, equipped: skinId, category });
     } catch (error) {
       res.status(500).json({ error: "Failed to equip skin" });
     }

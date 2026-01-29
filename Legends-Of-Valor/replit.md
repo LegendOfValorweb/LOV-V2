@@ -174,3 +174,5 @@ cd Legends-Of-Valor && npm run build && npm run start
 - **Fishing Bait**: Consuming bait provides 15% boost to rare fish chances
 - **VIP Display**: Crown icon next to username when VIP status is active
 - **Admin $Valor Grant**: Admins can grant $Valor tokens to players
+- **Expanded Cosmetics Shop**: 24 character skins, 22 pet skins, 22 bird skins, 22 base skins (90+ total)
+- **Skin Equip System**: Character skins update the player's portrait when equipped

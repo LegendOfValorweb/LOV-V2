@@ -18,12 +18,21 @@ export function PageLayout({ children, title, backdrop, showPlayerInfo = true }:
 
   const getPortraitPath = () => {
     if (!account) return '/portraits/human_male.png';
-    if (account.portrait && account.portrait.includes('/')) {
-      return account.portrait;
+    // Check for equipped character skin first
+    if (account.equippedCharacterSkin && account.equippedCharacterSkin !== 'default') {
+      return `/skins/character/${account.equippedCharacterSkin}.png`;
     }
+    // Check portrait field (may contain skin path or race_gender)
     if (account.portrait) {
+      if (account.portrait.startsWith('skins/')) {
+        return `/${account.portrait}.png`;
+      }
+      if (account.portrait.includes('/')) {
+        return account.portrait;
+      }
       return `/portraits/${account.portrait}.png`;
     }
+    // Default to race/gender portrait
     if (account.race && account.gender) {
       return `/portraits/${account.race}_${account.gender}.png`;
     }
