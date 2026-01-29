@@ -51,21 +51,36 @@ Legends-Of-Valor/
 ### PHASE 3: Pet/Bird/Fish Systems
 - Unlimited pet ownership with 1 active in battle
 - Pet bonding, evolution, and AI personalities
+- Premium Pet Shop (Mystic Egg Emporium):
+  - 6 egg tiers: Forest (500) → Celestial (250K rubies)
+  - Higher tiers guarantee better stats and rare elements
+  - Rank requirements from Journeyman to Mythical Legend
 - Bird system with Beak Coins and tier progression
 - Fish system for pet stat transfers
 
 ### PHASE 4: Base System
 - 5 base tiers (Humble Camp → Fortress Castle)
+- Tier costs: T1 Free, T2 500K, T3 5M, T4 50M, T5 500M gold
 - 6 room types (Storage, Rest, Crafting, Training, Vault, Defenses)
+- Defense system unlocks at T3 with progressive upgrades:
+  - T3: Arrow Traps, Magical Wards
+  - T4: Fire Pits, Reinforced Walls
+  - T5: Arcane Sentinels, Dragon's Wrath
+- Guard hiring: Militia (50K/day), Knights (250K/day, T4+), Archmages (1M/day, T5+)
 - Auto-craft, auto-level, auto-upgrade automation
 - Base raids scaling with Mystic Tower progress
 - Weekly Hero/Joker events
 
 ### PHASE 5: World Map & Zones
-- 12 interactive zones with unique activities
+- 15+ interactive zones with unique activities
 - Zone mechanics: PvP toggle, fast travel gates, dynamic events
 - 5-tier zone difficulty (Starter → Hell)
 - Hunting and gathering with efficiency scaling
+- New functional zones with rank requirements:
+  - Mountain Caverns (Apprentice): Mining copper → adamantite
+  - Ruby Mines (Expert): Ruby mining with PvP encounters
+  - Hell Zone (Grand Master): High-risk challenges with massive rewards
+  - Mystic Egg Emporium (Journeyman): Premium pet shop
 
 ### PHASE 6: Economy
 - Player trading system
