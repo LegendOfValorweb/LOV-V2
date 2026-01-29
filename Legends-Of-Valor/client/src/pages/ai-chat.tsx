@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Send, Sparkles, BookOpen, ArrowLeft, Map, Smile, Zap, Shield, Eye } from "lucide-react";
+import { Loader2, Send, Sparkles, BookOpen, ArrowLeft, Map, Smile, Zap, Shield, Eye, Volume2, VolumeX } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
 interface ChatMessage {
@@ -52,6 +52,41 @@ export default function AIChat() {
   const [showSettings, setShowSettings] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [voiceEnabled, setVoiceEnabled] = useState(() => {
+    const saved = localStorage.getItem('lov_voice_enabled');
+    return saved !== 'false';
+  });
+  const lastReadMessageRef = useRef<string>("");
+
+  const speakText = (text: string) => {
+    if (!voiceEnabled || !('speechSynthesis' in window)) return;
+    if (lastReadMessageRef.current === text) return;
+    lastReadMessageRef.current = text;
+    
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.95;
+    utterance.pitch = 1.0;
+    utterance.volume = 0.8;
+    
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice = voices.find(v => v.name.includes('English') && v.name.includes('Female'))
+      || voices.find(v => v.lang.startsWith('en'))
+      || voices[0];
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+    }
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const toggleVoice = () => {
+    const newValue = !voiceEnabled;
+    setVoiceEnabled(newValue);
+    localStorage.setItem('lov_voice_enabled', String(newValue));
+    if (!newValue) {
+      window.speechSynthesis.cancel();
+    }
+  };
 
   const { data: storyActInfo } = useQuery<StoryActInfo>({
     queryKey: ["/api/ai/story-act", account?.id],
@@ -173,6 +208,36 @@ export default function AIChat() {
     }
   }, [storyline?.conversationHistory]);
 
+  useEffect(() => {
+    if (welcomeMessage && voiceEnabled) {
+      speakText(welcomeMessage);
+    }
+  }, [welcomeMessage, voiceEnabled]);
+
+  useEffect(() => {
+    const messages = storyline?.conversationHistory || [];
+    if (messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage.role === "assistant" && voiceEnabled) {
+        speakText(lastMessage.content);
+      }
+    }
+  }, [storyline?.conversationHistory, voiceEnabled]);
+
+  useEffect(() => {
+    if (tutorialContent && voiceEnabled) {
+      speakText(tutorialContent);
+    }
+  }, [tutorialContent, voiceEnabled]);
+
+  useEffect(() => {
+    return () => {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
   if (!account) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-gray-900 via-purple-900 to-gray-900 flex items-center justify-center p-4">
@@ -226,6 +291,15 @@ export default function AIChat() {
                 <p className="text-xs text-gray-500">{storyActInfo.description}</p>
               </div>
             )}
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={toggleVoice}
+              className={voiceEnabled ? "text-green-400 hover:text-green-300" : "text-gray-500 hover:text-gray-400"}
+              title={voiceEnabled ? "Voice On (click to mute)" : "Voice Off (click to unmute)"}
+            >
+              {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            </Button>
             <Button 
               variant="ghost" 
               size="sm" 
