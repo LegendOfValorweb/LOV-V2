@@ -195,6 +195,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           respawnLocation: "base",
           baseTier: 1,
           baseSkin: "default",
+          baseRoomLevels: { storage: 1, rest: 1, crafting: 1, training: 1, vault: 1, defenses: 1 },
           trophies: [],
           equippedCharacterSkin: "default",
           equippedPetSkin: "default",

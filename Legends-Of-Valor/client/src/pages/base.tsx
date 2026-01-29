@@ -173,13 +173,15 @@ export default function Base() {
   const [trophyDialog, setTrophyDialog] = useState(false);
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [isSettingSkin, setIsSettingSkin] = useState(false);
-  const [roomLevels, setRoomLevels] = useState<Record<string, number>>({
-    storage: 1,
-    rest: 1,
-    crafting: 1,
-    training: 1,
-    vault: 1,
-    defenses: 1,
+  const [roomLevels, setRoomLevels] = useState<Record<string, number>>(() => {
+    return (account as any)?.baseRoomLevels || {
+      storage: 1,
+      rest: 1,
+      crafting: 1,
+      training: 1,
+      vault: 1,
+      defenses: 1,
+    };
   });
 
   const { data: baseSkins = [] } = useQuery<BaseSkin[]>({
@@ -259,15 +261,27 @@ export default function Base() {
     currentTierData.rooms.includes(room.id)
   );
 
-  const handleUpgradeRoom = (roomId: string) => {
+  const handleUpgradeRoom = async (roomId: string) => {
     const currentLevel = roomLevels[roomId] || 1;
     const room = baseRooms.find((r) => r.id === roomId);
-    if (!room || currentLevel >= room.maxLevel) return;
+    if (!room || currentLevel >= room.maxLevel || !account) return;
     
+    const newLevel = currentLevel + 1;
     setRoomLevels((prev) => ({
       ...prev,
-      [roomId]: currentLevel + 1,
+      [roomId]: newLevel,
     }));
+    
+    // Save to database
+    try {
+      await fetch(`/api/accounts/${account.id}/room-levels`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roomId, newLevel }),
+      });
+    } catch (error) {
+      console.error("Failed to save room level:", error);
+    }
   };
 
   const handleUpgradeBase = async () => {

@@ -860,6 +860,28 @@ export async function registerRoutes(
     }
   });
 
+  // Room level upgrade endpoint
+  app.patch("/api/accounts/:id/room-levels", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      const { roomId, newLevel } = req.body;
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+
+      const currentLevels = (account as any).baseRoomLevels || { storage: 1, rest: 1, crafting: 1, training: 1, vault: 1, defenses: 1 };
+      const updatedLevels = { ...currentLevels, [roomId]: newLevel };
+      
+      await storage.updateAccount(accountId, { baseRoomLevels: updatedLevels } as any);
+      
+      res.json({ roomLevels: updatedLevels });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update room level" });
+    }
+  });
+
   app.get("/api/accounts/:id/trophies", async (req, res) => {
     try {
       const account = await storage.getAccount(req.params.id);

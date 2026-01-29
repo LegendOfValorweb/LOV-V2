@@ -179,6 +179,7 @@ export const accounts = pgTable("accounts", {
   // V2: Base system
   baseTier: integer("base_tier").notNull().default(1), // Current base tier (1-5)
   baseSkin: text("base_skin").default("default"), // Cosmetic base skin
+  baseRoomLevels: jsonb("base_room_levels").notNull().default({ storage: 1, rest: 1, crafting: 1, training: 1, vault: 1, defenses: 1 }).$type<Record<string, number>>(), // Room upgrade levels
   trophies: text("trophies").array().default(sql`ARRAY[]::text[]`), // Earned trophies
   // V2: Equipped cosmetic skins
   equippedCharacterSkin: text("equipped_character_skin").default("default"),
