@@ -244,6 +244,9 @@ export default function ValorShop() {
         "collectors-vault": "conqueror_legacy",
         "dragon-slayer": "valor_hero",
         "divine-ascension": "conqueror_legacy",
+        "pet-collectors": "mythic_bond",
+        "guild-supporter": "legend_treasure",
+        "founders-pack": "conqueror_legacy",
       };
       
       const backendBundleId = bundleIdMap[selectedBundle.id] || selectedBundle.id.replace(/-/g, "_");
