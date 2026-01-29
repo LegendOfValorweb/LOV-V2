@@ -229,36 +229,38 @@ export default function WorldMap() {
 
   useEffect(() => {
     if (account) {
-      const playWelcomeAudio = async () => {
-        try {
-          const response = await fetch('/api/ai-chat/voice', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              text: `Welcome to Legends of Valor, ${account.username}! Your adventure awaits. Explore the world, battle fearsome foes, and become a legend!`
-            })
-          });
-          
-          if (response.ok) {
-            const audioBlob = await response.blob();
-            const audioUrl = URL.createObjectURL(audioBlob);
-            const audio = new Audio(audioUrl);
-            audio.volume = 0.7;
-            welcomeAudioRef.current = audio;
-            await audio.play();
+      const playWelcomeAudio = () => {
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(
+            `Welcome to Legends of Valor, ${account.username}! Your adventure awaits. Explore the world, battle fearsome foes, and become a legend!`
+          );
+          utterance.rate = 0.9;
+          utterance.pitch = 1.1;
+          utterance.volume = 0.8;
+          const voices = window.speechSynthesis.getVoices();
+          const preferredVoice = voices.find(v => v.name.includes('English') && v.name.includes('Female')) 
+            || voices.find(v => v.lang.startsWith('en'))
+            || voices[0];
+          if (preferredVoice) {
+            utterance.voice = preferredVoice;
           }
-        } catch (err) {
-          console.log('Welcome audio not available');
+          window.speechSynthesis.speak(utterance);
         }
       };
       
-      setTimeout(() => playWelcomeAudio(), 500);
+      setTimeout(() => {
+        if (window.speechSynthesis.getVoices().length === 0) {
+          window.speechSynthesis.onvoiceschanged = () => playWelcomeAudio();
+        } else {
+          playWelcomeAudio();
+        }
+      }, 500);
     }
     
     return () => {
-      if (welcomeAudioRef.current) {
-        welcomeAudioRef.current.pause();
-        welcomeAudioRef.current = null;
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
       }
     };
   }, [account?.id, account?.username]);
