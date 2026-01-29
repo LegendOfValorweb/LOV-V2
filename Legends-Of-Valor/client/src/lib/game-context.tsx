@@ -60,13 +60,26 @@ export function GameProvider({ children }: { children: ReactNode }) {
     const savedAccount = localStorage.getItem(ACCOUNT_STORAGE_PREFIX + username);
     
     if (savedAccount) {
-      const acc = JSON.parse(savedAccount);
-      setAccountState(acc);
-      syncToGlobal(acc);
+      const cachedAcc = JSON.parse(savedAccount);
+      setAccountState(cachedAcc);
+      syncToGlobal(cachedAcc);
+      
+      // Fetch fresh account data from server to ensure base/inventory is up to date
+      try {
+        const accountResponse = await fetch(`/api/accounts/${cachedAcc.id}`);
+        if (accountResponse.ok) {
+          const freshAccount = await accountResponse.json();
+          setAccountState(freshAccount);
+          localStorage.setItem(ACCOUNT_STORAGE_PREFIX + username, JSON.stringify(freshAccount));
+          syncToGlobal(freshAccount);
+        }
+      } catch (error) {
+        console.error("Failed to fetch fresh account data:", error);
+      }
       
       // Fetch inventory from API
       try {
-        const response = await fetch(`/api/accounts/${acc.id}/inventory`);
+        const response = await fetch(`/api/accounts/${cachedAcc.id}/inventory`);
         if (response.ok) {
           const data = await response.json();
           setInventory(data);

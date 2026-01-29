@@ -14,6 +14,7 @@ import {
 import { useGame } from "@/lib/game-context";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { playerRanks } from "@shared/schema";
 import {
   Dialog,
   DialogContent,

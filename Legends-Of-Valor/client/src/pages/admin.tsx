@@ -338,6 +338,171 @@ function SkillAuctionManagement({ account, toast }: { account: Account; toast: a
   );
 }
 
+function TournamentManagementInner({ account, toast }: { account: Account; toast: any }) {
+  const [tournamentName, setTournamentName] = useState("");
+  const [goldReward, setGoldReward] = useState(100000);
+  const [rubiesReward, setRubiesReward] = useState(100);
+  const [soulShardsReward, setSoulShardsReward] = useState(0);
+  const [trainingPointsReward, setTrainingPointsReward] = useState(0);
+  const [isCreating, setIsCreating] = useState(false);
+
+  const { data: tournamentsData, refetch } = useQuery<{
+    active: any;
+    pending: any[];
+    completed: any[];
+  }>({
+    queryKey: ["/api/tournaments"],
+    refetchInterval: 5000,
+  });
+
+  const createTournament = async () => {
+    if (!tournamentName.trim()) {
+      toast({ title: "Error", description: "Please enter a tournament name", variant: "destructive" });
+      return;
+    }
+    setIsCreating(true);
+    try {
+      const res = await fetch("/api/admin/tournaments/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          adminId: account.id,
+          name: tournamentName,
+          rewards: {
+            gold: goldReward,
+            rubies: rubiesReward,
+            soulShards: soulShardsReward,
+            trainingPoints: trainingPointsReward,
+          },
+        }),
+      });
+      if (res.ok) {
+        toast({ title: "Tournament Created", description: `${tournamentName} is now accepting registrations!` });
+        setTournamentName("");
+        refetch();
+      } else {
+        const data = await res.json();
+        toast({ title: "Error", description: data.error, variant: "destructive" });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to create tournament", variant: "destructive" });
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const startTournament = async (tournamentId: string) => {
+    try {
+      const res = await fetch(`/api/admin/tournaments/${tournamentId}/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adminId: account.id }),
+      });
+      if (res.ok) {
+        toast({ title: "Tournament Started", description: "Brackets have been generated!" });
+        refetch();
+      } else {
+        const data = await res.json();
+        toast({ title: "Error", description: data.error, variant: "destructive" });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to start tournament", variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="p-4 border border-red-500/20 rounded-lg bg-red-950/10">
+        <h3 className="font-medium mb-3">Create New Tournament</h3>
+        <div className="grid grid-cols-2 gap-4 mb-3">
+          <div>
+            <Label>Tournament Name</Label>
+            <Input 
+              value={tournamentName}
+              onChange={(e) => setTournamentName(e.target.value)}
+              placeholder="Enter tournament name..." 
+            />
+          </div>
+          <div>
+            <Label>Gold Reward</Label>
+            <Input 
+              type="number" 
+              value={goldReward}
+              onChange={(e) => setGoldReward(Number(e.target.value))}
+            />
+          </div>
+          <div>
+            <Label>Rubies Reward</Label>
+            <Input 
+              type="number" 
+              value={rubiesReward}
+              onChange={(e) => setRubiesReward(Number(e.target.value))}
+            />
+          </div>
+          <div>
+            <Label>Soul Shards Reward</Label>
+            <Input 
+              type="number" 
+              value={soulShardsReward}
+              onChange={(e) => setSoulShardsReward(Number(e.target.value))}
+            />
+          </div>
+          <div>
+            <Label>Training Points Reward</Label>
+            <Input 
+              type="number" 
+              value={trainingPointsReward}
+              onChange={(e) => setTrainingPointsReward(Number(e.target.value))}
+            />
+          </div>
+        </div>
+        <Button 
+          onClick={createTournament}
+          disabled={isCreating}
+          className="bg-gradient-to-r from-red-500 to-orange-500"
+        >
+          {isCreating ? "Creating..." : "Create Tournament"}
+        </Button>
+      </div>
+
+      {tournamentsData?.pending && tournamentsData.pending.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="font-medium">Pending Tournaments</h3>
+          {tournamentsData.pending.map((t: any) => (
+            <div key={t.id} className="p-3 border rounded-lg flex justify-between items-center">
+              <div>
+                <p className="font-medium">{t.name}</p>
+                <p className="text-sm text-muted-foreground">{t.participants?.length || 0} participants</p>
+              </div>
+              <Button 
+                size="sm" 
+                onClick={() => startTournament(t.id)}
+                disabled={(t.participants?.length || 0) < 2}
+              >
+                Start Tournament
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tournamentsData?.active && (
+        <div className="p-4 border border-green-500/20 rounded-lg bg-green-950/10">
+          <h3 className="font-medium text-green-400 mb-2">Active: {tournamentsData.active.name}</h3>
+          <p className="text-sm text-muted-foreground">
+            {tournamentsData.active.participants?.length || 0} participants | 
+            Round {tournamentsData.active.brackets?.length || 1}
+          </p>
+        </div>
+      )}
+
+      <p className="text-muted-foreground text-sm">
+        Tournaments use knockout format. Players register, admin starts the tournament, and selects winners for each match.
+      </p>
+    </div>
+  );
+}
+
 export default function Admin() {
   const [, navigate] = useLocation();
   const { account, logout } = useGame();
@@ -2318,25 +2483,7 @@ export default function Admin() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="p-4 border border-red-500/20 rounded-lg bg-red-950/10">
-                  <h3 className="font-medium mb-2">Create Tournament</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label>Tournament Name</Label>
-                      <Input placeholder="Enter tournament name..." />
-                    </div>
-                    <div>
-                      <Label>Gold Reward</Label>
-                      <Input type="number" placeholder="100000" />
-                    </div>
-                  </div>
-                  <Button className="mt-4 bg-gradient-to-r from-red-500 to-orange-500">
-                    Create Tournament
-                  </Button>
-                </div>
-                <p className="text-muted-foreground text-sm">
-                  Tournaments use knockout format. Players register, admin starts the tournament, and selects winners for each match.
-                </p>
+                <TournamentManagementInner account={account} toast={toast} />
               </CardContent>
             </Card>
           </TabsContent>

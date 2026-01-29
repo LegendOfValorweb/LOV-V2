@@ -10300,7 +10300,7 @@ export async function registerRoutes(
     status: "pending" | "active" | "completed";
     participants: string[];
     brackets: { round: number; matches: TournamentMatch[] }[];
-    rewards: { gold?: number; rubies?: number; items?: string[] };
+    rewards: { gold?: number; rubies?: number; soulShards?: number; trainingPoints?: number; items?: string[] };
     createdBy: string;
     startedAt?: Date;
     endedAt?: Date;
@@ -10457,6 +10457,8 @@ export async function registerRoutes(
           await storage.updateAccount(winners[0], {
             gold: winner.gold + (tournament.rewards.gold || 0),
             rubies: (winner.rubies || 0) + (tournament.rewards.rubies || 0),
+            soulShards: (winner.soulShards || 0) + (tournament.rewards.soulShards || 0),
+            trainingPoints: (winner.trainingPoints || 0) + (tournament.rewards.trainingPoints || 0),
           });
           
           const trophies = playerTrophies.get(winners[0]) || new Set();
