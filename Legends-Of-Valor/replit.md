@@ -167,3 +167,10 @@ cd Legends-Of-Valor && npm run build && npm run start
 - Endgame Mythical Legend ascension
 - Comprehensive admin dashboard with enhanced styling
 - Quintillion-safe stat formulas with BigInt
+- **Bug Fix**: Race modifiers now only apply at registration (not doubled in combat)
+- **$Valor Shop**: Full purchase system with token deduction and reward granting
+- **Cosmetics Shop**: Character/pet/bird/base skins via skin tickets or rubies
+- **Pet Egg System**: Tier-based hatching (basic/rare/epic/mythic eggs → pets)
+- **Fishing Bait**: Consuming bait provides 15% boost to rare fish chances
+- **VIP Display**: Crown icon next to username when VIP status is active
+- **Admin $Valor Grant**: Admins can grant $Valor tokens to players
