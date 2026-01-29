@@ -5201,6 +5201,8 @@ export async function registerRoutes(
       const challengedPet = allPets.find(p => p.id === challengedPetId);
       
       if (!challengerPet || !challengedPet) {
+        console.error(`Pet not found: ChallengerPetId=${challengerPetId}, ChallengedPetId=${challengedPetId}`);
+        // Fallback or handle missing pet
         return res.status(400).json({ error: "One of the pets no longer exists" });
       }
       

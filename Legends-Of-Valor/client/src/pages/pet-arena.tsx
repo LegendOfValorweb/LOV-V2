@@ -164,7 +164,8 @@ export default function PetArena() {
   };
 
   const getPetPower = (pet: Pet) => {
-    const stats = pet.stats as { Str: number; Spd: number; Luck: number; ElementalPower: number };
+    if (!pet || !pet.stats) return 1;
+    const stats = pet.stats as { Str?: number; Spd?: number; Luck?: number; ElementalPower?: number };
     return (stats.Str || 1) * 2 + (stats.Spd || 1) * 1.5 + (stats.Luck || 1) * 0.5 + (stats.ElementalPower || 1) * 3;
   };
 
