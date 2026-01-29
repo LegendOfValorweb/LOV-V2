@@ -1,0 +1,136 @@
+Gave a voice option in addition to the chat option for thr open AI
+
+Have a welcome to legends of valor audio play upon logging in
+
+Replace ingame music with audio file sent with this
+
+Add many skins for player characters, pets and birds
+
+Give admin ability to grant players $Valor
+
+Create shop where you can use $Valor to buy
+
+💎 Mixed & Focused Bundles ($0.99–$99.99)
+$0.99 Tier – Starter Boosts
+1. Tiny Adventurer Pack – $0.99
+10,000 Gold 🪙
+100 Training Points 💪
+5 Soul Gins ⚡
+2. Mini Hatchling Pack – $0.99
+1 common pet egg 🐾
+5 Soul Gins ⚡
+1 Bait 🎣
+$2.99 Tier – Early Progression
+1. Gold & TP Stack – $2.99
+50,000 Gold 🪙
+500 Training Points 💪
+2. Soul & Beak Cache – $2.99
+50 Soul Gins ⚡
+20 Beak Coins 🐦
+1 common pet egg 🐾
+$4.99 Tier – Beginner Bundle
+1. Adventurer’s Starter Pack – $4.99
+100,000 Gold 🪙
+1,000 Training Points 💪
+50 Soul Gins ⚡
+25 Beak Coins 🐦
+1 random cosmetic skin 🎨
+1 mini pet egg 🐾
+2. Style Pack (Cosmetics) – $4.99
+1 epic cosmetic skin 🎨
+1 rare weapon/armor skin ⚔️
+3. Hatchling Pack (Pets) – $4.99
+2 rare pet eggs 🐉
+100 Soul Gins ⚡
+50 Beak Coins 🐦
+$9.99 Tier – Advanced Starter
+1. Champion’s Loot Crate – $9.99
+250,000 Gold 🪙
+2,500 Training Points 💪
+150 Soul Gins ⚡
+75 Beak Coins 🐦
+25 Bait 🎣
+1 rare cosmetic skin 🎨
+1 rare pet egg 🐉
+5 Runes 🔮
+$14.99 Tier – Cosmetic / Resource Focus
+1. Legendary Look Pack – $14.99
+3 epic cosmetic skins 🎨
+1 mythic cosmetic skin 🛡️
+1 rare mount skin 🐴
+2. Rune & Bait Kit – $14.99
+10 Runes 🔮
+50 Bait 🎣
+100 Soul Gins ⚡
+$19.99 Tier – Mid-Level Boost
+1. Legend’s Treasure Chest – $19.99
+500,000 Gold 🪙
+5,000 Training Points 💪
+500 Soul Gins ⚡
+200 Beak Coins 🐦
+50 Bait 🎣
+2 rare cosmetic skins 🎨
+1 epic pet egg 🐲
+10 high-tier crafting materials 🛠️
+10 Runes 🔮
+1 Mystic Shard 💎
+$24.99 Tier – Pet/Power Focus
+1. Mythic Bond Pack – $24.99
+1 mythic pet egg 🐲
+500 Soul Gins ⚡
+1 epic pet skin 🎨
+Pet bond XP boost 24h ⏱️
+$49.99 Tier – Major Bundle
+1. Valor Hero Bundle – $49.99
+1,500,000 Gold 🪙
+15,000 Training Points 💪
+1,500 Soul Gins ⚡
+500 Beak Coins 🐦
+100 Bait 🎣
+3 epic cosmetic skins 🎨
+1 mythic pet egg 🐉
+1 elite crafting recipe 🛠️
+25 Runes 🔮
+Hero Aura cosmetic effect ✨ (7 days)
+$99.99 Tier – Ultimate Pack
+1. Conqueror’s Legacy – $99.99
+3,000,000 Gold 🪙
+30,000 Training Points 💪
+5,000 Soul Gins ⚡
+1,000 Beak Coins 🐦
+250 Bait 🎣
+5 epic cosmetic skins 🎨
+2 mythic pet eggs 🐲🐉
+1 elite crafting recipe 🛠️
+50 Runes 🔮
+2 Mystic Shards 💎
+Exclusive “Conqueror’s Banner” cosmetic 🏰
+Pet bond XP boost 48h ⏱️
+
+Create skins that can only be purchased with Valor and add to shop
+
+Auto add to account to respective areas upon purchase
+
+Make the log in page have a better more interesting backdrop, maybe include some characters like a game portrait
+
+Show list of unlocked achievements and trophies and collected achievements hide some per rank, show in new tab named achievements
+
+Make skin visible on player character static portrait
+
+Make the music tab see through so it doesnt get in players way
+
+Have the AI do a full game walk through on first log in showing where things are, how to do things, where to find things
+
+Make sure all skins have visuals and players can see when a skin is attached whethet it is pet, bird, character or base
+
+Add a way to get back to world map from all tabs
+
+Add pet wins and base raid level wins to leaderboard, game them their own sections
+
+Make sure theyre a minimum 1000 achievements, first achievement account creation and log in
+
+Create winnable 50 trophies
+
+Create a tournament page, admin controls when tournament starts
+
+Players battle in a knockout format, admin selects reward and tournment name like how quests are set up
