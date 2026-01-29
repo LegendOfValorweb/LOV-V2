@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from "react";
-import { Volume2, VolumeX, Play, Pause, SkipForward, Music } from "lucide-react";
+import { Volume2, VolumeX, Play, Pause, SkipForward, Music, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const MUSIC_TRACKS = [
-  { name: "Legends of Valor", src: "/game-music.mp3" },
   { name: "Epic Adventure", src: "/music.mp3" },
+  { name: "Legends of Valor", src: "/game-music.mp3" },
 ];
 
 export default function AudioPlayer() {
@@ -12,6 +12,8 @@ export default function AudioPlayer() {
   const [volume, setVolume] = useState(0.3);
   const [isMuted, setIsMuted] = useState(false);
   const [currentTrack, setCurrentTrack] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasError, setHasError] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -33,24 +35,33 @@ export default function AudioPlayer() {
         setIsPlaying(false);
       }
     };
-    const handlePlay = () => setIsPlaying(true);
+    const handlePlay = () => {
+      setIsPlaying(true);
+      setIsLoading(false);
+      setHasError(false);
+    };
     const handlePause = () => setIsPlaying(false);
     const handleError = (e: Event) => {
       console.error("Audio element error:", audio.error, e);
-      // Try to recover by resetting
-      setTimeout(() => {
-        if (isPlaying && audio.paused) {
-          audio.play().catch(console.error);
-        }
-      }, 1000);
+      setIsLoading(false);
+      setHasError(true);
+      setIsPlaying(false);
     };
     const handleStalled = () => {
       console.log("Audio stalled, attempting recovery...");
+      setIsLoading(true);
       if (isPlaying) {
         setTimeout(() => {
           audio.play().catch(console.error);
         }, 500);
       }
+    };
+    const handleCanPlay = () => {
+      setIsLoading(false);
+      setHasError(false);
+    };
+    const handleWaiting = () => {
+      setIsLoading(true);
     };
 
     audio.addEventListener('ended', handleEnded);
@@ -58,6 +69,8 @@ export default function AudioPlayer() {
     audio.addEventListener('pause', handlePause);
     audio.addEventListener('error', handleError);
     audio.addEventListener('stalled', handleStalled);
+    audio.addEventListener('canplay', handleCanPlay);
+    audio.addEventListener('waiting', handleWaiting);
 
     return () => {
       audio.removeEventListener('ended', handleEnded);
@@ -65,6 +78,8 @@ export default function AudioPlayer() {
       audio.removeEventListener('pause', handlePause);
       audio.removeEventListener('error', handleError);
       audio.removeEventListener('stalled', handleStalled);
+      audio.removeEventListener('canplay', handleCanPlay);
+      audio.removeEventListener('waiting', handleWaiting);
     };
   }, [isPlaying]);
 
@@ -113,11 +128,18 @@ export default function AudioPlayer() {
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 rounded-full"
+          className={`h-8 w-8 rounded-full ${hasError ? 'text-red-500' : ''}`}
           onClick={togglePlay}
-          title={isPlaying ? "Pause Music" : "Play Music"}
+          disabled={isLoading}
+          title={hasError ? "Error loading track" : isPlaying ? "Pause Music" : "Play Music"}
         >
-          {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
+          {isLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : isPlaying ? (
+            <Pause className="h-4 w-4" />
+          ) : (
+            <Play className="h-4 w-4 ml-0.5" />
+          )}
         </Button>
         
         <Button
@@ -156,8 +178,10 @@ export default function AudioPlayer() {
       </div>
       <div className="flex items-center gap-2 ml-2">
         <Music className="h-3 w-3 text-muted-foreground" />
-        <span className="text-[10px] text-muted-foreground">
-          {MUSIC_TRACKS[currentTrack].name}
+        <span className={`text-[10px] ${hasError ? 'text-red-400' : 'text-muted-foreground'}`}>
+          {hasError ? `${MUSIC_TRACKS[currentTrack].name} (Error)` : 
+           isLoading ? `${MUSIC_TRACKS[currentTrack].name} (Loading...)` : 
+           MUSIC_TRACKS[currentTrack].name}
         </span>
       </div>
     </div>
