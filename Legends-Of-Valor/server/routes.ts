@@ -9274,22 +9274,143 @@ export async function registerRoutes(
       
       const contents = bundle.contents as any;
       const updates: any = {};
+      const grantedItems: string[] = [];
       
-      if (contents.gold) updates.gold = account.gold + contents.gold;
-      if (contents.trainingPoints) updates.trainingPoints = (account.trainingPoints || 0) + contents.trainingPoints;
-      if (contents.soulGins) updates.soulGins = (account.soulGins || 0) + contents.soulGins;
-      if (contents.beakCoins) updates.beakCoins = (account.beakCoins || 0) + contents.beakCoins;
-      if (contents.runes) updates.runes = (account.runes || 0) + contents.runes;
+      // Currency rewards
+      if (contents.gold) {
+        updates.gold = (account.gold || 0) + contents.gold;
+        grantedItems.push(`${contents.gold.toLocaleString()} Gold`);
+      }
+      if (contents.trainingPoints) {
+        updates.trainingPoints = (account.trainingPoints || 0) + contents.trainingPoints;
+        grantedItems.push(`${contents.trainingPoints} Training Points`);
+      }
+      if (contents.soulGins) {
+        updates.soulGins = (account.soulGins || 0) + contents.soulGins;
+        grantedItems.push(`${contents.soulGins} Soul Gins`);
+      }
+      if (contents.beakCoins) {
+        updates.beakCoins = (account.beakCoins || 0) + contents.beakCoins;
+        grantedItems.push(`${contents.beakCoins} Beak Coins`);
+      }
+      if (contents.runes) {
+        updates.runes = (account.runes || 0) + contents.runes;
+        grantedItems.push(`${contents.runes} Runes`);
+      }
+      if (contents.bait) {
+        updates.bait = (account.bait || 0) + contents.bait;
+        grantedItems.push(`${contents.bait} Fishing Bait`);
+      }
+      if (contents.craftingMats) {
+        updates.craftingMats = (account.craftingMats || 0) + contents.craftingMats;
+        grantedItems.push(`${contents.craftingMats} Crafting Materials`);
+      }
+      if (contents.mysticShards) {
+        updates.mysticShards = (account.mysticShards || 0) + contents.mysticShards;
+        grantedItems.push(`${contents.mysticShards} Mystic Shards`);
+      }
+      
+      // Pet Eggs
+      if (contents.petEggs) {
+        updates.petEggs = (account.petEggs || 0) + contents.petEggs;
+        grantedItems.push(`${contents.petEggs} Pet Egg(s)`);
+      }
+      if (contents.rarePetEggs) {
+        updates.rarePetEggs = (account.rarePetEggs || 0) + contents.rarePetEggs;
+        grantedItems.push(`${contents.rarePetEggs} Rare Pet Egg(s)`);
+      }
+      if (contents.epicPetEggs) {
+        updates.epicPetEggs = (account.epicPetEggs || 0) + contents.epicPetEggs;
+        grantedItems.push(`${contents.epicPetEggs} Epic Pet Egg(s)`);
+      }
+      if (contents.mythicPetEggs) {
+        updates.mythicPetEggs = (account.mythicPetEggs || 0) + contents.mythicPetEggs;
+        grantedItems.push(`${contents.mythicPetEggs} Mythic Pet Egg(s)`);
+      }
+      
+      // Skin Tickets
+      if (contents.skins) {
+        updates.skinTickets = (account.skinTickets || 0) + contents.skins;
+        grantedItems.push(`${contents.skins} Skin Ticket(s)`);
+      }
+      if (contents.rareSkins) {
+        updates.rareSkinTickets = (account.rareSkinTickets || 0) + contents.rareSkins;
+        grantedItems.push(`${contents.rareSkins} Rare Skin Ticket(s)`);
+      }
+      if (contents.epicSkins) {
+        updates.epicSkinTickets = (account.epicSkinTickets || 0) + contents.epicSkins;
+        grantedItems.push(`${contents.epicSkins} Epic Skin Ticket(s)`);
+      }
+      if (contents.mythicSkins) {
+        updates.mythicSkinTickets = (account.mythicSkinTickets || 0) + contents.mythicSkins;
+        grantedItems.push(`${contents.mythicSkins} Mythic Skin Ticket(s)`);
+      }
+      
+      // Temporary Buffs (VIP, Hero Aura, Pet Bond Boost)
+      const activeBuffs = [...(account.activeBuffs || [])];
+      const now = new Date();
+      
+      if (contents.heroAura7d) {
+        const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        activeBuffs.push({ id: "hero_aura", expiresAt: expiresAt.toISOString() });
+        grantedItems.push("Hero Aura (7 days)");
+      }
+      if (contents.petBondBoost24h) {
+        const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+        activeBuffs.push({ id: "pet_bond_boost", expiresAt: expiresAt.toISOString() });
+        grantedItems.push("Pet Bond Boost (24 hours)");
+      }
+      if (contents.petBondBoost48h) {
+        const expiresAt = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+        activeBuffs.push({ id: "pet_bond_boost", expiresAt: expiresAt.toISOString() });
+        grantedItems.push("Pet Bond Boost (48 hours)");
+      }
+      if (contents.conquerorBanner) {
+        const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+        activeBuffs.push({ id: "conqueror_banner", expiresAt: expiresAt.toISOString() });
+        grantedItems.push("Conqueror Banner (30 days)");
+      }
+      
+      if (activeBuffs.length > (account.activeBuffs || []).length) {
+        updates.activeBuffs = activeBuffs;
+      }
+      
+      // VIP Status (30 days from purchase or current expiration)
+      if (contents.vipStatus30d) {
+        const currentVip = account.vipUntil ? new Date(account.vipUntil) : now;
+        const baseDate = currentVip > now ? currentVip : now;
+        updates.vipUntil = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+        grantedItems.push("VIP Status (30 days)");
+      }
+      
+      // Unlock specific skins
+      if (contents.mountSkins || contents.epicPetSkins) {
+        const unlockedSkins = [...(account.unlockedSkins || [])];
+        if (contents.mountSkins) {
+          unlockedSkins.push("random_mount_skin_" + Date.now());
+          grantedItems.push(`${contents.mountSkins} Mount Skin(s)`);
+        }
+        if (contents.epicPetSkins) {
+          unlockedSkins.push("random_epic_pet_skin_" + Date.now());
+          grantedItems.push(`${contents.epicPetSkins} Epic Pet Skin(s)`);
+        }
+        updates.unlockedSkins = unlockedSkins;
+      }
+      
+      // Special items just get noted
+      if (contents.eliteRecipe) {
+        grantedItems.push(`${contents.eliteRecipe} Elite Recipe(s)`);
+      }
       
       await storage.updateAccount(accountId, updates);
       
       await storage.createActivityFeed({
         type: "shop_purchase",
         message: `${account.username} purchased ${bundle.name}!`,
-        metadata: { bundleId, contents },
+        metadata: { bundleId, grantedItems },
       });
       
-      res.json({ success: true, bundle: bundle.name, contents });
+      res.json({ success: true, bundle: bundle.name, grantedItems });
     } catch (error) {
       res.status(500).json({ error: "Failed to process purchase" });
     }

@@ -142,6 +142,21 @@ export const accounts = pgTable("accounts", {
   soulGins: bigint("soul_gins", { mode: "number" }).notNull().default(0), // For pet training
   beakCoins: bigint("beak_coins", { mode: "number" }).notNull().default(0), // For bird training
   valorTokens: bigint("valor_tokens", { mode: "number" }).notNull().default(0), // Premium currency ($Valor)
+  // $Valor Shop currencies
+  bait: bigint("bait", { mode: "number" }).notNull().default(0), // Fishing bait
+  craftingMats: bigint("crafting_mats", { mode: "number" }).notNull().default(0), // Crafting materials
+  mysticShards: bigint("mystic_shards", { mode: "number" }).notNull().default(0), // Rare mystic shards
+  petEggs: bigint("pet_eggs", { mode: "number" }).notNull().default(0), // Basic pet eggs
+  rarePetEggs: bigint("rare_pet_eggs", { mode: "number" }).notNull().default(0),
+  epicPetEggs: bigint("epic_pet_eggs", { mode: "number" }).notNull().default(0),
+  mythicPetEggs: bigint("mythic_pet_eggs", { mode: "number" }).notNull().default(0),
+  skinTickets: bigint("skin_tickets", { mode: "number" }).notNull().default(0), // Unlock random skins
+  rareSkinTickets: bigint("rare_skin_tickets", { mode: "number" }).notNull().default(0),
+  epicSkinTickets: bigint("epic_skin_tickets", { mode: "number" }).notNull().default(0),
+  mythicSkinTickets: bigint("mythic_skin_tickets", { mode: "number" }).notNull().default(0),
+  unlockedSkins: text("unlocked_skins").array().default(sql`ARRAY[]::text[]`), // Skins player owns
+  activeBuffs: jsonb("active_buffs").notNull().default([]).$type<{id: string; expiresAt: string}[]>(), // Temporary boosts
+  vipUntil: timestamp("vip_until"), // VIP status expiration
   pets: jsonb("pets").notNull().default([]).$type<string[]>(),
   rank: text("rank").notNull().default("Novice").$type<PlayerRank>(),
   wins: integer("wins").notNull().default(0),
