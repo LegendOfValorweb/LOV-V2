@@ -25,6 +25,7 @@ interface GameContextType {
   logout: () => void;
   login: (username: string, password: string, role: "player" | "admin", race?: string, gender?: string) => Promise<{ account: Account | null; error?: string; needsRaceSelection?: boolean }>;
   refreshInventory: () => Promise<void>;
+  refetchAccount: () => Promise<void>;
 }
 
 const GameContext = createContext<GameContextType | null>(null);
@@ -186,6 +187,21 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }
   }, [account]);
 
+  const refetchAccount = useCallback(async () => {
+    if (!account) return;
+    try {
+      const response = await fetch(`/api/accounts/${account.id}`);
+      if (response.ok) {
+        const freshAccount = await response.json();
+        setAccountState(freshAccount);
+        localStorage.setItem(ACCOUNT_STORAGE_PREFIX + freshAccount.username, JSON.stringify(freshAccount));
+        syncToGlobal(freshAccount);
+      }
+    } catch (error) {
+      console.error("Failed to refetch account:", error);
+    }
+  }, [account]);
+
   const spendGold = useCallback((amount: number): boolean => {
     if (!account || account.gold < amount) return false;
     const newAccount = { ...account, gold: account.gold - amount };
@@ -236,6 +252,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         logout,
         login,
         refreshInventory,
+        refetchAccount,
       }}
     >
       {children}
