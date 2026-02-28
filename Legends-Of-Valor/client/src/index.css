@@ -287,10 +287,10 @@
   gap: 2px;
   background: rgba(10,10,20,0.88);
   border: 1.5px solid rgba(255,191,0,0.45);
-  border-radius: 8px;
-  padding: 5px 7px;
-  min-width: 64px;
-  max-width: 110px;
+  border-radius: 7px;
+  padding: 4px 6px;
+  min-width: 56px;
+  max-width: 90px;
   backdrop-filter: blur(4px);
 }
 
