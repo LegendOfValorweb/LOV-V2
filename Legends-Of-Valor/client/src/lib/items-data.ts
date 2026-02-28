@@ -154,47 +154,6 @@ const eliteItems: Omit<Item, "id" | "tier">[] = [
 ];
 
 const mythicalLegendItems: Omit<Item, "id" | "tier">[] = [
-  {"name": "Mythical Origin Sword", "type": "weapon", "stats": {"Str": 1000000}, "price": 1000000000},
-  {"name": "Mythical Eternity Core", "type": "weapon", "stats": {"Int": 1000000}, "price": 1000000000},
-];
-
-const legendItems: Omit<Item, "id" | "tier">[] = [
-  {"name": "Legendary Realm Splitter", "type": "weapon", "stats": {"Str": 2800, "Luck": 1800}, "special": "Critical +12%", "price": 150000000},
-  {"name": "Bow of Mythic Legends", "type": "weapon", "stats": {"Spd": 2800, "Luck": 1800}, "special": "Stun 10%", "price": 150000000},
-  {"name": "Staff of Eternal Myth", "type": "weapon", "stats": {"Int": 3400}, "special": "Burn 3t", "price": 165000000},
-  {"name": "Legendary Hero's Armor", "type": "armor", "stats": {"Str": 2200, "Spd": 2200, "Int": 1700, "Luck": 1700}, "special": "Heroic Aura", "price": 180000000},
-  {"name": "Heart of Legends", "type": "accessory", "stats": {"Int": 2500, "Luck": 1700}, "special": "Legendary Will", "price": 140000000},
-  {"name": "Blade of Ancient Heroes", "type": "weapon", "stats": {"Str": 3100, "Spd": 1500}, "special": "Critical +12%", "price": 175000000},
-  {"name": "Legendary Shadowweave", "type": "armor", "stats": {"Spd": 2600, "Int": 2000}, "special": "Legend's Cloak", "price": 158000000},
-  {"name": "Ring of Timeless Glory", "type": "accessory", "stats": {"Luck": 2600, "Str": 1400}, "special": "Eternal Fame", "price": 162000000},
-  {"name": "Legend's Runic Greatsword", "type": "weapon", "stats": {"Str": 2950, "Spd": 1400}, "special": "Stun 10%", "price": 168000000},
-  {"name": "Legend's Spirit Bow", "type": "weapon", "stats": {"Spd": 2880, "Luck": 1760}, "special": "Burn 3t", "price": 155000000},
-  {"name": "Legend's Monument Plate", "type": "armor", "stats": {"Str": 2300, "Int": 1650, "Luck": 1600}, "price": 165000000},
-  {"name": "Legend's Myth Robe", "type": "armor", "stats": {"Int": 2750, "Spd": 2100}, "price": 148000000},
-  {"name": "Legend's Heroic Signet", "type": "accessory", "stats": {"Str": 2400, "Luck": 1600}, "price": 135000000},
-  {"name": "Legend's Eternal Amulet", "type": "accessory", "stats": {"Int": 2650, "Luck": 1800}, "special": "Hero's Legacy", "price": 138000000},
-  {"name": "Legend's Titan Gauntlets", "type": "armor", "stats": {"Str": 2250, "Spd": 2100}, "price": 155000000},
-];
-
-const eliteItems: Omit<Item, "id" | "tier">[] = [
-  {"name": "Elite Omega Destroyer", "type": "weapon", "stats": {"Str": 5000, "Luck": 3000}, "special": "Double Strike", "price": 500000000},
-  {"name": "Bow of Ultimate Annihilation", "type": "weapon", "stats": {"Spd": 5000, "Luck": 3000}, "special": "Life Steal 20%", "price": 500000000},
-  {"name": "Staff of Absolute Infinity", "type": "weapon", "stats": {"Int": 6000}, "special": "Critical +20%", "price": 550000000},
-  {"name": "Elite Transcendence Armor", "type": "armor", "stats": {"Str": 4000, "Spd": 4000, "Int": 3000, "Luck": 3000}, "special": "Transcendent Shield", "price": 600000000},
-  {"name": "Crown of the Elite", "type": "accessory", "stats": {"Int": 4500, "Luck": 3000}, "special": "Elite Dominion", "price": 480000000},
-  {"name": "Blade of Final Reckoning", "type": "weapon", "stats": {"Str": 5500, "Spd": 2800}, "special": "Double Strike", "price": 580000000},
-  {"name": "Elite Voidweave Mantle", "type": "armor", "stats": {"Spd": 4700, "Int": 3500}, "special": "Void Mastery", "price": 520000000},
-  {"name": "Ring of Ultimate Supremacy", "type": "accessory", "stats": {"Luck": 4700, "Str": 2500}, "special": "Supreme Authority", "price": 540000000},
-  {"name": "Elite Null-Blade", "type": "weapon", "stats": {"Str": 5300, "Spd": 2700}, "special": "Life Steal 20%", "price": 565000000},
-  {"name": "Elite Void Piercer Bow", "type": "weapon", "stats": {"Spd": 5100, "Luck": 2950}, "special": "Critical +20%", "price": 510000000},
-  {"name": "Elite Bastion Plate", "type": "armor", "stats": {"Str": 4200, "Int": 2900, "Luck": 2800}, "price": 540000000},
-  {"name": "Elite Nullweave Robe", "type": "armor", "stats": {"Int": 4900, "Spd": 3800}, "price": 500000000},
-  {"name": "Elite Supreme Signet", "type": "accessory", "stats": {"Str": 4400, "Luck": 2800}, "price": 460000000},
-  {"name": "Elite Oracle Medallion", "type": "accessory", "stats": {"Int": 4700, "Luck": 3050}, "special": "Infinity Cascade", "price": 475000000},
-  {"name": "Elite Titan Gauntlets", "type": "armor", "stats": {"Str": 4100, "Spd": 3900}, "price": 515000000},
-];
-
-const mythicalLegendItems: Omit<Item, "id" | "tier">[] = [
   {"name": "Mythical Legend's Worldsplitter", "type": "weapon", "stats": {"Str": 10000, "Luck": 6000}, "special": "Double Strike", "price": 2000000000},
   {"name": "Bow of Eternal Myths", "type": "weapon", "stats": {"Spd": 10000, "Luck": 6000}, "special": "Life Steal 25%", "price": 2000000000},
   {"name": "Staff of Creation's End", "type": "weapon", "stats": {"Int": 12000}, "special": "Stun 15%", "price": 2200000000},
