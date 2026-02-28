@@ -173,41 +173,48 @@ export function GameHUD() {
   return (
     <div className="game-hud">
       <div className="hud-top-bar">
-        <div className="flex items-center gap-3 pointer-events-auto">
-          <img 
-            src={getPortraitPath()} 
-            alt={account.username} 
-            className="hud-player-portrait-small" 
-            onClick={() => navigateTo("/base")}
-            title="View Base"
-          />
-          <div className="flex flex-col">
-            <div className="hud-player-name-small">
-              {account.username}
-              {account.vipUntil && new Date(account.vipUntil) > new Date() && <span className="hud-vip-badge-mini">VIP</span>}
+        <div className="hud-top-row">
+          <div className="flex items-center gap-3">
+            <img 
+              src={getPortraitPath()} 
+              alt={account.username} 
+              className="hud-player-portrait-small" 
+              onClick={() => navigateTo("/base")}
+            />
+            <div className="hud-player-info-compact">
+              <div className="hud-player-name-small">
+                {account.username}
+                {account.vipUntil && new Date(account.vipUntil) > new Date() && <span className="hud-vip-badge-mini">VIP</span>}
+              </div>
+              <div className="hud-player-rank-small">Lv.{rankLevel} {account.rank}</div>
             </div>
-            <div className="hud-player-rank-small">Lv.{rankLevel} {account.rank}</div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="hud-currencies-row">
+              <div className="hud-currency-mini" title="Gold">
+                <span className="text-amber-500 mr-1 text-[10px]">⬤</span>
+                <span>{formatNumber(account.gold || 0)}</span>
+              </div>
+              <div className="hud-currency-mini" title="Rubies">
+                <span className="text-red-500 mr-1 text-[10px]">◆</span>
+                <span>{formatNumber(account.rubies || 0)}</span>
+              </div>
+            </div>
+            
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-400" onClick={() => setSettingsOpen(true)}>
+              <Settings className="h-4 w-4" />
+            </Button>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 pointer-events-auto">
-          <div className="hud-currencies-compact mr-2">
-            <div className="hud-currency-mini" title="Gold">
-              <span className="text-amber-500 mr-1 text-[10px]">⬤</span>
-              <span>{formatNumber(account.gold || 0)}</span>
-            </div>
-            <div className="hud-currency-mini" title="Rubies">
-              <span className="text-red-500 mr-1 text-[10px]">◆</span>
-              <span>{formatNumber(account.rubies || 0)}</span>
-            </div>
+        <div className="hud-stats-row">
+          <div className="hud-energy-bar-compact" title={`Energy: ${energy}/${maxEnergy}`}>
+            <div className="hud-energy-fill" style={{ width: `${energyPercent}%` }} />
+            <span className="hud-energy-text">⚡ {energy} / {maxEnergy}</span>
           </div>
-
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-400" onClick={() => navigateTo("/ai-chat")}>
-            <MessageSquare className="h-4 w-4" />
-          </Button>
-          
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-400" onClick={() => setSettingsOpen(true)}>
-            <Settings className="h-4 w-4" />
+          <Button variant="ghost" size="icon" className="h-6 w-6 text-amber-400" onClick={() => navigateTo("/ai-chat")}>
+            <MessageSquare className="h-3 w-3" />
           </Button>
         </div>
       </div>
