@@ -63,7 +63,14 @@ export default function Landing() {
   const [selectedGender, setSelectedGender] = useState<"male" | "female">("male");
   const [selectedEgg, setSelectedEgg] = useState<string>("Fire");
   const [raceData, setRaceData] = useState<RaceData | null>(null);
+  const [selectedElement, setSelectedElement] = useState<string>("fire");
   const [error, setError] = useState("");
+
+  const getRaceStartingEgg = (race: string) => {
+    const modifier = raceData?.raceModifiers[race];
+    if (modifier?.element) return modifier.element;
+    return "Neutral";
+  };
 
   useEffect(() => {
     if (!isLoading && account) {
@@ -100,14 +107,21 @@ export default function Landing() {
     }
   };
 
-  const handleRaceConfirm = async () => {
+   const handleRaceConfirm = async () => {
     if (!selectedRace) {
       setError("Please select a race");
       return;
     }
     
     setError("");
-    const result = await login(playerName.trim(), playerPassword, "player", selectedRace, selectedGender, selectedEgg);
+    const result = await login(
+      playerName.trim(), 
+      playerPassword, 
+      "player", 
+      selectedRace, 
+      selectedGender, 
+      selectedRace === "elemental" ? selectedElement : selectedEgg
+    );
     
     if (result.account) {
       navigate("/world-map");
@@ -244,7 +258,38 @@ export default function Landing() {
                           <StatBadge label="INT" value={info?.Int} />
                           <StatBadge label="LCK" value={info?.Luck} />
                         </div>
-                        {info?.element && (
+                        {isSelected && (
+                          <div style={{background:"#1a1a2e",border:"1px solid #333",borderRadius:8,padding:12,marginTop:8,fontSize:13}}>
+                            <div style={{color:"#d4af37",marginBottom:6}}>Race Bonuses:</div>
+                            <div style={{color:"#888", marginBottom: 4}}>
+                              {Object.entries(info || {})
+                                .filter(([k, v]) => ["Str", "Def", "Spd", "Int", "Luck"].includes(k) && typeof v === 'number' && v !== 1.0)
+                                .map(([k, v]) => `${k}: ${((v as number) - 1 > 0 ? "+" : "") + (((v as number) - 1) * 100).toFixed(0)}%`)
+                                .join(", ")}
+                            </div>
+                            <div style={{color:"#888"}}>Starting Pet: 🥚 {getRaceStartingEgg(race)}</div>
+                            
+                            {race === "elemental" && (
+                              <div className="mt-2">
+                                <label className="block text-xs text-muted-foreground mb-1">Element Affinity:</label>
+                                <select 
+                                  value={selectedElement} 
+                                  onChange={e => setSelectedElement(e.target.value)}
+                                  className="w-full bg-background border border-border rounded px-2 py-1 text-xs"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <option value="fire">🔥 Fire</option>
+                                  <option value="water">💧 Water</option>
+                                  <option value="earth">🌍 Earth</option>
+                                  <option value="air">💨 Air</option>
+                                  <option value="lightning">⚡ Lightning</option>
+                                  <option value="ice">❄️ Ice</option>
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {info?.element && !isSelected && (
                           <Badge variant="outline" className="mt-2 text-xs">
                             {info.element} Affinity
                           </Badge>

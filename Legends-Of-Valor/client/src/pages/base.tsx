@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -166,6 +166,17 @@ interface BaseSkin {
   cost: number;
 }
 
+interface CraftingRecipe {
+  id: string;
+  name: string;
+  resultItemId: string;
+  tier: string;
+  requiredRank: string;
+  ingredients: { itemId: string; quantity: number }[];
+  goldCost: number;
+  description?: string;
+}
+
 interface TrophyData {
   id: string;
   name: string;
@@ -211,6 +222,31 @@ export default function Base() {
     queryFn: async () => {
       const res = await fetch("/api/base-skins");
       return res.json();
+    },
+  });
+
+  const { data: craftingRecipes = [] } = useQuery<CraftingRecipe[]>({
+    queryKey: ["/api/crafting/recipes"],
+    queryFn: async () => {
+      const res = await fetch("/api/crafting/recipes", { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!account?.id,
+  });
+
+  const craftItemMutation = useMutation({
+    mutationFn: async (recipeId: string) => {
+      const res = await apiRequest("POST", "/api/crafting/craft", { recipeId });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Item Crafted!", description: `You crafted ${data.name || "an item"}.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/crafting/recipes"] });
+      refetchAccount();
+    },
+    onError: (err: any) => {
+      toast({ title: "Craft Failed", description: err.message || "Could not craft item.", variant: "destructive" });
     },
   });
 
@@ -284,14 +320,42 @@ export default function Base() {
   );
 
   const { data: trainingStatus, refetch: refetchTraining } = useQuery<any>({
-    queryKey: ["/api/accounts", account?.id, "offline-training-status"],
+    queryKey: ["/api/accounts/" + account?.id + "/offline-training/status"],
     queryFn: async () => {
-      if (!account?.id) return { active: false };
       const res = await fetch(`/api/accounts/${account.id}/offline-training/status`);
       return res.json();
     },
     enabled: !!account?.id,
-    refetchInterval: 30000,
+    refetchInterval: 10000,
+  });
+
+  const startTrainingMutation = useMutation({
+    mutationFn: async (stat: string) => {
+      const res = await apiRequest("POST", `/api/accounts/${account.id}/offline-training/start`, { stat });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Training Started!" });
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts/" + account?.id + "/offline-training/status"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to start training", description: err.message, variant: "destructive" });
+    }
+  });
+
+  const collectTrainingMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/accounts/${account.id}/offline-training/stop`, {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Training Collected!", description: data.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts/" + account?.id + "/offline-training/status"] });
+      refetchAccount();
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to collect training", description: err.message, variant: "destructive" });
+    }
   });
 
   const { data: vaultStatus, refetch: refetchVault } = useQuery<any>({
@@ -559,6 +623,7 @@ export default function Base() {
                 <TabsTrigger value="training" className="flex-1">Training</TabsTrigger>
                 <TabsTrigger value="vault" className="flex-1">Vault</TabsTrigger>
                 <TabsTrigger value="defenses" className="flex-1">Defenses</TabsTrigger>
+                <TabsTrigger value="recipes" className="flex-1">Recipes</TabsTrigger>
                 <TabsTrigger value="raids" className="flex-1">Raids</TabsTrigger>
                 <TabsTrigger value="events" className="flex-1">Events</TabsTrigger>
                 <TabsTrigger value="settings" className="flex-1">Settings</TabsTrigger>
@@ -615,59 +680,37 @@ export default function Base() {
                 <Card>
                   <CardContent className="p-6">
                     {currentTier >= 3 ? (
-                      <div className="space-y-6">
-                        <div className="flex items-center justify-between">
-                          <h3 className="font-serif text-lg font-semibold flex items-center gap-2">
-                            <Dumbbell className="w-5 h-5 text-orange-500" />
-                            Offline Training
-                          </h3>
-                          <Badge variant="secondary">Lv. {roomLevels.training || 1}</Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          Train a stat while you're away. XP accumulates automatically for up to 24 hours.
-                          Rate: {trainingStatus?.xpPerHour || 0} XP/hour
-                        </p>
-
+                      <div>
+                        <h3 style={{color:"#d4af37", marginBottom:12}}>⚔️ Offline Training</h3>
                         {trainingStatus?.active ? (
-                          <div className="p-4 rounded-lg bg-orange-500/10 border border-orange-500/30">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="font-medium">Training: {trainingStatus.stat}</span>
-                              <Badge className="bg-orange-600">{trainingStatus.elapsedHours}h elapsed</Badge>
-                            </div>
-                            <p className="text-sm text-muted-foreground mb-3">
-                              Accumulated: +{trainingStatus.accumulatedXp} {trainingStatus.stat} XP
-                            </p>
-                            <Button
-                              onClick={handleStopTraining}
-                              disabled={isTraining}
-                              variant="destructive"
-                              className="w-full"
+                          <div>
+                            <p>Training: <strong>{trainingStatus.stat}</strong></p>
+                            <p>Started: {trainingStatus.startedAt ? new Date(trainingStatus.startedAt).toLocaleTimeString() : "Unknown"}</p>
+                            <p>Estimated XP gain: <strong>{trainingStatus.accumulatedXp || 0}</strong></p>
+                            <p className="text-xs text-muted-foreground mb-4">XP Rate: {trainingStatus.xpPerHour} XP/hour</p>
+                            <button 
+                              onClick={() => collectTrainingMutation.mutate()} 
+                              disabled={collectTrainingMutation.isPending}
+                              style={{background:"#22c55e",color:"white",border:"none",padding:"8px 16px",borderRadius:4,cursor:"pointer",marginTop:8}}
                             >
-                              {isTraining ? "Collecting..." : "Stop & Collect XP"}
-                            </Button>
+                              💰 Collect Training ({trainingStatus.accumulatedXp || 0} XP)
+                            </button>
                           </div>
                         ) : (
-                          <div className="space-y-4">
-                            <div className="grid grid-cols-5 gap-2">
-                              {["Str", "Def", "Spd", "Int", "Luck"].map((stat) => (
-                                <Button
-                                  key={stat}
-                                  variant={selectedTrainingStat === stat ? "default" : "outline"}
-                                  size="sm"
-                                  onClick={() => setSelectedTrainingStat(stat)}
+                          <div>
+                            <p style={{color:"#888",marginBottom:12}}>Select a stat to train while offline (Max 24h):</p>
+                            <div className="flex flex-wrap gap-2">
+                              {["Str","Def","Spd","Int","Luck"].map(stat => (
+                                <button 
+                                  key={stat} 
+                                  onClick={() => startTrainingMutation.mutate(stat)} 
+                                  disabled={startTrainingMutation.isPending}
+                                  style={{background:"#1a1a2e",border:"1px solid #d4af37",color:"#d4af37",padding:"6px 12px",borderRadius:4,cursor:"pointer"}}
                                 >
-                                  {stat}
-                                </Button>
+                                  Train {stat}
+                                </button>
                               ))}
                             </div>
-                            <Button
-                              onClick={handleStartTraining}
-                              disabled={isTraining}
-                              className="w-full"
-                            >
-                              <Dumbbell className="w-4 h-4 mr-2" />
-                              {isTraining ? "Starting..." : `Start Training ${selectedTrainingStat}`}
-                            </Button>
                           </div>
                         )}
                       </div>
@@ -928,6 +971,81 @@ export default function Base() {
                     </div>
                   </CardContent>
                 </Card>
+              </TabsContent>
+
+              <TabsContent value="recipes" className="mt-4">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-serif text-lg font-semibold flex items-center gap-2">
+                      <Hammer className="w-5 h-5 text-orange-400" />
+                      Crafting Recipes
+                    </h3>
+                    <Badge variant="secondary">{craftingRecipes.length} recipes</Badge>
+                  </div>
+                  {craftingRecipes.length === 0 ? (
+                    <Card>
+                      <CardContent className="p-6 text-center text-muted-foreground">
+                        <Hammer className="w-12 h-12 mx-auto mb-4 opacity-40" />
+                        <p>No crafting recipes available yet.</p>
+                        <p className="text-sm mt-2">Advance your rank to unlock recipes.</p>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {craftingRecipes.map((recipe) => {
+                        const canCraft = (account?.rank && recipe.requiredRank) ?
+                          playerRanks.indexOf(account.rank as any) >= playerRanks.indexOf(recipe.requiredRank as any) : false;
+                        return (
+                          <Card key={recipe.id} className={!canCraft ? "opacity-60" : ""}>
+                            <CardHeader className="pb-2">
+                              <div className="flex items-center justify-between">
+                                <CardTitle className="text-sm">{recipe.name}</CardTitle>
+                                <Badge variant="outline" className="text-xs capitalize">{recipe.tier}</Badge>
+                              </div>
+                              {recipe.description && (
+                                <CardDescription className="text-xs">{recipe.description}</CardDescription>
+                              )}
+                            </CardHeader>
+                            <CardContent className="pt-0">
+                              <div className="space-y-2">
+                                <div className="text-xs text-muted-foreground">
+                                  <span className="font-medium">Required Rank:</span>{" "}
+                                  <span className={canCraft ? "text-green-400" : "text-red-400"}>{recipe.requiredRank}</span>
+                                </div>
+                                <div className="text-xs">
+                                  <span className="font-medium text-muted-foreground">Ingredients:</span>
+                                  <div className="mt-1 space-y-0.5">
+                                    {recipe.ingredients.map((ing, i) => (
+                                      <div key={i} className="flex items-center gap-1 text-muted-foreground">
+                                        <span>×{ing.quantity}</span>
+                                        <span className="capitalize">{ing.itemId.replace(/_/g, " ")}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                                {recipe.goldCost > 0 && (
+                                  <div className="text-xs flex items-center gap-1 text-yellow-400">
+                                    <Coins className="w-3 h-3" />
+                                    {recipe.goldCost.toLocaleString()} gold
+                                  </div>
+                                )}
+                                <Button
+                                  size="sm"
+                                  className="w-full mt-2"
+                                  disabled={!canCraft || craftItemMutation.isPending}
+                                  onClick={() => craftItemMutation.mutate(recipe.id)}
+                                >
+                                  <Hammer className="w-3 h-3 mr-1" />
+                                  {!canCraft ? `Requires ${recipe.requiredRank}` : "Craft"}
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </TabsContent>
 
               <TabsContent value="raids" className="mt-4">

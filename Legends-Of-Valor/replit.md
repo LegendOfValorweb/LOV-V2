@@ -87,6 +87,10 @@ Legends-Of-Valor/
 - Admin auction house (8hr bidding)
 - Guild shops with progressive unlocks
 - $Valor currency packs
+- Dynamic market economy: supply/demand tracking in economy-system.ts
+  - recordPurchase/recordSale update real-time item prices (0.5x–2.0x base)
+  - Shop shows ↑/↓ trend indicators with "Market Trends" panel
+  - Price trend sidebar showing hot and discounted items
 
 ### PHASE 7: AI Story Guide
 - 4-Act storyline (Awakening, Fractured Realms, Hell Zone, Convergence War)
@@ -114,6 +118,23 @@ Legends-Of-Valor/
 - 8 cosmetic mounts with unlock requirements
 - Mythical Legend ascension requirements
 - Quintillion power milestones
+- Admin teleport: POST /api/admin/teleport-player sets player respawnLocation
+- Admin force-end challenge: POST /api/admin/challenges/:id/force-end
+
+### PHASE 11: Recent Additions (Session 5)
+- Weather spawn modifiers: thunderstorm +boss ×3, rain +elite ×1.8, fog +champion ×2, blizzard +boss ×2
+- Status effects in combat: stun (😵), freeze (🧊), silence (🔇) — 20% boss/champion chance
+- Death penalty display modal: shows gold lost + equipment durability damage
+- Pet HP bar + fainting mechanic: pets take 10% of player damage, faint when HP=0
+- GET /api/accounts/:id/pet/revival-cost endpoint
+- Faction Reputation system: 4 factions (Merchants, Warriors, Scholars, Naturalists)
+  - reputationData jsonb field in accounts table
+  - GET/POST /api/accounts/:id/reputation and /reputation/gain
+  - /reputation page with progress bars and unlock rewards
+  - 🏅 Rep button in HUD menu
+- Offline Training UI in base.tsx: start/collect with 10s refresh
+- Race bonus display + elemental race element picker in registration
+- Schema: accounts.reputationData (jsonb)
 
 ## Running the Project
 

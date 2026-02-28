@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { getWorldTimeInfo, getDayNightState } from "./weather-system";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, hellZoneSessions, hellZoneParticipants } from "@shared/schema";
+import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, hellZoneSessions, hellZoneParticipants } from "@shared/schema";
 import { z } from "zod";
 import type { Account, Event, Challenge, PlayerRace, PlayerGender } from "@shared/schema";
 import {
@@ -1599,6 +1599,20 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/teleport-player", async (req, res) => {
+    try {
+      const { adminId, targetAccountId, location } = req.body;
+      const admin = await storage.getAccount(adminId);
+      if (!admin || admin.role !== "admin") return res.status(403).json({ error: "Admin access required" });
+      const validLocations = ["capital_city", "mountain_caverns", "ancient_ruins", "enchanted_forest", "crystal_lake", "coastal_village", "ruby_mines", "battle_arena"];
+      if (!validLocations.includes(location)) return res.status(400).json({ error: "Invalid location" });
+      await db.update(accounts).set({ respawnLocation: location }).where(eq(accounts.id, targetAccountId));
+      res.json({ success: true, message: `Player teleported to ${location}` });
+    } catch (error) {
+      res.status(500).json({ error: "Teleport failed" });
+    }
+  });
+
   app.get("/api/accounts/:accountId/inventory", async (req, res) => {
     const inventory = await storage.getInventoryByAccount(req.params.accountId);
     res.json(inventory);
@@ -2194,6 +2208,18 @@ export async function registerRoutes(
       res.json(challengesWithNames);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch accepted challenges" });
+    }
+  });
+
+  app.post("/api/admin/challenges/:challengeId/force-end", async (req, res) => {
+    try {
+      const { adminId } = req.body;
+      const admin = await storage.getAccount(adminId);
+      if (!admin || admin.role !== "admin") return res.status(403).json({ error: "Admin access required" });
+      await db.delete(challengesTable).where(eq(challengesTable.id, req.params.challengeId));
+      res.json({ success: true, message: "Challenge force-ended" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to force-end challenge" });
     }
   });
   
@@ -2878,6 +2904,17 @@ export async function registerRoutes(
   app.get("/api/accounts/:accountId/pets", async (req, res) => {
     const pets = await storage.getPetsByAccount(req.params.accountId);
     res.json(pets);
+  });
+
+  app.get("/api/accounts/:id/pet/revival-cost", async (req, res) => {
+    const account = await storage.getAccount(req.params.id);
+    if (!account) return res.status(404).json({ error: "Not found" });
+    const activePetId = (account as any).equippedPetId;
+    if (!activePetId) return res.json({ hasPet: false });
+    const activePet = await storage.getPet(activePetId);
+    if (!activePet) return res.json({ hasPet: false });
+    const revivalCost = 500; // flat cost
+    res.json({ hasPet: true, petName: activePet.name || "Your Pet", revivalCost, canAfford: account.gold >= revivalCost });
   });
 
   app.post("/api/accounts/:accountId/pets", async (req, res) => {
@@ -11017,17 +11054,26 @@ export async function registerRoutes(
     mystic_tower: { difficulty: "hard", enemies: ["Tower Guardian", "Arcane Sentinel", "Floor Boss"] },
   };
 
-  function getRandomArchetype(): keyof typeof ENEMY_ARCHETYPES {
-    const totalWeight = Object.values(ENEMY_ARCHETYPES).reduce((sum, a) => sum + a.spawnWeight, 0);
+  const WEATHER_SPAWN_MODS: Record<string, Record<string, number>> = {
+    thunderstorm: { boss: 3.0, champion: 1.5, elite: 1.2, minion: 0.6 },
+    rain:         { elite: 1.8, champion: 1.3, minion: 0.8 },
+    fog:          { champion: 2.0, minion: 0.7, boss: 1.3 },
+    blizzard:     { boss: 2.0, elite: 1.5, champion: 1.2, minion: 0.5 },
+    clear:        {},
+  };
+
+  function getRandomArchetype(weatherType?: string): keyof typeof ENEMY_ARCHETYPES {
+    const mods = weatherType ? (WEATHER_SPAWN_MODS[weatherType] || {}) : {};
+    const totalWeight = Object.entries(ENEMY_ARCHETYPES).reduce((sum, [key, a]) => sum + a.spawnWeight * (mods[key] || 1), 0);
     let random = Math.random() * totalWeight;
     for (const [key, archetype] of Object.entries(ENEMY_ARCHETYPES)) {
-      random -= archetype.spawnWeight;
+      random -= archetype.spawnWeight * (mods[key] || 1);
       if (random <= 0) return key as keyof typeof ENEMY_ARCHETYPES;
     }
     return "minion";
   }
 
-  function generateZoneEnemy(zoneId: string, playerPower: number, playerRankIndex: number) {
+  function generateZoneEnemy(zoneId: string, playerPower: number, playerRankIndex: number, weatherType?: string) {
     const zoneConfig = ZONE_ENEMY_CONFIG[zoneId] || ZONE_ENEMY_CONFIG["capital_city"];
     const difficultyConfig = ZONE_DIFFICULTIES[zoneConfig.difficulty];
     
@@ -11036,7 +11082,7 @@ export async function registerRoutes(
     const effectivePower = Math.min(playerPower, maxPower);
     const scaledPower = Math.max(minPower, Math.min(effectivePower, maxPower));
     
-    const archetype = getRandomArchetype();
+    const archetype = getRandomArchetype(weatherType);
     const archetypeConfig = ENEMY_ARCHETYPES[archetype];
     const enemyName = zoneConfig.enemies[Math.floor(Math.random() * zoneConfig.enemies.length)];
     
@@ -11131,8 +11177,9 @@ export async function registerRoutes(
         }
       }
       
-      const enemy = generateZoneEnemy(zoneId, playerPower, playerRankIndex);
-      res.json(enemy);
+      const zoneWeather = getZoneWeather(zoneId);
+      const enemy = generateZoneEnemy(zoneId, playerPower, playerRankIndex, zoneWeather?.type);
+      res.json({ ...enemy, weatherType: zoneWeather?.type });
     } catch (error) {
       console.error("Generate enemy error:", error);
       res.status(500).json({ error: "Failed to generate enemy" });
@@ -11174,7 +11221,8 @@ export async function registerRoutes(
         }
       }
       
-      const enemy = generateZoneEnemy(zoneId, playerPower, playerRankIndex);
+      const zoneWeatherQuick = getZoneWeather(zoneId);
+      const enemy = generateZoneEnemy(zoneId, playerPower, playerRankIndex, zoneWeatherQuick?.type);
       
       // Simple battle simulation
       const playerAttack = (account.stats?.Str || 10) + Math.floor(Math.random() * 20);
@@ -13258,6 +13306,40 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Energy status error:", error);
       res.status(500).json({ error: "Failed to get energy status" });
+    }
+  });
+
+  // Reputation System
+  app.get("/api/accounts/:id/reputation", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.id);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+      const reputation = (account as any).reputationData || {};
+      const factions = [
+        { id: "merchants", name: "Merchant Guild", icon: "💰", current: reputation.merchants || 0, max: 100, unlockAt: 50, unlockReward: "Exclusive merchant discounts & rare items" },
+        { id: "warriors", name: "Warriors Brotherhood", icon: "⚔️", current: reputation.warriors || 0, max: 100, unlockAt: 50, unlockReward: "Combat skills & weapon upgrades" },
+        { id: "scholars", name: "Scholar Society", icon: "📚", current: reputation.scholars || 0, max: 100, unlockAt: 50, unlockReward: "Rare spell tomes & stat boosts" },
+        { id: "naturalists", name: "Nature Wardens", icon: "🌿", current: reputation.naturalists || 0, max: 100, unlockAt: 50, unlockReward: "Rare pet encounters & training bonuses" },
+      ];
+      res.json({ factions, totalReputation: Object.values(reputation).reduce((a: number, b: any) => a + (b as number), 0) });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch reputation" });
+    }
+  });
+
+  app.post("/api/accounts/:id/reputation/gain", async (req, res) => {
+    try {
+      const { faction, amount } = req.body;
+      const account = await storage.getAccount(req.params.id);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+      const validFactions = ["merchants", "warriors", "scholars", "naturalists"];
+      if (!validFactions.includes(faction)) return res.status(400).json({ error: "Invalid faction" });
+      const rep: Record<string, number> = ((account as any).reputationData as Record<string, number>) || {};
+      rep[faction] = Math.min(100, (rep[faction] || 0) + (amount || 5));
+      await db.update(accounts).set({ reputationData: rep } as any).where(eq(accounts.id, req.params.id));
+      res.json({ success: true, reputation: rep });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to gain reputation" });
     }
   });
 

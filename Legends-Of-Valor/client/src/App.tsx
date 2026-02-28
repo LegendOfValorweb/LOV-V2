@@ -36,6 +36,7 @@ import Mining from "@/pages/mining";
 import RubyMines from "@/pages/ruby-mines";
 import HellZone from "@/pages/hell-zone";
 import Valorpedia from "@/pages/valorpedia";
+import Reputation from "@/pages/reputation";
 import NotFound from "@/pages/not-found";
 import { MobileLandscapePrompt } from "@/components/mobile-landscape-prompt";
 import { AppLoadingWrapper } from "@/components/app-loading-wrapper";
@@ -73,6 +74,7 @@ function Router() {
       <Route path="/ruby-mines" component={RubyMines} />
       <Route path="/hell-zone" component={HellZone} />
       <Route path="/valorpedia" component={Valorpedia} />
+      <Route path="/reputation" component={Reputation} />
       <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>

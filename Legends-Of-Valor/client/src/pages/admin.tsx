@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import type { Item, ItemTier, ItemType, Account, PlayerRank, Event, Challenge, Pet, PetTier, PetElement, PetStats } from "@shared/schema";
 import { petTiers, petElements } from "@shared/schema";
 import { ALL_ITEMS, TIER_LABELS, getItemById } from "@/lib/items-data";
@@ -512,6 +512,7 @@ export default function Admin() {
   const [selectedTier, setSelectedTier] = useState<ItemTier | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [playerSearchQuery, setPlayerSearchQuery] = useState("");
+  const [teleportPlayer, setTeleportPlayer] = useState<Account | null>(null);
   const [giveItemDialog, setGiveItemDialog] = useState<Item | null>(null);
   const [playerName, setPlayerName] = useState("");
   const [editPlayerDialog, setEditPlayerDialog] = useState<Account | null>(null);
@@ -536,6 +537,8 @@ export default function Admin() {
   });
   const [viewRegistrationsEvent, setViewRegistrationsEvent] = useState<Event | null>(null);
 
+  const [teleportLocation, setTeleportLocation] = useState<string>("capital_city");
+
   interface EventRegistration {
     id: string;
     eventId: string;
@@ -558,6 +561,52 @@ export default function Admin() {
 
   const { data: players = [], isLoading: playersLoading } = useQuery<Account[]>({
     queryKey: ["/api/accounts"],
+  });
+
+  const validLocations = [
+    { id: "capital_city", name: "Capital City" },
+    { id: "mountain_caverns", name: "Mountain Caverns" },
+    { id: "ancient_ruins", name: "Ancient Ruins" },
+    { id: "enchanted_forest", name: "Enchanted Forest" },
+    { id: "crystal_lake", name: "Crystal Lake" },
+    { id: "coastal_village", name: "Coastal Village" },
+    { id: "ruby_mines", name: "Ruby Mines" },
+    { id: "battle_arena", name: "Battle Arena" },
+  ];
+
+  const teleportMutation = useMutation({
+    mutationFn: async ({ targetAccountId, location }: { targetAccountId: string; location: string }) => {
+      const res = await apiRequest("POST", "/api/admin/teleport-player", {
+        adminId: account?.id,
+        targetAccountId,
+        location,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+      toast({ title: "Success", description: "Player teleported successfully" });
+      setTeleportPlayer(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Teleport failed", variant: "destructive" });
+    },
+  });
+
+  const forceEndChallengeMutation = useMutation({
+    mutationFn: async (challengeId: string) => {
+      const res = await apiRequest("POST", `/api/admin/challenges/${challengeId}/force-end`, {
+        adminId: account?.id,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/challenges"] });
+      toast({ title: "Success", description: "Challenge force-ended" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to force-end challenge", variant: "destructive" });
+    },
   });
 
   const { data: events = [], isLoading: eventsLoading } = useQuery<Event[]>({
@@ -1626,6 +1675,16 @@ export default function Admin() {
                         <Button
                           size="sm"
                           variant="outline"
+                          className="flex-1"
+                          onClick={() => setTeleportPlayer(player)}
+                          data-testid={`button-teleport-player-${player.id}`}
+                        >
+                          <Zap className="w-3.5 h-3.5 mr-1" />
+                          Teleport
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
                           className="px-3 text-destructive hover:bg-destructive/10"
                           onClick={() => handleDeletePlayer(player)}
                           data-testid={`button-delete-player-${player.id}`}
@@ -1776,6 +1835,22 @@ export default function Admin() {
                       </div>
                       <div className="text-xs text-muted-foreground text-center">
                         Accepted: {challenge.acceptedAt ? new Date(challenge.acceptedAt).toLocaleString() : "N/A"}
+                      </div>
+                      
+                      <div className="flex justify-center pt-2">
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="w-full h-8 text-xs"
+                          onClick={() => {
+                            if (confirm("Are you sure you want to force-end this challenge?")) {
+                              forceEndChallengeMutation.mutate(challenge.id);
+                            }
+                          }}
+                          disabled={forceEndChallengeMutation.isPending}
+                        >
+                          {forceEndChallengeMutation.isPending ? "Ending..." : "Force End Challenge"}
+                        </Button>
                       </div>
                       
                       {(challenge.challengerIsNPC || challenge.challengedIsNPC) ? (
@@ -3292,6 +3367,50 @@ export default function Admin() {
             </Button>
             <Button onClick={handleSavePlayer} data-testid="button-save-player">
               Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!teleportPlayer} onOpenChange={(open) => !open && setTeleportPlayer(null)}>
+        <DialogContent className="max-w-sm" data-testid="dialog-teleport-player">
+          <DialogHeader>
+            <DialogTitle className="font-serif">Teleport Player: {teleportPlayer?.username}</DialogTitle>
+            <DialogDescription>
+              Select a location to teleport this player to.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Location</Label>
+              <Select value={teleportLocation} onValueChange={setTeleportLocation}>
+                <SelectTrigger data-testid="select-teleport-location">
+                  <SelectValue placeholder="Select location" />
+                </SelectTrigger>
+                <SelectContent>
+                  {validLocations.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id}>
+                      {loc.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTeleportPlayer(null)} data-testid="button-cancel-teleport">
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                if (teleportPlayer) {
+                  teleportMutation.mutate({ targetAccountId: teleportPlayer.id, location: teleportLocation });
+                }
+              }}
+              disabled={teleportMutation.isPending}
+              data-testid="button-confirm-teleport"
+            >
+              {teleportMutation.isPending ? "Teleporting..." : "Teleport"}
             </Button>
           </DialogFooter>
         </DialogContent>

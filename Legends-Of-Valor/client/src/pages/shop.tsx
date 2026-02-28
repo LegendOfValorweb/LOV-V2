@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import type { Item, ItemTier, ItemType } from "@shared/schema";
 import { playerRanks } from "@shared/schema";
 import { ALL_ITEMS, TIER_LABELS } from "@/lib/items-data";
@@ -84,6 +85,10 @@ export default function Shop() {
   const { account, inventory, addToInventory, logout } = useGame();
   const { toast } = useToast();
 
+  const { data: marketPrices } = useQuery<Record<string, any>>({
+    queryKey: ["/api/economy/market-prices"],
+  });
+
   const [selectedTier, setSelectedTier] = useState<ItemTier | "all">("all");
   const [selectedType, setSelectedType] = useState<ItemType | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -145,12 +150,37 @@ export default function Shop() {
     setHoveredItem(null);
   }, []);
 
+  function getPriceTrend(itemId: string, basePrice: number): { indicator: string; color: string } | null {
+    if (!marketPrices) return null;
+    const market = marketPrices[itemId];
+    if (!market) return null;
+    if (market.currentPrice > market.basePrice * 1.05) return { indicator: "↑", color: "#ef4444" };
+    if (market.currentPrice < market.basePrice * 0.95) return { indicator: "↓", color: "#22c55e" };
+    return null;
+  }
+
   if (!account || account.role !== "player") {
     navigate("/");
     return null;
   }
 
   const availableTiers: (ItemTier | "all")[] = ["all", ...["normal", "super_rare", "x_tier", "umr", "ssumr", "divine", "initiate", "journeyman", "adept", "expert", "master", "grandmaster", "champion", "overlord", "sovereign", "ascendant", "legend", "elite", "mythical_legend"].filter(t => !excludedTiers.includes(t as ItemTier)) as ItemTier[]];
+
+  const hotItems = useMemo(() => {
+    if (!marketPrices) return [];
+    return ALL_ITEMS.filter(item => {
+      const trend = getPriceTrend(item.id, item.price);
+      return trend && trend.indicator === "↑";
+    }).slice(0, 5);
+  }, [marketPrices]);
+
+  const discountedItems = useMemo(() => {
+    if (!marketPrices) return [];
+    return ALL_ITEMS.filter(item => {
+      const trend = getPriceTrend(item.id, item.price);
+      return trend && trend.indicator === "↓";
+    }).slice(0, 5);
+  }, [marketPrices]);
 
   return (
     <div className="game-page-scroll" style={{ background: "hsl(240 10% 6%)" }}>
@@ -161,6 +191,29 @@ export default function Shop() {
       <div style={{ position: "relative", zIndex: 1, padding: "8px 12px", maxWidth: 1000, margin: "0 auto" }}>
         <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 12, minHeight: "calc(100vh - 60px)" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div className="rpg-inv-panel">
+              <div className="rpg-inv-panel-header">
+                📈 Market Trends
+              </div>
+              <div style={{ padding: 8, fontSize: "0.65rem", display: "flex", flexDirection: "column", gap: 6 }}>
+                {hotItems.length > 0 && (
+                  <div>
+                    <div style={{ color: "#ef4444", fontWeight: "bold", marginBottom: 2 }}>🔥 Hot items (high demand):</div>
+                    <div style={{ color: "hsl(45 10% 70%)" }}>{hotItems.map(i => i.name).join(", ")}</div>
+                  </div>
+                )}
+                {discountedItems.length > 0 && (
+                  <div>
+                    <div style={{ color: "#22c55e", fontWeight: "bold", marginBottom: 2 }}>🏷️ Discounted items:</div>
+                    <div style={{ color: "hsl(45 10% 70%)" }}>{discountedItems.map(i => i.name).join(", ")}</div>
+                  </div>
+                )}
+                {hotItems.length === 0 && discountedItems.length === 0 && (
+                  <div style={{ color: "hsl(45 10% 50%)", textAlign: "center", fontStyle: "italic" }}>Market is stable</div>
+                )}
+              </div>
+            </div>
+
             <div className="rpg-inv-panel">
               <div className="rpg-inv-panel-header">
                 🛒 Item Shop
@@ -274,7 +327,13 @@ export default function Shop() {
                         <span className="rpg-shop-slot-icon">
                           {isOwned ? "✓" : ITEM_TYPE_ICONS[item.type] || "?"}
                         </span>
-                        <span className="rpg-shop-slot-price">{formatPrice(item.price)}</span>
+                        <span className="rpg-shop-slot-price">
+                          {formatPrice(item.price)}
+                          {(() => {
+                            const trend = getPriceTrend(item.id || item.name, item.price || item.cost || 0);
+                            return trend ? <span style={{color: trend.color, fontWeight: "bold", fontSize: 10, marginLeft: 2}}>{trend.indicator}</span> : null;
+                          })()}
+                        </span>
                       </>
                     )}
                   </div>
@@ -316,6 +375,10 @@ export default function Shop() {
                 {confirmItem.special && <div className="rpg-tooltip-special" style={{ marginTop: 8 }}>✦ {confirmItem.special}</div>}
                 <div style={{ marginTop: 12, textAlign: "center", fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: "1.1rem", color: "hsl(45 90% 55%)" }}>
                   ⬤ {confirmItem.price.toLocaleString()} gold
+                  {(() => {
+                    const trend = getPriceTrend(confirmItem.id || confirmItem.name, confirmItem.price || 0);
+                    return trend ? <span style={{color: trend.color, fontWeight: "bold", fontSize: 14, marginLeft: 4}}>{trend.indicator}</span> : null;
+                  })()}
                 </div>
               </div>
             </div>

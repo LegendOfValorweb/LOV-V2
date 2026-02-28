@@ -36,6 +36,7 @@ const ZONE_NAMES: Record<string, string> = {
   "/ruby-mines": "Ruby Mines",
   "/hell-zone": "Hell Zone",
   "/valorpedia": "Valorpedia",
+  "/reputation": "Faction Reputation",
   "/admin": "Admin Console",
 };
 
@@ -63,11 +64,12 @@ function formatNumber(n: number): string {
 
 export function GameHUD() {
   const [location, navigate] = useLocation();
-  const { account } = useGame();
+  const { account, logout } = useGame();
   const [energyData, setEnergyData] = useState<{ energy: number; maxEnergy: number } | null>(null);
   const [activePet, setActivePet] = useState<PetData | null>(null);
   const [activeBird, setActiveBird] = useState<BirdData | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [combatCooldown, setCombatCooldown] = useState(0);
 
   const isVisible = location !== "/" && location !== "/admin" && !!account;
   const accountId = account?.id;
@@ -129,6 +131,24 @@ export function GameHUD() {
   useEffect(() => {
     setMenuOpen(false);
   }, [location]);
+
+  useEffect(() => {
+    if (!account?.lastCombatTime) { setCombatCooldown(0); return; }
+    const tick = () => {
+      const elapsed = Date.now() - new Date(account.lastCombatTime!).getTime();
+      const remaining = Math.max(0, 30 - Math.floor(elapsed / 1000));
+      setCombatCooldown(remaining);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [account?.lastCombatTime]);
+
+  const handleLogout = useCallback(() => {
+    if (combatCooldown > 0) return;
+    setMenuOpen(false);
+    logout();
+  }, [combatCooldown, logout]);
 
   const navigateTo = useCallback((path: string) => {
     setMenuOpen(false);
@@ -257,6 +277,9 @@ export function GameHUD() {
             <button className="hud-menu-item" onClick={() => navigateTo("/valorpedia")}>
               <span>📚</span><span>Pedia</span>
             </button>
+            <button className="hud-menu-item" onClick={() => navigateTo("/reputation")}>
+              <span>🏅</span><span>Rep</span>
+            </button>
             <button className="hud-menu-item" onClick={() => navigateTo("/tournaments")}>
               <span>⚔</span><span>Tourney</span>
             </button>
@@ -268,6 +291,14 @@ export function GameHUD() {
                 <span>🔧</span><span>Admin</span>
               </button>
             )}
+            <button
+              className={`hud-menu-item ${combatCooldown > 0 ? 'opacity-60 cursor-not-allowed' : 'text-red-400 hover:text-red-300'}`}
+              onClick={handleLogout}
+              title={combatCooldown > 0 ? `Cannot logout during combat (${combatCooldown}s)` : "Logout"}
+            >
+              <span>🚪</span>
+              <span>{combatCooldown > 0 ? `${combatCooldown}s` : "Logout"}</span>
+            </button>
           </div>
         </div>
       )}

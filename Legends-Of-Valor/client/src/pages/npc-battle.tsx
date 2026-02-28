@@ -53,6 +53,13 @@ export default function NpcBattle() {
   const [autoFightProgress, setAutoFightProgress] = useState({ current: 0, total: 0, wins: 0, losses: 0 });
   const autoFightRef = useRef<boolean>(false);
 
+  // Status effects state
+  const [statusEffects, setStatusEffects] = useState<{ type: "stun" | "freeze" | "silence", turnsLeft: number }[]>([]);
+  
+  // Pet combat state
+  const [petHP, setPetHP] = useState({ current: 100, max: 100 });
+  const [isPetFainted, setIsPetFainted] = useState(false);
+
   const { data: currentNpc } = useQuery({
     queryKey: ["/api/accounts", account?.id, "current-npc"],
     queryFn: async () => {
@@ -98,6 +105,52 @@ export default function NpcBattle() {
     onSuccess: (result) => {
       setBattleResult(result);
       queryClient.invalidateQueries({ queryKey: ["/api/accounts", account?.id, "current-npc"] });
+
+      // Update status effects and pet status
+      if (currentNpc?.isBoss || currentNpc?.archetype === "champion") {
+        const shouldApplyEffect = Math.random() < 0.2;
+        if (shouldApplyEffect) {
+          const types: ("stun" | "freeze" | "silence")[] = ["stun", "freeze", "silence"];
+          const type = types[Math.floor(Math.random() * types.length)];
+          const turns = Math.floor(Math.random() * 2) + 1;
+          
+          setStatusEffects(prev => {
+            const existing = prev.find(e => e.type === type);
+            if (existing) {
+              return prev.map(e => e.type === type ? { ...e, turnsLeft: e.turnsLeft + turns } : e);
+            }
+            return [...prev, { type, turnsLeft: turns }];
+          });
+
+          toast({
+            title: "Status Applied!",
+            description: `${type === "stun" ? "😵 Stunned" : type === "freeze" ? "🧊 Frozen" : "🔇 Silenced"} for ${turns} turns!`,
+            variant: "destructive"
+          });
+        }
+      }
+
+      // Handle turns and status effects decay
+      setStatusEffects(prev => prev.map(e => ({ ...e, turnsLeft: e.turnsLeft - 1 })).filter(e => e.turnsLeft > 0));
+
+      // Pet HP logic
+      if (currentNpc?.equippedPet && !isPetFainted) {
+        const damageToPlayer = result.npcPower > result.playerPower ? Math.floor((result.npcPower - result.playerPower) / 10) : 10;
+        const petDamage = Math.floor(damageToPlayer * 0.1);
+        
+        setPetHP(prev => {
+          const newHP = Math.max(0, prev.current - petDamage);
+          if (newHP === 0 && prev.current > 0) {
+            setIsPetFainted(true);
+            toast({
+              title: "Pet Fainted!",
+              description: `Your pet ${currentNpc.equippedPet.name} has fainted! Pet bonus removed.`,
+              variant: "destructive"
+            });
+          }
+          return { ...prev, current: newHP };
+        });
+      }
     },
     onError: () => {
       toast({ title: "Error", description: "Battle failed", variant: "destructive" });
@@ -239,12 +292,32 @@ export default function NpcBattle() {
                   <Sword className="w-5 h-5 text-primary" />
                   Your Stats
                 </CardTitle>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {statusEffects.map(effect => (
+                    <span key={effect.type} className={
+                      effect.type === "stun" ? "bg-yellow-500" :
+                      effect.type === "freeze" ? "bg-blue-500" :
+                      "bg-purple-500"
+                    } style={{padding:"2px 8px", borderRadius:4, fontSize:12, color:"white", marginRight:4}}>
+                      {effect.type === "stun" ? "😵 Stunned" : effect.type === "freeze" ? "🧊 Frozen" : "🔇 Silenced"} ({effect.turnsLeft}t)
+                    </span>
+                  ))}
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex justify-between items-center text-lg">
                   <span className="text-muted-foreground">Total Power</span>
-                  <span className="font-bold text-green-500">{(currentNpc?.playerPower || 0).toLocaleString()}</span>
+                  <span className={`font-bold ${statusEffects.some(e => e.type === "freeze") ? "text-blue-400" : "text-green-500"}`}>
+                    {statusEffects.some(e => e.type === "freeze") 
+                      ? Math.floor((currentNpc?.playerPower || 0) * 0.5).toLocaleString() 
+                      : (currentNpc?.playerPower || 0).toLocaleString()}
+                  </span>
                 </div>
+                {statusEffects.some(e => e.type === "freeze") && (
+                  <div className="text-[10px] text-blue-400 font-bold animate-pulse">
+                    🧊 FROZEN - Power reduced by 50%!
+                  </div>
+                )}
                 <div className="text-xs text-muted-foreground italic">
                   *Includes base stats, equipped gear, weapon boosts, and pet power.
                 </div>
@@ -271,6 +344,25 @@ export default function NpcBattle() {
                       <span className="font-semibold">{currentNpc.equippedPet.name}</span>
                       <Badge>{currentNpc.equippedPet.tier}</Badge>
                     </div>
+                    
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span>🐾 HP</span>
+                        <span>{petHP.current} / {petHP.max}</span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                        <div 
+                          className="bg-orange-500 h-full transition-all duration-300" 
+                          style={{ width: `${(petHP.current / petHP.max) * 100}%` }}
+                        />
+                      </div>
+                      {isPetFainted && (
+                        <div className="text-[10px] text-destructive font-bold animate-pulse">
+                          FAINTED - Bonus Disabled
+                        </div>
+                      )}
+                    </div>
+
                     <div className="flex flex-wrap gap-1">
                       {currentNpc.equippedPet.elements.map((elem: string) => (
                         <Badge key={elem} variant="outline" className={`text-xs ${elementColors[elem] || ''}`}>
@@ -407,27 +499,36 @@ export default function NpcBattle() {
                 </div>
               )}
 
-              <Button 
-                size="lg" 
-                className="w-full" 
-                onClick={() => battleMutation.mutate()}
-                disabled={battleMutation.isPending || !currentNpc?.canFight || isAutoFighting}
-                data-testid="button-battle"
-              >
-                {battleMutation.isPending ? (
-                  "Fighting..."
-                ) : !currentNpc?.canFight ? (
-                  <>
-                    <Shield className="w-5 h-5 mr-2" />
-                    Rank Required: {currentNpc?.requiredRank}
-                  </>
-                ) : (
-                  <>
-                    <Sword className="w-5 h-5 mr-2" />
-                    Challenge {currentNpc?.isBoss ? "Boss" : "NPC"}
-                  </>
-                )}
-              </Button>
+                <Button 
+                  size="lg" 
+                  className="w-full" 
+                  onClick={() => {
+                    if (statusEffects.some(e => e.type === "stun")) {
+                      toast({ title: "Stunned!", description: "You are stunned and must defend!", variant: "destructive" });
+                      // In a real turn based system we'd force defend, 
+                      // here we just proceed with the mutation but maybe with a penalty
+                    }
+                    battleMutation.mutate();
+                  }}
+                  disabled={battleMutation.isPending || !currentNpc?.canFight || isAutoFighting || statusEffects.some(e => e.type === "stun")}
+                  data-testid="button-battle"
+                >
+                  {battleMutation.isPending ? (
+                    "Fighting..."
+                  ) : statusEffects.some(e => e.type === "stun") ? (
+                    "😵 Stunned!"
+                  ) : !currentNpc?.canFight ? (
+                    <>
+                      <Shield className="w-5 h-5 mr-2" />
+                      Rank Required: {currentNpc?.requiredRank}
+                    </>
+                  ) : (
+                    <>
+                      <Sword className="w-5 h-5 mr-2" />
+                      Challenge {currentNpc?.isBoss ? "Boss" : "NPC"}
+                    </>
+                  )}
+                </Button>
 
               <div className="mt-4 pt-4 border-t border-border">
                 <div className="flex items-center justify-between mb-3">
@@ -596,6 +697,20 @@ export default function NpcBattle() {
                     Pet's elemental power was blocked by immunity
                   </div>
                 )}
+              </div>
+            )}
+
+            {!battleResult?.won && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-md p-4 space-y-3">
+                <div className="font-bold text-red-500 flex items-center gap-2">
+                  <Skull className="w-5 h-5" />
+                  ⚠️ You Died!
+                </div>
+                <div className="text-sm space-y-1">
+                  <p>Lost: <span className="font-mono text-yellow-500">{Math.floor((account?.gold || 0) * 0.05).toLocaleString()} gold</span></p>
+                  <p>Equipment damage: <span className="text-red-400">Durability lost on weakest item</span></p>
+                  <p className="mt-2 text-muted-foreground italic">You are now a Ghost. Return to your base to respawn.</p>
+                </div>
               </div>
             )}
 

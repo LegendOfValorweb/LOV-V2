@@ -297,6 +297,7 @@ export const accounts = pgTable("accounts", {
   losses: integer("losses").notNull().default(0),
   stats: jsonb("stats").notNull().default({ Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 }).$type<PlayerStats>(),
   equipped: jsonb("equipped").notNull().default({ weapon: null, armor: null, accessory1: null, accessory2: null }).$type<Equipped>(),
+  reputationData: jsonb("reputation_data").$type<Record<string, number>>().default({}),
   npcFloor: integer("npc_floor").notNull().default(1),
   npcLevel: integer("npc_level").notNull().default(1),
   equippedPetId: varchar("equipped_pet_id"),
