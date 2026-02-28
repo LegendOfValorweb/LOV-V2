@@ -173,20 +173,32 @@ export function GameHUD() {
   return (
     <div className="game-hud">
       <div className="hud-top-bar">
-        <div className="hud-zone-info">
-          <span className="hud-zone-icon">⚔</span>
-          <span className="hud-zone-name">{zoneName}</span>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <div className="hud-currencies mr-2">
-            <div className="hud-currency" title="Gold">
-              <span className="hud-currency-icon hud-icon-gold">⬤</span>
-              <span className="hud-currency-value">{formatNumber(account.gold || 0)}</span>
+        <div className="flex items-center gap-3 pointer-events-auto">
+          <img 
+            src={getPortraitPath()} 
+            alt={account.username} 
+            className="hud-player-portrait-small" 
+            onClick={() => navigateTo("/base")}
+            title="View Base"
+          />
+          <div className="flex flex-col">
+            <div className="hud-player-name-small">
+              {account.username}
+              {account.vipUntil && new Date(account.vipUntil) > new Date() && <span className="hud-vip-badge-mini">VIP</span>}
             </div>
-            <div className="hud-currency" title="Rubies">
-              <span className="hud-currency-icon hud-icon-ruby">◆</span>
-              <span className="hud-currency-value">{formatNumber(account.rubies || 0)}</span>
+            <div className="hud-player-rank-small">Lv.{rankLevel} {account.rank}</div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 pointer-events-auto">
+          <div className="hud-currencies-compact mr-2">
+            <div className="hud-currency-mini" title="Gold">
+              <span className="text-amber-500 mr-1 text-[10px]">⬤</span>
+              <span>{formatNumber(account.gold || 0)}</span>
+            </div>
+            <div className="hud-currency-mini" title="Rubies">
+              <span className="text-red-500 mr-1 text-[10px]">◆</span>
+              <span>{formatNumber(account.rubies || 0)}</span>
             </div>
           </div>
 
@@ -242,14 +254,7 @@ export function GameHUD() {
       )}
 
       <div className="hud-bottom-left">
-        <div className="hud-player-panel">
-          <img src={getPortraitPath()} alt={account.username} className="hud-player-portrait" onError={(e) => { (e.target as HTMLImageElement).src = "/portraits/human_male.png"; }} />
-          <div className="hud-player-info">
-            <div className="hud-player-name">{account.username} {account.vipUntil && new Date(account.vipUntil) > new Date() && <span className="hud-vip-badge">VIP</span>}</div>
-            <div className="hud-player-rank"><span className="hud-rank-badge">Lv.{rankLevel}</span> <span className="hud-rank-name">{account.rank}</span></div>
-            <div className="hud-bar-container"><div className="hud-bar hud-bar-energy"><div className="hud-bar-fill" style={{ width: `${energyPercent}%` }} /></div><span className="hud-bar-label">⚡ {energy}/{maxEnergy}</span></div>
-          </div>
-        </div>
+        {/* Profile moved to top-left */}
       </div>
 
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
