@@ -25,7 +25,7 @@ export function verifyToken(token: string): any {
 }
 
 export async function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
-  const token = req.cookies[COOKIE_NAME];
+  const token = req.cookies?.[COOKIE_NAME];
   
   if (!token) {
     return res.status(401).json({ error: "Unauthorized", message: "No token provided" });

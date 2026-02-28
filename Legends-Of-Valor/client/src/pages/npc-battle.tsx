@@ -60,6 +60,12 @@ export default function NpcBattle() {
   const [petHP, setPetHP] = useState({ current: 100, max: 100 });
   const [isPetFainted, setIsPetFainted] = useState(false);
 
+  useEffect(() => {
+    if (!account || account.role !== "player") {
+      navigate("/");
+    }
+  }, [account, navigate]);
+
   const { data: currentNpc } = useQuery({
     queryKey: ["/api/accounts", account?.id, "current-npc"],
     queryFn: async () => {
@@ -217,7 +223,6 @@ export default function NpcBattle() {
   };
 
   if (!account || account.role !== "player") {
-    navigate("/");
     return null;
   }
 
@@ -253,7 +258,7 @@ export default function NpcBattle() {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-8 overflow-y-auto flex-1">
         <div className="max-w-4xl mx-auto">
           <div className="grid gap-6 md:grid-cols-2 mb-6">
             <Card>
@@ -451,6 +456,45 @@ export default function NpcBattle() {
                 </div>
               </div>
 
+              {currentNpc?.requiredRank && !currentNpc?.canFight && (
+                <div className="bg-destructive/20 border border-destructive/50 rounded-md p-3 text-center">
+                  <div className="font-semibold text-destructive">Rank Too Low</div>
+                  <p className="text-sm text-muted-foreground">
+                    You need <span className="font-bold text-foreground">{currentNpc.requiredRank}</span> rank 
+                    to fight level {globalLevel}+. Your current rank: {currentNpc.playerRank}
+                  </p>
+                </div>
+              )}
+
+                <Button 
+                  size="lg" 
+                  className="w-full" 
+                  onClick={() => {
+                    if (statusEffects.some(e => e.type === "stun")) {
+                      toast({ title: "Stunned!", description: "You are stunned and must defend!", variant: "destructive" });
+                    }
+                    battleMutation.mutate();
+                  }}
+                  disabled={battleMutation.isPending || !currentNpc?.canFight || isAutoFighting || statusEffects.some(e => e.type === "stun")}
+                  data-testid="button-battle"
+                >
+                  {battleMutation.isPending ? (
+                    "Fighting..."
+                  ) : statusEffects.some(e => e.type === "stun") ? (
+                    "😵 Stunned!"
+                  ) : !currentNpc?.canFight ? (
+                    <>
+                      <Shield className="w-5 h-5 mr-2" />
+                      Rank Required: {currentNpc?.requiredRank}
+                    </>
+                  ) : (
+                    <>
+                      <Sword className="w-5 h-5 mr-2" />
+                      Challenge {currentNpc?.isBoss ? "Boss" : "NPC"}
+                    </>
+                  )}
+                </Button>
+
               {currentNpc?.immuneElements?.length > 0 && (
                 <div className="bg-destructive/10 border border-destructive/30 rounded-md p-3 text-sm">
                   <Shield className="w-4 h-4 inline mr-2 text-destructive" />
@@ -488,47 +532,6 @@ export default function NpcBattle() {
                   </div>
                 </div>
               )}
-
-              {currentNpc?.requiredRank && !currentNpc?.canFight && (
-                <div className="bg-destructive/20 border border-destructive/50 rounded-md p-3 text-center">
-                  <div className="font-semibold text-destructive">Rank Too Low</div>
-                  <p className="text-sm text-muted-foreground">
-                    You need <span className="font-bold text-foreground">{currentNpc.requiredRank}</span> rank 
-                    to fight level {globalLevel}+. Your current rank: {currentNpc.playerRank}
-                  </p>
-                </div>
-              )}
-
-                <Button 
-                  size="lg" 
-                  className="w-full" 
-                  onClick={() => {
-                    if (statusEffects.some(e => e.type === "stun")) {
-                      toast({ title: "Stunned!", description: "You are stunned and must defend!", variant: "destructive" });
-                      // In a real turn based system we'd force defend, 
-                      // here we just proceed with the mutation but maybe with a penalty
-                    }
-                    battleMutation.mutate();
-                  }}
-                  disabled={battleMutation.isPending || !currentNpc?.canFight || isAutoFighting || statusEffects.some(e => e.type === "stun")}
-                  data-testid="button-battle"
-                >
-                  {battleMutation.isPending ? (
-                    "Fighting..."
-                  ) : statusEffects.some(e => e.type === "stun") ? (
-                    "😵 Stunned!"
-                  ) : !currentNpc?.canFight ? (
-                    <>
-                      <Shield className="w-5 h-5 mr-2" />
-                      Rank Required: {currentNpc?.requiredRank}
-                    </>
-                  ) : (
-                    <>
-                      <Sword className="w-5 h-5 mr-2" />
-                      Challenge {currentNpc?.isBoss ? "Boss" : "NPC"}
-                    </>
-                  )}
-                </Button>
 
               <div className="mt-4 pt-4 border-t border-border">
                 <div className="flex items-center justify-between mb-3">

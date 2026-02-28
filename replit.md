@@ -104,6 +104,19 @@ cd Legends-Of-Valor && npm run db:push
 - Zone backdrops: shop (marketplace), fishing (lake), base (castle), arena, tower, pets (training grounds)
 - World map is central hub after login with player avatar display, quick travel, and zone navigation
 
+### Session 5-6 Features (February 2026)
+- Weather-based spawn modifiers: thunderstorm 3× boss, rain 1.8× elite, fog 2× champion, blizzard 2× boss
+- Status effects in NPC combat: stun (😵), freeze (🧊 -50% power), silence (🔇 disables spells)
+- Death penalty modal on combat loss + pet HP bar + pet fainting display in NPC battle
+- Market price trend indicators (↑/↓) in shop with live market price API
+- Faction reputation system: 4 factions (Merchants, Warriors, Scholars, Nature Wardens) with progress bars
+  - /reputation page accessible from HUD menu
+- Admin tools: Teleport Player dialog + Force-End Challenge button in admin panel
+- Offline training UI in base with start/collect buttons and 10s status refresh
+- Elemental race registration: element picker + race bonus display in registration form
+- NPC Tower scrollable layout with fight button prominently at top of card
+- Fixed server crash: authMiddleware now uses optional chaining for req.cookies
+
 ### Bug Fixes (January 2026)
 - Fixed data persistence: Account data now fetches fresh from server on re-login
 - Fixed base page: Imports canonical playerRanks from schema to prevent rank display drift
@@ -113,7 +126,3 @@ cd Legends-Of-Valor && npm run db:push
 - Fixed name truncation: Improved display of long names in leaderboard (12 chars) and tournaments (8 chars)
 - Fixed trade batching: addItemsMutation now handles partial failures gracefully
 - Removed unused code: Cleaned up admin.tsx unused functions
-
-### Planned
-- Enhanced combat formulas
-- AI Story Guide with 4-act storyline
