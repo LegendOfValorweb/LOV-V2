@@ -87,7 +87,6 @@ function App() {
           <GameViewport>
             <AppLoadingWrapper>
               <Toaster />
-              <AudioPlayer />
               <GameHUD />
               <WeatherOverlay />
               <Router />

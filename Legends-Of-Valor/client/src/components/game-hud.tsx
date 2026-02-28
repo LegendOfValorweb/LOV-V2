@@ -1,6 +1,19 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useGame } from "@/lib/game-context";
+import { 
+  Settings, MessageSquare, Volume2, VolumeX, Music,
+  Castle, ShoppingBag, Star, Users, Coins, Fish, Pickaxe,
+  Trophy, Book, Swords, Calendar, Hammer
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import AudioPlayer from "./audio-player";
 
 const RANK_LEVELS: Record<string, number> = {
   "Novice": 1, "Apprentice": 2, "Initiate": 3, "Journeyman": 4,
@@ -68,6 +81,7 @@ export function GameHUD() {
   const [activePet, setActivePet] = useState<PetData | null>(null);
   const [activeBird, setActiveBird] = useState<BirdData | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const isVisible = location !== "/" && !!account;
   const accountId = account?.id;
@@ -163,60 +177,43 @@ export function GameHUD() {
           <span className="hud-zone-icon">⚔</span>
           <span className="hud-zone-name">{zoneName}</span>
         </div>
-        <div className="hud-currencies">
-          <div className="hud-currency" title="Gold">
-            <span className="hud-currency-icon hud-icon-gold">⬤</span>
-            <span className="hud-currency-value">{formatNumber(account.gold || 0)}</span>
+        
+        <div className="flex items-center gap-2">
+          <div className="hud-currencies mr-2">
+            <div className="hud-currency" title="Gold">
+              <span className="hud-currency-icon hud-icon-gold">⬤</span>
+              <span className="hud-currency-value">{formatNumber(account.gold || 0)}</span>
+            </div>
+            <div className="hud-currency" title="Rubies">
+              <span className="hud-currency-icon hud-icon-ruby">◆</span>
+              <span className="hud-currency-value">{formatNumber(account.rubies || 0)}</span>
+            </div>
           </div>
-          <div className="hud-currency" title="Rubies">
-            <span className="hud-currency-icon hud-icon-ruby">◆</span>
-            <span className="hud-currency-value">{formatNumber(account.rubies || 0)}</span>
-          </div>
-          <div className="hud-currency" title="$Valor">
-            <span className="hud-currency-icon hud-icon-valor">$V</span>
-            <span className="hud-currency-value">{formatNumber(account.valorTokens || 0)}</span>
-          </div>
-          <div className="hud-currency" title="Energy">
-            <span className="hud-currency-icon hud-icon-energy">⚡</span>
-            <span className="hud-currency-value">{energy}/{maxEnergy}</span>
-          </div>
+
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-400" onClick={() => navigateTo("/ai-chat")}>
+            <MessageSquare className="h-4 w-4" />
+          </Button>
+          
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-400" onClick={() => setSettingsOpen(true)}>
+            <Settings className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
       <div className="hud-left-strip">
-        <button
-          className={`hud-icon-btn ${location === '/world-map' ? 'hud-icon-active' : ''}`}
-          onClick={() => navigateTo("/world-map")}
-          title="World Map"
-        >
+        <button className={`hud-icon-btn ${location === '/world-map' ? 'hud-icon-active' : ''}`} onClick={() => navigateTo("/world-map")} title="World Map">
           <span className="hud-icon-sprite">🗺</span>
         </button>
-        <button
-          className={`hud-icon-btn ${location === '/inventory' ? 'hud-icon-active' : ''}`}
-          onClick={() => navigateTo("/inventory")}
-          title="Inventory"
-        >
+        <button className={`hud-icon-btn ${location === '/inventory' ? 'hud-icon-active' : ''}`} onClick={() => navigateTo("/inventory")} title="Inventory">
           <span className="hud-icon-sprite">🎒</span>
         </button>
-        <button
-          className={`hud-icon-btn ${location === '/skills' ? 'hud-icon-active' : ''}`}
-          onClick={() => navigateTo("/skills")}
-          title="Skills"
-        >
+        <button className={`hud-icon-btn ${location === '/skills' ? 'hud-icon-active' : ''}`} onClick={() => navigateTo("/skills")} title="Skills">
           <span className="hud-icon-sprite">📖</span>
         </button>
-        <button
-          className={`hud-icon-btn ${location === '/quests' ? 'hud-icon-active' : ''}`}
-          onClick={() => navigateTo("/quests")}
-          title="Quests"
-        >
+        <button className={`hud-icon-btn ${location === '/quests' ? 'hud-icon-active' : ''}`} onClick={() => navigateTo("/quests")} title="Quests">
           <span className="hud-icon-sprite">📜</span>
         </button>
-        <button
-          className={`hud-icon-btn ${menuOpen ? 'hud-icon-active' : ''}`}
-          onClick={() => setMenuOpen(!menuOpen)}
-          title="More..."
-        >
+        <button className={`hud-icon-btn ${menuOpen ? 'hud-icon-active' : ''}`} onClick={() => setMenuOpen(!menuOpen)} title="More...">
           <span className="hud-icon-sprite">☰</span>
         </button>
       </div>
@@ -224,52 +221,21 @@ export function GameHUD() {
       {menuOpen && (
         <div className="hud-menu-popup">
           <div className="hud-menu-grid">
-            <button className="hud-menu-item" onClick={() => navigateTo("/base")}>
-              <span>🏰</span><span>Base</span>
-            </button>
-            <button className="hud-menu-item" onClick={() => navigateTo("/shop")}>
-              <span>🛒</span><span>Shop</span>
-            </button>
-            <button className="hud-menu-item" onClick={() => navigateTo("/pets")}>
-              <span>🐾</span><span>Pets</span>
-            </button>
-            <button className="hud-menu-item" onClick={() => navigateTo("/birds")}>
-              <span>🦅</span><span>Birds</span>
-            </button>
-            <button className="hud-menu-item" onClick={() => navigateTo("/guild")}>
-              <span>⚜</span><span>Guild</span>
-            </button>
-            <button className="hud-menu-item" onClick={() => navigateTo("/trading")}>
-              <span>🤝</span><span>Trade</span>
-            </button>
-            <button className="hud-menu-item" onClick={() => navigateTo("/fishing")}>
-              <span>🎣</span><span>Fish</span>
-            </button>
-            <button className="hud-menu-item" onClick={() => navigateTo("/mining")}>
-              <span>⛏</span><span>Mine</span>
-            </button>
-            <button className="hud-menu-item" onClick={() => navigateTo("/leaderboard")}>
-              <span>🏆</span><span>Ranks</span>
-            </button>
-            <button className="hud-menu-item" onClick={() => navigateTo("/achievements")}>
-              <span>🎖</span><span>Achieve</span>
-            </button>
-            <button className="hud-menu-item" onClick={() => navigateTo("/valorpedia")}>
-              <span>📚</span><span>Pedia</span>
-            </button>
-            <button className="hud-menu-item" onClick={() => navigateTo("/tournaments")}>
-              <span>⚔</span><span>Tourney</span>
-            </button>
-            <button className="hud-menu-item" onClick={() => navigateTo("/events")}>
-              <span>📅</span><span>Events</span>
-            </button>
-            <button className="hud-menu-item" onClick={() => navigateTo("/ai-chat")}>
-              <span>🤖</span><span>AI Chat</span>
-            </button>
+            <button className="hud-menu-item" onClick={() => navigateTo("/base")}>🏰 Base</button>
+            <button className="hud-menu-item" onClick={() => navigateTo("/shop")}>🛒 Shop</button>
+            <button className="hud-menu-item" onClick={() => navigateTo("/pets")}>🐾 Pets</button>
+            <button className="hud-menu-item" onClick={() => navigateTo("/birds")}>🦅 Birds</button>
+            <button className="hud-menu-item" onClick={() => navigateTo("/guild")}>⚜ Guild</button>
+            <button className="hud-menu-item" onClick={() => navigateTo("/trading")}>🤝 Trade</button>
+            <button className="hud-menu-item" onClick={() => navigateTo("/fishing")}>🎣 Fish</button>
+            <button className="hud-menu-item" onClick={() => navigateTo("/mining")}>⛏ Mine</button>
+            <button className="hud-menu-item" onClick={() => navigateTo("/leaderboard")}>🏆 Ranks</button>
+            <button className="hud-menu-item" onClick={() => navigateTo("/achievements")}>🎖 Achieve</button>
+            <button className="hud-menu-item" onClick={() => navigateTo("/valorpedia")}>📚 Pedia</button>
+            <button className="hud-menu-item" onClick={() => navigateTo("/tournaments")}>⚔ Tourney</button>
+            <button className="hud-menu-item" onClick={() => navigateTo("/events")}>📅 Events Hall</button>
             {account.role === "admin" && (
-              <button className="hud-menu-item" onClick={() => navigateTo("/admin")}>
-                <span>🔧</span><span>Admin</span>
-              </button>
+              <button className="hud-menu-item" onClick={() => navigateTo("/admin")}>🔧 Admin</button>
             )}
           </div>
         </div>
@@ -277,70 +243,34 @@ export function GameHUD() {
 
       <div className="hud-bottom-left">
         <div className="hud-player-panel">
-          <img
-            src={getPortraitPath()}
-            alt={account.username}
-            className="hud-player-portrait"
-            onError={(e) => { (e.target as HTMLImageElement).src = "/portraits/human_male.png"; }}
-          />
+          <img src={getPortraitPath()} alt={account.username} className="hud-player-portrait" onError={(e) => { (e.target as HTMLImageElement).src = "/portraits/human_male.png"; }} />
           <div className="hud-player-info">
-            <div className="hud-player-name">
-              {account.username}
-              {account.vipUntil && new Date(account.vipUntil) > new Date() && (
-                <span className="hud-vip-badge">VIP</span>
-              )}
-            </div>
-            <div className="hud-player-rank">
-              <span className="hud-rank-badge">Lv.{rankLevel}</span>
-              <span className="hud-rank-name">{account.rank}</span>
-            </div>
-            <div className="hud-bar-container" title={`Energy: ${energy}/${maxEnergy}`}>
-              <div className="hud-bar hud-bar-energy">
-                <div className="hud-bar-fill" style={{ width: `${energyPercent}%` }} />
-              </div>
-              <span className="hud-bar-label">⚡ {energy}/{maxEnergy}</span>
-            </div>
+            <div className="hud-player-name">{account.username} {account.vipUntil && new Date(account.vipUntil) > new Date() && <span className="hud-vip-badge">VIP</span>}</div>
+            <div className="hud-player-rank"><span className="hud-rank-badge">Lv.{rankLevel}</span> <span className="hud-rank-name">{account.rank}</span></div>
+            <div className="hud-bar-container"><div className="hud-bar hud-bar-energy"><div className="hud-bar-fill" style={{ width: `${energyPercent}%` }} /></div><span className="hud-bar-label">⚡ {energy}/{maxEnergy}</span></div>
           </div>
         </div>
       </div>
 
-      <div className="hud-bottom-right">
-        {activePet && (
-          <div className="hud-companion-panel">
-            <div className="hud-companion-icon" title={`${activePet.name} (${activePet.tier})`}>
-              <span className="hud-companion-emoji">🐾</span>
-              {activePet.isFainted && <span className="hud-fainted-overlay">💀</span>}
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent className="bg-zinc-900 border-amber-900/50 text-amber-50 max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-amber-400">Settings & Music</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-6">
+            <div>
+              <h3 className="text-xs uppercase text-zinc-500 font-bold mb-3 tracking-widest">Audio Control</h3>
+              <AudioPlayer />
             </div>
-            <div className="hud-companion-info">
-              <span className="hud-companion-name">{activePet.name}</span>
-              <span className="hud-companion-tier">{activePet.tier} · {activePet.element}</span>
-            </div>
-          </div>
-        )}
-        {activeBird && (
-          <div className="hud-companion-panel">
-            <div className="hud-companion-icon" title={`${activeBird.name} (${activeBird.tier})`}>
-              <span className="hud-companion-emoji">🦅</span>
-            </div>
-            <div className="hud-companion-info">
-              <span className="hud-companion-name">{activeBird.name}</span>
-              <span className="hud-companion-tier">{activeBird.tier}</span>
+            <div className="pt-4 border-t border-zinc-800">
+              <Button variant="outline" className="w-full border-zinc-700 text-zinc-400 hover:text-white" onClick={() => window.location.reload()}>
+                Reload Game
+              </Button>
             </div>
           </div>
-        )}
-        {!activePet && !activeBird && (
-          <div className="hud-companion-panel hud-companion-empty">
-            <span className="hud-companion-emoji">—</span>
-            <span className="hud-companion-info-empty">No companion</span>
-          </div>
-        )}
-      </div>
-
-      {account.ghostState && (
-        <div className="hud-ghost-overlay">
-          <span>👻 GHOST STATE</span>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+

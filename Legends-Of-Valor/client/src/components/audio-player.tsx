@@ -30,7 +30,6 @@ export default function AudioPlayer() {
     if (!audio) return;
 
     const handleEnded = () => {
-      // Auto-advance to next track
       const nextIndex = (currentTrack + 1) % MUSIC_TRACKS.length;
       setCurrentTrack(nextIndex);
       setTimeout(() => {
@@ -40,40 +39,16 @@ export default function AudioPlayer() {
         }
       }, 100);
     };
-    const handlePlay = () => {
-      setIsPlaying(true);
-      setIsLoading(false);
-      setHasError(false);
-    };
+    const handlePlay = () => { setIsPlaying(true); setIsLoading(false); setHasError(false); };
     const handlePause = () => setIsPlaying(false);
-    const handleError = (e: Event) => {
-      console.error("Audio element error:", audio.error, e);
-      setIsLoading(false);
-      setHasError(true);
-      setIsPlaying(false);
-    };
-    const handleStalled = () => {
-      console.log("Audio stalled, attempting recovery...");
-      setIsLoading(true);
-      if (isPlaying) {
-        setTimeout(() => {
-          audio.play().catch(console.error);
-        }, 500);
-      }
-    };
-    const handleCanPlay = () => {
-      setIsLoading(false);
-      setHasError(false);
-    };
-    const handleWaiting = () => {
-      setIsLoading(true);
-    };
+    const handleError = () => { setIsLoading(false); setHasError(true); setIsPlaying(false); };
+    const handleCanPlay = () => { setIsLoading(false); setHasError(false); };
+    const handleWaiting = () => setIsLoading(true);
 
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('play', handlePlay);
     audio.addEventListener('pause', handlePause);
     audio.addEventListener('error', handleError);
-    audio.addEventListener('stalled', handleStalled);
     audio.addEventListener('canplay', handleCanPlay);
     audio.addEventListener('waiting', handleWaiting);
 
@@ -82,7 +57,6 @@ export default function AudioPlayer() {
       audio.removeEventListener('play', handlePlay);
       audio.removeEventListener('pause', handlePause);
       audio.removeEventListener('error', handleError);
-      audio.removeEventListener('stalled', handleStalled);
       audio.removeEventListener('canplay', handleCanPlay);
       audio.removeEventListener('waiting', handleWaiting);
     };
@@ -90,103 +64,49 @@ export default function AudioPlayer() {
 
   const togglePlay = () => {
     if (audioRef.current) {
-      if (isPlaying) {
-        audioRef.current.pause();
-      } else {
-        const playPromise = audioRef.current.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(err => {
-            console.error("Audio play failed:", err);
-            setIsPlaying(false);
-          });
-        }
-      }
+      if (isPlaying) audioRef.current.pause();
+      else audioRef.current.play().catch(err => { console.error("Audio play failed:", err); setIsPlaying(false); });
     }
-  };
-
-  const toggleMute = () => {
-    setIsMuted(!isMuted);
   };
 
   const nextTrack = () => {
     const wasPlaying = isPlaying;
-    if (audioRef.current) {
-      audioRef.current.pause();
-    }
+    if (audioRef.current) audioRef.current.pause();
     setCurrentTrack((prev) => (prev + 1) % MUSIC_TRACKS.length);
-    setTimeout(() => {
-      if (wasPlaying && audioRef.current) {
-        audioRef.current.play().catch(console.error);
-      }
-    }, 100);
+    setTimeout(() => { if (wasPlaying && audioRef.current) audioRef.current.play().catch(console.error); }, 100);
   };
 
   return (
-    <div className="absolute bottom-20 left-4 z-50 flex flex-col items-start gap-1 pointer-events-auto">
-      <div className="bg-card/40 backdrop-blur-sm p-2 rounded-full border border-border/50 shadow-lg flex items-center gap-2 opacity-70 hover:opacity-100 transition-opacity">
-        <audio
-          ref={audioRef}
-          src={MUSIC_TRACKS[currentTrack].src}
-          preload="auto"
-        />
-        <Button
-          variant="ghost"
-          size="icon"
-          className={`h-8 w-8 rounded-full ${hasError ? 'text-red-500' : ''}`}
-          onClick={togglePlay}
-          disabled={isLoading}
-          title={hasError ? "Error loading track" : isPlaying ? "Pause Music" : "Play Music"}
-        >
-          {isLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : isPlaying ? (
-            <Pause className="h-4 w-4" />
-          ) : (
-            <Play className="h-4 w-4 ml-0.5" />
-          )}
-        </Button>
-        
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 rounded-full"
-          onClick={nextTrack}
-          title="Next Track"
-        >
-          <SkipForward className="h-4 w-4" />
-        </Button>
-        
-        <div className="flex items-center gap-2 px-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 rounded-full"
-            onClick={toggleMute}
-            title={isMuted ? "Unmute" : "Mute"}
-          >
-            {isMuted || volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+    <div className="flex flex-col gap-3 w-full bg-zinc-800/50 p-4 rounded-lg border border-zinc-700">
+      <audio ref={audioRef} src={MUSIC_TRACKS[currentTrack].src} preload="auto" />
+      
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 overflow-hidden">
+          <Music className="h-4 w-4 text-amber-400 flex-shrink-0" />
+          <span className="text-xs text-zinc-300 truncate font-medium">
+            {hasError ? 'Error loading track' : isLoading ? 'Loading...' : MUSIC_TRACKS[currentTrack].name}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-white" onClick={togglePlay} disabled={isLoading}>
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
           </Button>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            value={isMuted ? 0 : volume * 100}
-            onChange={(e) => {
-              const val = parseInt(e.target.value);
-              setVolume(val / 100);
-              if (val > 0) setIsMuted(false);
-            }}
-            className="w-20 h-1.5 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
-          />
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-white" onClick={nextTrack}>
+            <SkipForward className="h-4 w-4" />
+          </Button>
         </div>
       </div>
-      <div className="flex items-center gap-2 ml-2">
-        <Music className="h-3 w-3 text-muted-foreground" />
-        <span className={`text-[10px] ${hasError ? 'text-red-400' : 'text-muted-foreground'}`}>
-          {hasError ? `${MUSIC_TRACKS[currentTrack].name} (Error)` : 
-           isLoading ? `${MUSIC_TRACKS[currentTrack].name} (Loading...)` : 
-           MUSIC_TRACKS[currentTrack].name}
-        </span>
+
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-white" onClick={() => setIsMuted(!isMuted)}>
+          {isMuted || volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+        </Button>
+        <input 
+          type="range" min="0" max="100" 
+          value={isMuted ? 0 : volume * 100} 
+          onChange={(e) => { const val = parseInt(e.target.value); setVolume(val / 100); if (val > 0) setIsMuted(false); }}
+          className="flex-1 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500" 
+        />
       </div>
     </div>
   );
