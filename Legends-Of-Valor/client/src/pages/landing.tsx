@@ -129,10 +129,10 @@ export default function Landing() {
 
   if (showRaceSelection && raceData) {
     return (
-      <div className="min-h-screen relative overflow-auto bg-background">
-        <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-accent/20 fixed" />
+      <div className="min-h-screen relative overflow-y-auto overflow-x-hidden bg-background">
+        <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-accent/20 fixed pointer-events-none" />
         
-        <div className="relative z-10 min-h-screen flex flex-col">
+        <div className="relative z-10 w-full min-h-screen flex flex-col">
           <header className="p-6 flex items-center justify-center">
             <div className="flex items-center gap-3">
               <Sword className="w-8 h-8 text-primary" />
@@ -298,9 +298,9 @@ export default function Landing() {
   }
 
   return (
-    <div className="min-h-screen relative overflow-auto bg-background">
+    <div className="min-h-screen relative overflow-y-auto overflow-x-hidden bg-background">
       <div
-        className="absolute inset-0 fixed"
+        className="absolute inset-0 fixed pointer-events-none"
         style={{
           background: `
             linear-gradient(135deg, 
@@ -314,7 +314,7 @@ export default function Landing() {
         }}
       />
       <div
-        className="absolute inset-0 opacity-40 fixed"
+        className="absolute inset-0 opacity-40 fixed pointer-events-none"
         style={{
           backgroundImage: `
             radial-gradient(ellipse at 10% 20%, hsl(280, 80%, 40%) 0%, transparent 40%),
@@ -325,17 +325,17 @@ export default function Landing() {
           `,
         }}
       />
-      <div className="absolute top-4 left-4 w-32 h-32 opacity-20 fixed">
+      <div className="absolute top-4 left-4 w-32 h-32 opacity-20 fixed pointer-events-none">
         <div className="w-full h-full rounded-full bg-gradient-to-br from-yellow-500 to-orange-600 blur-xl animate-pulse" />
       </div>
-      <div className="absolute bottom-10 right-10 w-24 h-24 opacity-15 fixed">
+      <div className="absolute bottom-10 right-10 w-24 h-24 opacity-15 fixed pointer-events-none">
         <div className="w-full h-full rounded-full bg-gradient-to-br from-purple-500 to-pink-600 blur-xl" />
       </div>
-      <div className="absolute top-1/4 right-1/4 w-16 h-16 opacity-10 fixed">
+      <div className="absolute top-1/4 right-1/4 w-16 h-16 opacity-10 fixed pointer-events-none">
         <div className="w-full h-full rounded-full bg-gradient-to-br from-blue-400 to-cyan-500 blur-lg" />
       </div>
 
-      <div className="relative z-10 min-h-screen flex flex-col">
+      <div className="relative z-10 w-full min-h-screen flex flex-col">
         <header className="p-6 flex items-center justify-center">
           <div className="flex items-center gap-3">
             <Sword className="w-8 h-8 text-primary" />
