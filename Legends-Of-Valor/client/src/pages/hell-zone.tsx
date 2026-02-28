@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useGame } from "@/lib/game-context";
+import { ZoneScene } from "@/components/zone-scene";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -293,14 +294,13 @@ export default function HellZone() {
   const canLeave = !isInBattle || brStatus?.status !== "active";
 
   return (
-    <div className="min-h-screen relative">
-      <div 
-        className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: "url('/backdrops/arena.png')" }}
-      />
-      <div className="absolute inset-0 bg-gradient-to-b from-red-900/50 via-black/70 to-black/90" />
-      
-      <div className="relative z-10">
+    <ZoneScene
+      zoneName="Hell Zone"
+      backdrop="/backdrops/arena.png"
+      ambientClass="zone-ambient-hell"
+      overlayOpacity={0.5}
+    >
+      <div className="h-full flex flex-col">
         <header className="border-b border-red-500/50 bg-black/70 backdrop-blur-sm">
           <div className="container mx-auto px-4 py-4">
             <div className="flex items-center justify-between">
@@ -894,6 +894,6 @@ export default function HellZone() {
           </DialogContent>
         </Dialog>
       </div>
-    </div>
+    </ZoneScene>
   );
 }

@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { GameProvider } from "@/lib/game-context";
 import AudioPlayer from "@/components/audio-player";
 import FloatingAIButton from "@/components/floating-ai-button";
+import { GameHUD } from "@/components/game-hud";
 import Landing from "@/pages/landing";
 import Shop from "@/pages/shop";
 import Inventory from "@/pages/inventory";
@@ -33,9 +34,12 @@ import PetShop from "@/pages/pet-shop";
 import Mining from "@/pages/mining";
 import RubyMines from "@/pages/ruby-mines";
 import HellZone from "@/pages/hell-zone";
+import Valorpedia from "@/pages/valorpedia";
 import NotFound from "@/pages/not-found";
 import { MobileLandscapePrompt } from "@/components/mobile-landscape-prompt";
 import { AppLoadingWrapper } from "@/components/app-loading-wrapper";
+import { GameViewport } from "@/components/game-viewport";
+import { WeatherOverlay } from "@/components/weather-overlay";
 
 function Router() {
   return (
@@ -66,6 +70,7 @@ function Router() {
       <Route path="/mining" component={Mining} />
       <Route path="/ruby-mines" component={RubyMines} />
       <Route path="/hell-zone" component={HellZone} />
+      <Route path="/valorpedia" component={Valorpedia} />
       <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>
@@ -78,12 +83,16 @@ function App() {
       <TooltipProvider>
         <GameProvider>
           <MobileLandscapePrompt />
-          <AppLoadingWrapper>
-            <Toaster />
-            <AudioPlayer />
-            <FloatingAIButton />
-            <Router />
-          </AppLoadingWrapper>
+          <GameViewport>
+            <AppLoadingWrapper>
+              <Toaster />
+              <AudioPlayer />
+              <GameHUD />
+              <FloatingAIButton />
+              <WeatherOverlay />
+              <Router />
+            </AppLoadingWrapper>
+          </GameViewport>
         </GameProvider>
       </TooltipProvider>
     </QueryClientProvider>

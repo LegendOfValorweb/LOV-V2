@@ -12,7 +12,7 @@ export default function FloatingAIButton() {
   return (
     <Button
       onClick={() => navigate("/ai-chat")}
-      className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-purple-600 hover:bg-purple-700 shadow-lg shadow-purple-500/30 z-50 p-0"
+      className="absolute bottom-6 right-6 w-14 h-14 rounded-full z-50 p-0 border-2 border-purple-500/50 shadow-[0_0_16px_rgba(168,85,247,0.3)] hover:shadow-[0_0_24px_rgba(168,85,247,0.5)]"
       aria-label="AI Game Master"
     >
       <MessageCircle className="w-6 h-6 text-white" />

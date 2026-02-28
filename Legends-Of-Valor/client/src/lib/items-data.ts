@@ -1,4 +1,19 @@
 import type { Item, ItemTier } from "@shared/schema";
+import { ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, calculateCarryCapacity } from "@shared/schema";
+
+export function getItemWeight(tier: string): number {
+  return ITEM_WEIGHT_BY_TIER[tier] || 1;
+}
+
+export function getFishWeight(rarity: string): number {
+  return FISH_WEIGHT_BY_RARITY[rarity] || 1;
+}
+
+export function getResourceWeight(rarity: string): number {
+  return RESOURCE_WEIGHT_BY_RARITY[rarity] || 1;
+}
+
+export { calculateCarryCapacity };
 
 const tier1Items: Omit<Item, "id" | "tier">[] = [
   {"name": "Arcane Staff", "type": "weapon", "stats": {"Int": 20}, "price": 300},

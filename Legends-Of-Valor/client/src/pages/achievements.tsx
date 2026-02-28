@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useGame } from "@/lib/game-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
-import { Trophy, Star, Lock, Check, Map, Sword, Castle, Coins, Users, Compass, Package, Crown } from "lucide-react";
+import { Trophy, Star, Lock, Check, Map, Sword, Castle, Coins, Users, Compass, Package, Crown, Shield, Gem, Zap, Tag } from "lucide-react";
 
 interface Achievement {
   id: string;
@@ -32,6 +32,24 @@ interface TrophyItem {
   earned?: boolean;
 }
 
+interface PlayerTitle {
+  id: string;
+  titleId: string;
+  category: string;
+  name: string;
+  isEquipped: boolean;
+  earnedAt: string;
+}
+
+interface PlayerBadge {
+  id: string;
+  badgeId: string;
+  badgeType: string;
+  name: string;
+  icon: string;
+  earnedAt: string;
+}
+
 const categoryIcons: Record<string, any> = {
   Combat: Sword,
   Tower: Castle,
@@ -43,10 +61,29 @@ const categoryIcons: Record<string, any> = {
   Milestones: Crown,
 };
 
+const badgeTypeIcons: Record<string, any> = {
+  vip: Zap,
+  guild: Shield,
+  rank: Crown,
+};
+
+const badgeTypeColors: Record<string, string> = {
+  vip: "text-purple-500 bg-purple-500/10 border-purple-500/30",
+  guild: "text-blue-500 bg-blue-500/10 border-blue-500/30",
+  rank: "text-yellow-500 bg-yellow-500/10 border-yellow-500/30",
+};
+
+const titleCategoryColors: Record<string, string> = {
+  rank: "text-yellow-500",
+  guild: "text-blue-500",
+  event: "text-green-500",
+};
+
 export default function Achievements() {
   const [, navigate] = useLocation();
   const { account } = useGame();
   const [selectedCategory, setSelectedCategory] = useState("Combat");
+  const queryClient = useQueryClient();
 
   const { data: achievementsData } = useQuery<{ categories: AchievementCategory[]; total: number; unlocked: string[] }>({
     queryKey: [`/api/accounts/${account?.id}/achievements`],
@@ -58,9 +95,49 @@ export default function Achievements() {
     enabled: !!account,
   });
 
+  const { data: titlesData } = useQuery<{ titles: PlayerTitle[]; equipped: PlayerTitle[]; maxEquipped: number; availableTitles: any[] }>({
+    queryKey: [`/api/accounts/${account?.id}/titles`],
+    enabled: !!account,
+  });
+
+  const { data: badgesData } = useQuery<{ badges: PlayerBadge[] }>({
+    queryKey: [`/api/accounts/${account?.id}/badges`],
+    enabled: !!account,
+  });
+
+  const equipTitle = useMutation({
+    mutationFn: async (titleId: string) => {
+      const res = await fetch(`/api/accounts/${account?.id}/titles/equip`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ titleId }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/accounts/${account?.id}/titles`] });
+    },
+  });
+
+  const unequipTitle = useMutation({
+    mutationFn: async (titleId: string) => {
+      const res = await fetch(`/api/accounts/${account?.id}/titles/unequip`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ titleId }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/accounts/${account?.id}/titles`] });
+    },
+  });
+
   if (!account) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="h-full flex items-center justify-center">
         <p className="text-muted-foreground">Please log in to view achievements</p>
       </div>
     );
@@ -75,10 +152,14 @@ export default function Achievements() {
   const earnedTrophies = trophiesData?.earned?.length || 0;
   const totalTrophies = trophiesData?.total || 0;
 
+  const titles = titlesData?.titles || [];
+  const equippedTitles = titles.filter(t => t.isEquipped);
+  const badges = badgesData?.badges || [];
+
   const currentCategory = categories.find(c => c.category === selectedCategory);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-accent/10 p-4">
+    <div className="h-full bg-gradient-to-br from-background via-background to-accent/10 p-4">
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
@@ -96,15 +177,50 @@ export default function Achievements() {
           </Button>
         </div>
 
+        {badges.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {badges.map(badge => {
+              const Icon = badgeTypeIcons[badge.badgeType] || Shield;
+              const colorClass = badgeTypeColors[badge.badgeType] || "text-gray-500 bg-gray-500/10 border-gray-500/30";
+              return (
+                <div key={badge.id} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium ${colorClass}`}>
+                  <Icon className="w-3 h-3" />
+                  {badge.name}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {equippedTitles.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {equippedTitles.map(title => (
+              <div key={title.id} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs font-medium">
+                <Tag className="w-3 h-3" />
+                {title.name}
+                <span className="text-[9px] opacity-60 uppercase">{title.category}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         <Tabs defaultValue="achievements" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 max-w-md">
+          <TabsList className="grid w-full grid-cols-4 max-w-2xl">
             <TabsTrigger value="achievements" className="flex items-center gap-2">
               <Star className="w-4 h-4" />
-              Achievements ({totalUnlocked})
+              Achievements
             </TabsTrigger>
             <TabsTrigger value="trophies" className="flex items-center gap-2">
               <Trophy className="w-4 h-4" />
-              Trophies ({earnedTrophies}/{totalTrophies})
+              Trophies
+            </TabsTrigger>
+            <TabsTrigger value="titles" className="flex items-center gap-2">
+              <Tag className="w-4 h-4" />
+              Titles
+            </TabsTrigger>
+            <TabsTrigger value="badges" className="flex items-center gap-2">
+              <Shield className="w-4 h-4" />
+              Badges
             </TabsTrigger>
           </TabsList>
 
@@ -218,7 +334,7 @@ export default function Achievements() {
                 <CardDescription>
                   {earnedTrophies} / {totalTrophies} trophies earned
                 </CardDescription>
-                <Progress value={(earnedTrophies / totalTrophies) * 100} className="h-2" />
+                <Progress value={(earnedTrophies / Math.max(totalTrophies, 1)) * 100} className="h-2" />
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-[500px]">
@@ -244,6 +360,139 @@ export default function Achievements() {
                         )}
                       </div>
                     ))}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="titles" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Tag className="w-5 h-5 text-amber-500" />
+                  Titles
+                </CardTitle>
+                <CardDescription>
+                  {titles.length} titles earned — {equippedTitles.length}/3 equipped (max 1 per category: rank, guild, event)
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ScrollArea className="h-[500px]">
+                  <div className="space-y-6">
+                    {(["rank", "guild", "event"] as const).map(category => {
+                      const categoryTitles = titles.filter(t => t.category === category);
+                      if (categoryTitles.length === 0) return null;
+                      return (
+                        <div key={category}>
+                          <h3 className={`text-sm font-semibold mb-3 uppercase tracking-wider ${titleCategoryColors[category]}`}>
+                            {category} Titles ({categoryTitles.length})
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {categoryTitles.map(title => (
+                              <div
+                                key={title.id}
+                                className={`p-3 rounded-lg border flex items-center justify-between ${
+                                  title.isEquipped
+                                    ? "bg-amber-500/10 border-amber-500/30"
+                                    : "bg-card border-border"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <Crown className={`w-4 h-4 ${title.isEquipped ? "text-amber-500" : "text-muted-foreground"}`} />
+                                  <span className="font-medium text-sm">{title.name}</span>
+                                </div>
+                                {title.isEquipped ? (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-xs h-7"
+                                    onClick={() => unequipTitle.mutate(title.titleId)}
+                                    disabled={unequipTitle.isPending}
+                                  >
+                                    Unequip
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs h-7"
+                                    onClick={() => equipTitle.mutate(title.titleId)}
+                                    disabled={equipTitle.isPending}
+                                  >
+                                    Equip
+                                  </Button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {titles.length === 0 && (
+                      <div className="text-center text-muted-foreground py-12">
+                        <Tag className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                        <p>No titles earned yet. Keep progressing to unlock titles!</p>
+                      </div>
+                    )}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="badges" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-blue-500" />
+                  Badges
+                </CardTitle>
+                <CardDescription>
+                  {badges.length} badges earned — Badges are always visible on your profile
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ScrollArea className="h-[500px]">
+                  <div className="space-y-6">
+                    {(["vip", "guild", "rank"] as const).map(badgeType => {
+                      const typeBadges = badges.filter(b => b.badgeType === badgeType);
+                      if (typeBadges.length === 0) return null;
+                      const Icon = badgeTypeIcons[badgeType] || Shield;
+                      return (
+                        <div key={badgeType}>
+                          <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider flex items-center gap-2">
+                            <Icon className="w-4 h-4" />
+                            {badgeType === "vip" ? "VIP" : badgeType.charAt(0).toUpperCase() + badgeType.slice(1)} Badges
+                          </h3>
+                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            {typeBadges.map(badge => {
+                              const colorClass = badgeTypeColors[badge.badgeType] || "";
+                              return (
+                                <div
+                                  key={badge.id}
+                                  className={`p-4 rounded-lg border text-center ${colorClass}`}
+                                >
+                                  <div className="w-14 h-14 mx-auto rounded-full flex items-center justify-center mb-2 bg-background/50">
+                                    <Icon className="w-7 h-7" />
+                                  </div>
+                                  <p className="font-medium text-sm">{badge.name}</p>
+                                  <p className="text-[10px] text-muted-foreground mt-1">
+                                    {new Date(badge.earnedAt).toLocaleDateString()}
+                                  </p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {badges.length === 0 && (
+                      <div className="text-center text-muted-foreground py-12">
+                        <Shield className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                        <p>No badges earned yet. Badges are awarded for VIP status, guild membership, and rank progress.</p>
+                      </div>
+                    )}
                   </div>
                 </ScrollArea>
               </CardContent>

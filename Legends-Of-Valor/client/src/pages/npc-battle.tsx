@@ -16,6 +16,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { ZoneScene } from "@/components/zone-scene";
 import { Sword, Shield, Crown, LogOut, ChevronRight, Target, Trophy, Skull, Sparkles, Cat, Check, ArrowLeftRight, Play, Square, Zap } from "lucide-react";
 
 const elementColors: Record<string, string> = {
@@ -171,14 +172,13 @@ export default function NpcBattle() {
   const levelProgress = currentNpc ? ((currentNpc.level - 1) / 99) * 100 : 0;
 
   return (
-    <div className="min-h-screen relative">
-      <div 
-        className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: "url('/backdrops/tower.png')" }}
-      />
-      <div className="absolute inset-0 bg-black/60" />
-      
-      <div className="relative z-10 min-h-screen text-foreground">
+    <ZoneScene
+      zoneName="NPC Battle"
+      backdrop="/backdrops/tower.png"
+      ambientClass="zone-ambient-tower"
+      overlayOpacity={0.45}
+    >
+      <div className="h-full flex flex-col text-foreground">
       <header className="border-b border-border bg-card/80 backdrop-blur sticky top-0 z-50">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -645,6 +645,6 @@ export default function NpcBattle() {
         </DialogContent>
       </Dialog>
       </div>
-    </div>
+    </ZoneScene>
   );
 }

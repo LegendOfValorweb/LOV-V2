@@ -1,11 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { Sword, Shield, Zap, Brain, Loader2, Heart, RefreshCw } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface CombatState {
@@ -16,6 +11,12 @@ interface CombatState {
     hp: number;
     maxHp: number;
     action: string | null;
+    element?: string;
+    portrait?: string;
+    race?: string;
+    gender?: string;
+    pet?: { name: string; element: string; tier: string } | null;
+    statusEffects?: { type: string; turns: number }[];
   };
   player2: {
     id: string;
@@ -23,10 +24,28 @@ interface CombatState {
     hp: number;
     maxHp: number;
     action: string | null;
+    element?: string;
+    portrait?: string;
+    race?: string;
+    gender?: string;
+    pet?: { name: string; element: string; tier: string } | null;
+    statusEffects?: { type: string; turns: number }[];
   };
   log: string[];
   status: "waiting" | "resolved" | "finished";
   winnerId?: string;
+  lastAction?: {
+    attackerId: string;
+    defenderId: string;
+    type: string;
+    damage?: number;
+    isCrit?: boolean;
+    isAoE?: boolean;
+    element?: string;
+    healed?: number;
+    dodged?: boolean;
+    blocked?: boolean;
+  };
 }
 
 interface CombatUIProps {
@@ -37,44 +56,87 @@ interface CombatUIProps {
   onCombatEnd?: () => void;
 }
 
-const actionIcons = {
-  attack: <Sword className="w-5 h-5" />,
-  defend: <Shield className="w-5 h-5" />,
-  dodge: <Zap className="w-5 h-5" />,
-  trick: <Brain className="w-5 h-5" />,
+interface FloatingNumber {
+  id: number;
+  value: string;
+  x: number;
+  y: number;
+  color: string;
+  isCrit: boolean;
+}
+
+const ELEMENT_COLORS: Record<string, string> = {
+  Fire: "#ff4400",
+  Water: "#0088ff",
+  Air: "#88ddff",
+  Earth: "#aa7722",
+  Nature: "#22cc44",
+  Light: "#ffee88",
+  Dark: "#8833aa",
+  Plasma: "#ff44aa",
+  Space: "#6666ff",
+  Time: "#ddaa33",
+  Aether: "#7799ff",
+  Soul: "#cc88ff",
+  Void: "#555566",
+  Storm: "#ffdd00",
+  Metal: "#99aabb",
+  Blood: "#cc2222",
+  Crystal: "#88eeff",
+  Arcane: "#aa44ff",
 };
 
-const actionColors = {
-  attack: "bg-red-600 hover:bg-red-700",
-  defend: "bg-blue-600 hover:bg-blue-700",
-  dodge: "bg-green-600 hover:bg-green-700",
-  trick: "bg-purple-600 hover:bg-purple-700",
+const STATUS_ICONS: Record<string, string> = {
+  stun: "💫",
+  freeze: "🧊",
+  silence: "🤐",
+  burn: "🔥",
+  poison: "☠️",
+  bleed: "🩸",
+  weakness: "⬇️",
+  buff_str: "⬆️",
+  buff_def: "🛡️",
+  buff_spd: "💨",
+  buff_int: "🧠",
 };
 
-const actionDescriptions = {
-  attack: "Deal damage based on STR",
-  defend: "Reduce incoming damage with DEF",
-  dodge: "Attempt to avoid attack with SPD",
-  trick: "Outsmart opponent with INT",
-};
+const ACTION_DATA = {
+  attack: { icon: "⚔️", label: "Attack", desc: "Strike with STR", color: "combat-btn-attack" },
+  defend: { icon: "🛡️", label: "Defend", desc: "Guard with DEF", color: "combat-btn-defend" },
+  dodge: { icon: "💨", label: "Dodge", desc: "Evade with SPD", color: "combat-btn-dodge" },
+  spell: { icon: "✨", label: "Spell", desc: "Cast with INT", color: "combat-btn-spell" },
+} as const;
 
-export default function CombatUI({ 
-  challengeId, 
+let floatingIdCounter = 0;
+
+export default function CombatUI({
+  challengeId,
   currentPlayerId,
   challengerName,
   challengedName,
-  onCombatEnd 
+  onCombatEnd,
 }: CombatUIProps) {
   const { toast } = useToast();
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
+  const [floatingNumbers, setFloatingNumbers] = useState<FloatingNumber[]>([]);
+  const [playerShake, setPlayerShake] = useState(false);
+  const [enemyShake, setEnemyShake] = useState(false);
+  const [critFlash, setCritFlash] = useState(false);
+  const [screenShake, setScreenShake] = useState(false);
+  const [hitSpark, setHitSpark] = useState<{ x: number; y: number; element: string } | null>(null);
+  const [showVictory, setShowVictory] = useState(false);
+  const [showDefeat, setShowDefeat] = useState(false);
+  const [playerDefeated, setPlayerDefeated] = useState(false);
+  const [enemyDefeated, setEnemyDefeated] = useState(false);
+  const prevStateRef = useRef<CombatState | null>(null);
+  const battlefieldRef = useRef<HTMLDivElement>(null);
 
   const { data: combatState, isLoading, refetch } = useQuery<CombatState | null>({
     queryKey: ["/api/challenges", challengeId, "combat"],
     queryFn: async () => {
       const res = await fetch(`/api/challenges/${challengeId}/combat`);
       if (!res.ok) throw new Error("Failed to fetch combat state");
-      const data = await res.json();
-      return data;
+      return res.json();
     },
     refetchInterval: 3000,
   });
@@ -90,30 +152,108 @@ export default function CombatUI({
     onSuccess: (data) => {
       setSelectedAction(null);
       queryClient.invalidateQueries({ queryKey: ["/api/challenges", challengeId, "combat"] });
-      
+
       if (data.combatState?.status === "finished") {
         const isWinner = data.combatState.winnerId === currentPlayerId;
-        toast({
-          title: isWinner ? "Victory!" : "Defeat",
-          description: isWinner ? "You won the battle!" : "You were defeated.",
-          variant: isWinner ? "default" : "destructive",
-        });
-        onCombatEnd?.();
+        if (isWinner) {
+          setShowVictory(true);
+        } else {
+          setShowDefeat(true);
+        }
+        setTimeout(() => onCombatEnd?.(), 4000);
       } else if (data.message) {
-        toast({
-          title: "Action Submitted",
-          description: data.message,
-        });
+        toast({ title: "Action Submitted", description: data.message });
       }
     },
     onError: (error: Error) => {
-      toast({
-        title: "Action Failed",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Action Failed", description: error.message, variant: "destructive" });
     },
   });
+
+  const spawnFloatingNumber = useCallback(
+    (value: string, side: "player" | "enemy", color: string, isCrit: boolean) => {
+      const baseX = side === "player" ? 22 : 72;
+      const x = baseX + (Math.random() - 0.5) * 10;
+      const y = 30 + (Math.random() - 0.5) * 10;
+      const id = ++floatingIdCounter;
+      setFloatingNumbers((prev) => [...prev, { id, value, x, y, color, isCrit }]);
+      setTimeout(() => {
+        setFloatingNumbers((prev) => prev.filter((n) => n.id !== id));
+      }, 1200);
+    },
+    []
+  );
+
+  const triggerHitSpark = useCallback((side: "player" | "enemy", element: string) => {
+    const x = side === "player" ? 25 : 75;
+    const y = 40;
+    setHitSpark({ x, y, element });
+    setTimeout(() => setHitSpark(null), 400);
+  }, []);
+
+  useEffect(() => {
+    if (!combatState || !prevStateRef.current) {
+      prevStateRef.current = combatState || null;
+      return;
+    }
+    const prev = prevStateRef.current;
+    const curr = combatState;
+
+    if (curr.status === "resolved" || curr.round !== prev.round) {
+      const isPlayer1 = curr.player1.id === currentPlayerId;
+      const myState = isPlayer1 ? curr.player1 : curr.player2;
+      const opState = isPlayer1 ? curr.player2 : curr.player1;
+      const prevMyState = isPlayer1 ? prev.player1 : prev.player2;
+      const prevOpState = isPlayer1 ? prev.player2 : prev.player1;
+
+      if (myState.hp < prevMyState.hp) {
+        const dmg = prevMyState.hp - myState.hp;
+        setPlayerShake(true);
+        setTimeout(() => setPlayerShake(false), 500);
+        spawnFloatingNumber(`-${dmg}`, "player", "#ff4444", false);
+        triggerHitSpark("player", opState.element || "Fire");
+      }
+
+      if (opState.hp < prevOpState.hp) {
+        const dmg = prevOpState.hp - opState.hp;
+        setEnemyShake(true);
+        setTimeout(() => setEnemyShake(false), 500);
+
+        const lastLog = curr.log[curr.log.length - 1] || "";
+        const isCrit = lastLog.toLowerCase().includes("crit");
+        const color = isCrit ? "#ffdd00" : "#ffffff";
+        spawnFloatingNumber(`-${dmg}`, "enemy", color, isCrit);
+        triggerHitSpark("enemy", myState.element || "Fire");
+
+        if (isCrit) {
+          setCritFlash(true);
+          setTimeout(() => setCritFlash(false), 300);
+        }
+      }
+
+      if (myState.hp > prevMyState.hp) {
+        const heal = myState.hp - prevMyState.hp;
+        spawnFloatingNumber(`+${heal}`, "player", "#44ff88", false);
+      }
+
+      if (myState.hp <= 0 && prevMyState.hp > 0) {
+        setPlayerDefeated(true);
+      }
+      if (opState.hp <= 0 && prevOpState.hp > 0) {
+        setEnemyDefeated(true);
+      }
+    }
+
+    if (curr.status === "finished" && prev.status !== "finished") {
+      const isWinner = curr.winnerId === currentPlayerId;
+      setTimeout(() => {
+        if (isWinner) setShowVictory(true);
+        else setShowDefeat(true);
+      }, 800);
+    }
+
+    prevStateRef.current = curr;
+  }, [combatState, currentPlayerId, spawnFloatingNumber, triggerHitSpark]);
 
   const handleAction = (action: string) => {
     setSelectedAction(action);
@@ -122,24 +262,26 @@ export default function CombatUI({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="combat-scene">
+        <div className="combat-loading">
+          <div className="combat-loading-spinner" />
+          <span>Preparing battle...</span>
+        </div>
       </div>
     );
   }
 
   if (!combatState || !combatState.player1 || !combatState.player2) {
     return (
-      <Card className="border-yellow-500/50">
-        <CardContent className="text-center py-8">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-yellow-500" />
-          <p className="text-muted-foreground mb-4">Initializing combat...</p>
-          <Button onClick={() => refetch()} variant="outline" size="sm">
-            <RefreshCw className="w-4 h-4 mr-2" />
+      <div className="combat-scene">
+        <div className="combat-loading">
+          <div className="combat-loading-spinner" />
+          <span>Initializing combat...</span>
+          <button className="combat-refresh-btn" onClick={() => refetch()}>
             Refresh
-          </Button>
-        </CardContent>
-      </Card>
+          </button>
+        </div>
+      </div>
     );
   }
 
@@ -149,140 +291,270 @@ export default function CombatUI({
   const hasSubmittedAction = myState.action !== null;
   const waitingForOpponent = hasSubmittedAction && opponentState.action === null;
 
+  const getPortrait = (state: CombatState["player1"]) => {
+    if (state.portrait) {
+      if (state.portrait.startsWith("skins/")) return `/${state.portrait}.png`;
+      if (state.portrait.includes("/")) return state.portrait;
+      return `/portraits/${state.portrait}.png`;
+    }
+    if (state.race && state.gender) return `/portraits/${state.race}_${state.gender}.png`;
+    return "/portraits/human_male.png";
+  };
+
+  const hpPercent = (hp: number, max: number) => Math.max(0, Math.min(100, (hp / max) * 100));
+  const hpColor = (pct: number) =>
+    pct > 60 ? "combat-hp-high" : pct > 25 ? "combat-hp-mid" : "combat-hp-low";
+
+  if (showVictory) {
+    return (
+      <div className="combat-scene">
+        <div className="combat-backdrop combat-backdrop-arena" />
+        <div className="combat-victory-screen">
+          <div className="combat-victory-banner">🏆 VICTORY 🏆</div>
+          <div className="combat-victory-text">You defeated {opponentState.name}!</div>
+          <div className="combat-log-mini">
+            {combatState.log.slice(-5).map((entry, i) => (
+              <div key={i} className="combat-log-entry">
+                {entry}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (showDefeat) {
+    return (
+      <div className="combat-scene">
+        <div className="combat-backdrop combat-backdrop-arena" />
+        <div className="combat-defeat-screen">
+          <div className="combat-defeat-banner">💀 DEFEAT 💀</div>
+          <div className="combat-defeat-text">You were defeated by {opponentState.name}</div>
+          <div className="combat-log-mini">
+            {combatState.log.slice(-5).map((entry, i) => (
+              <div key={i} className="combat-log-entry">
+                {entry}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (combatState.status === "finished") {
     const isWinner = combatState.winnerId === currentPlayerId;
     return (
-      <Card className={isWinner ? "border-green-500" : "border-red-500"}>
-        <CardHeader>
-          <CardTitle className="text-center">
-            {isWinner ? "🏆 Victory!" : "💀 Defeat"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-center text-muted-foreground">
-            {isWinner ? "You won the battle!" : "Better luck next time!"}
-          </p>
-          <div className="bg-muted rounded-lg p-3 max-h-40 overflow-y-auto">
-            <p className="text-xs font-mono text-muted-foreground">
-              {combatState.log.slice(-5).map((entry, i) => (
-                <span key={i} className="block">{entry}</span>
-              ))}
-            </p>
+      <div className="combat-scene">
+        <div className="combat-backdrop combat-backdrop-arena" />
+        <div className={isWinner ? "combat-victory-screen" : "combat-defeat-screen"}>
+          <div className={isWinner ? "combat-victory-banner" : "combat-defeat-banner"}>
+            {isWinner ? "🏆 VICTORY 🏆" : "💀 DEFEAT 💀"}
           </div>
-        </CardContent>
-      </Card>
+          <div className={isWinner ? "combat-victory-text" : "combat-defeat-text"}>
+            {isWinner ? "You won the battle!" : "Better luck next time!"}
+          </div>
+          <div className="combat-log-mini">
+            {combatState.log.slice(-5).map((entry, i) => (
+              <div key={i} className="combat-log-entry">
+                {entry}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Card className="border-yellow-500/50">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg">Round {combatState.round}</CardTitle>
-          <div className="flex items-center gap-2">
-            {!hasSubmittedAction && (
-              <Badge className="bg-green-600 animate-pulse">Your Turn</Badge>
-            )}
-            {hasSubmittedAction && !waitingForOpponent && (
-              <Badge variant="secondary">Action Submitted</Badge>
-            )}
-            {waitingForOpponent && (
-              <Badge variant="outline" className="text-yellow-500 border-yellow-500">
-                Waiting for {opponentState.name}
-              </Badge>
-            )}
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div className={`p-3 rounded-lg ${isPlayer1 ? "bg-primary/10 border border-primary/30" : "bg-muted"}`}>
-            <p className="font-medium text-sm mb-1">{combatState.player1.name}</p>
-            <div className="flex items-center gap-2 mb-1">
-              <Heart className="w-4 h-4 text-red-500" />
-              <span className="text-sm">{combatState.player1.hp}/{combatState.player1.maxHp}</span>
-            </div>
-            <Progress 
-              value={(combatState.player1.hp / combatState.player1.maxHp) * 100} 
-              className="h-2"
-            />
-            {combatState.player1.action && (
-              <Badge className="mt-2" variant="secondary">
-                Action submitted
-              </Badge>
-            )}
-          </div>
-          <div className={`p-3 rounded-lg ${!isPlayer1 ? "bg-primary/10 border border-primary/30" : "bg-muted"}`}>
-            <p className="font-medium text-sm mb-1">{combatState.player2.name}</p>
-            <div className="flex items-center gap-2 mb-1">
-              <Heart className="w-4 h-4 text-red-500" />
-              <span className="text-sm">{combatState.player2.hp}/{combatState.player2.maxHp}</span>
-            </div>
-            <Progress 
-              value={(combatState.player2.hp / combatState.player2.maxHp) * 100} 
-              className="h-2"
-            />
-            {combatState.player2.action && (
-              <Badge className="mt-2" variant="secondary">
-                Action submitted
-              </Badge>
-            )}
-          </div>
-        </div>
+    <div className={`combat-scene ${screenShake ? "combat-screen-shake" : ""}`}>
+      {critFlash && <div className="combat-crit-flash" />}
 
-        {combatState.log.length > 0 && (
-          <div className="bg-muted rounded-lg p-3 max-h-24 overflow-y-auto">
-            <p className="text-xs font-mono text-muted-foreground">
-              {combatState.log.slice(-3).map((entry, i) => (
-                <span key={i} className="block">{entry}</span>
-              ))}
-            </p>
-          </div>
+      <div className="combat-backdrop combat-backdrop-arena" />
+      <div className="combat-backdrop-vignette" />
+
+      <div className="combat-round-banner">
+        <span className="combat-round-label">Round {combatState.round}</span>
+        {!hasSubmittedAction && (
+          <span className="combat-turn-indicator">⚔ YOUR TURN ⚔</span>
         )}
+        {waitingForOpponent && (
+          <span className="combat-waiting-indicator">Waiting for {opponentState.name}...</span>
+        )}
+      </div>
 
+      <div className="combat-battlefield" ref={battlefieldRef}>
+        <div className={`combat-combatant combat-combatant-player ${playerShake ? "combat-shake" : ""} ${playerDefeated ? "combat-defeated" : ""}`}>
+          <div className="combat-status-effects">
+            {(myState.statusEffects || []).map((fx, i) => (
+              <div key={i} className="combat-status-icon" title={`${fx.type} (${fx.turns} turns)`}>
+                <span>{STATUS_ICONS[fx.type] || "❓"}</span>
+                <span className="combat-status-turns">{fx.turns}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="combat-hp-bar-container">
+            <div className="combat-combatant-name">{myState.name}</div>
+            <div className="combat-hp-bar">
+              <div
+                className={`combat-hp-fill ${hpColor(hpPercent(myState.hp, myState.maxHp))}`}
+                style={{ width: `${hpPercent(myState.hp, myState.maxHp)}%` }}
+              />
+            </div>
+            <div className="combat-hp-text">
+              {myState.hp} / {myState.maxHp}
+            </div>
+          </div>
+
+          <div className="combat-sprite-frame">
+            <img
+              src={getPortrait(myState)}
+              alt={myState.name}
+              className="combat-sprite-img"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = "/portraits/human_male.png";
+              }}
+            />
+            {myState.element && (
+              <div
+                className="combat-element-badge"
+                style={{ color: ELEMENT_COLORS[myState.element] || "#fff" }}
+              >
+                {myState.element}
+              </div>
+            )}
+          </div>
+
+          {myState.pet && (
+            <div className="combat-pet-sprite">
+              <span className="combat-pet-icon">🐾</span>
+              <span className="combat-pet-name">{myState.pet.name}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="combat-vs-divider">
+          <span>VS</span>
+        </div>
+
+        <div className={`combat-combatant combat-combatant-enemy ${enemyShake ? "combat-shake" : ""} ${enemyDefeated ? "combat-defeated" : ""}`}>
+          <div className="combat-status-effects">
+            {(opponentState.statusEffects || []).map((fx, i) => (
+              <div key={i} className="combat-status-icon" title={`${fx.type} (${fx.turns} turns)`}>
+                <span>{STATUS_ICONS[fx.type] || "❓"}</span>
+                <span className="combat-status-turns">{fx.turns}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="combat-hp-bar-container">
+            <div className="combat-combatant-name">{opponentState.name}</div>
+            <div className="combat-hp-bar">
+              <div
+                className={`combat-hp-fill ${hpColor(hpPercent(opponentState.hp, opponentState.maxHp))}`}
+                style={{ width: `${hpPercent(opponentState.hp, opponentState.maxHp)}%` }}
+              />
+            </div>
+            <div className="combat-hp-text">
+              {opponentState.hp} / {opponentState.maxHp}
+            </div>
+          </div>
+
+          <div className="combat-sprite-frame combat-sprite-enemy">
+            <img
+              src={getPortrait(opponentState)}
+              alt={opponentState.name}
+              className="combat-sprite-img"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = "/portraits/human_male.png";
+              }}
+            />
+            {opponentState.element && (
+              <div
+                className="combat-element-badge"
+                style={{ color: ELEMENT_COLORS[opponentState.element] || "#fff" }}
+              >
+                {opponentState.element}
+              </div>
+            )}
+          </div>
+
+          {opponentState.pet && (
+            <div className="combat-pet-sprite">
+              <span className="combat-pet-icon">🐾</span>
+              <span className="combat-pet-name">{opponentState.pet.name}</span>
+            </div>
+          )}
+        </div>
+
+        {floatingNumbers.map((fn) => (
+          <div
+            key={fn.id}
+            className={`combat-floating-number ${fn.isCrit ? "combat-floating-crit" : ""}`}
+            style={{
+              left: `${fn.x}%`,
+              top: `${fn.y}%`,
+              color: fn.color,
+            }}
+          >
+            {fn.value}
+          </div>
+        ))}
+
+        {hitSpark && (
+          <div
+            className="combat-hit-spark"
+            style={{
+              left: `${hitSpark.x}%`,
+              top: `${hitSpark.y}%`,
+              color: ELEMENT_COLORS[hitSpark.element] || "#ffaa00",
+            }}
+          />
+        )}
+      </div>
+
+      {combatState.log.length > 0 && (
+        <div className="combat-log-panel">
+          {combatState.log.slice(-3).map((entry, i) => (
+            <div key={i} className="combat-log-entry">
+              {entry}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="combat-action-panel">
         {waitingForOpponent ? (
-          <div className="text-center py-4">
-            <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-yellow-500" />
-            <p className="text-sm text-muted-foreground">
-              Waiting for opponent to choose their action...
-            </p>
-            <Button onClick={() => refetch()} variant="ghost" size="sm" className="mt-2">
-              <RefreshCw className="w-4 h-4 mr-1" />
-              Refresh
-            </Button>
+          <div className="combat-waiting-panel">
+            <div className="combat-waiting-spinner" />
+            <span>Waiting for opponent...</span>
           </div>
         ) : hasSubmittedAction ? (
-          <div className="text-center py-4">
-            <p className="text-sm text-muted-foreground">
-              You selected: <span className="font-bold capitalize">{myState.action}</span>
-            </p>
+          <div className="combat-submitted-panel">
+            <span>Action submitted: <strong className="capitalize">{myState.action}</strong></span>
           </div>
         ) : (
-          <div className="space-y-3">
-            <p className="text-sm text-center text-muted-foreground">
-              Choose your action:
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {(["attack", "defend", "dodge", "trick"] as const).map((action) => (
-                <Button
+          <div className="combat-action-grid">
+            {(Object.keys(ACTION_DATA) as Array<keyof typeof ACTION_DATA>).map((action) => {
+              const data = ACTION_DATA[action];
+              return (
+                <button
                   key={action}
+                  className={`combat-action-btn ${data.color} ${selectedAction === action ? "combat-action-selected" : ""}`}
                   onClick={() => handleAction(action)}
                   disabled={actionMutation.isPending}
-                  className={`flex flex-col items-center gap-1 h-auto py-3 ${actionColors[action]}`}
                 >
-                  {actionMutation.isPending && selectedAction === action ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    actionIcons[action]
-                  )}
-                  <span className="capitalize font-bold">{action}</span>
-                  <span className="text-xs opacity-75">{actionDescriptions[action]}</span>
-                </Button>
-              ))}
-            </div>
+                  <span className="combat-action-icon">{data.icon}</span>
+                  <span className="combat-action-label">{data.label}</span>
+                  <span className="combat-action-desc">{data.desc}</span>
+                </button>
+              );
+            })}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

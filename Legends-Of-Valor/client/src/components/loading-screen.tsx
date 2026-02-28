@@ -6,7 +6,7 @@ interface LoadingScreenProps {
 
 export function LoadingScreen({ message = "Loading..." }: LoadingScreenProps) {
   return (
-    <div className="fixed inset-0 z-[9998] bg-gradient-to-br from-slate-900 via-purple-900/50 to-slate-900 flex flex-col items-center justify-center">
+    <div className="absolute inset-0 z-[9998] bg-gradient-to-br from-slate-900 via-purple-900/50 to-slate-900 flex flex-col items-center justify-center">
       <div className="text-center space-y-8">
         <div className="relative">
           <div className="flex items-center justify-center gap-4">
@@ -18,7 +18,7 @@ export function LoadingScreen({ message = "Loading..." }: LoadingScreenProps) {
         </div>
         
         <div className="space-y-4">
-          <h2 className="text-2xl font-bold text-amber-400 font-serif tracking-wide">
+          <h2 className="text-2xl font-bold rpg-title rpg-gold-text tracking-wide">
             Legends of Valor
           </h2>
           

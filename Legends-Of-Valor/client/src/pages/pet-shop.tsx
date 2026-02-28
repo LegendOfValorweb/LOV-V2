@@ -172,7 +172,7 @@ export default function PetShop() {
   };
 
   return (
-    <div className="min-h-screen relative">
+    <div className="h-full relative">
       <div 
         className="absolute inset-0 bg-cover bg-center"
         style={{ backgroundImage: "url('/backdrops/pets.png')" }}

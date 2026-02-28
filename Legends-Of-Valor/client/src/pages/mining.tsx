@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { ZoneScene } from "@/components/zone-scene";
 import { 
   Mountain, 
   ArrowLeft,
@@ -87,86 +88,73 @@ export default function Mining() {
   };
 
   return (
-    <div className="min-h-screen relative">
-      <div 
-        className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: "url('/backdrops/base.png')" }}
-      />
-      <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/60 to-black/80" />
-      
-      <div className="relative z-10">
-        <header className="border-b border-border/50 bg-black/50 backdrop-blur-sm">
-          <div className="container mx-auto px-4 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Button variant="ghost" size="icon" onClick={() => navigate("/world-map")}>
-                  <ArrowLeft className="w-5 h-5" />
-                </Button>
-                <div className="flex items-center gap-2">
-                  <Mountain className="w-6 h-6 text-amber-400" />
-                  <h1 className="text-2xl font-serif font-bold">Mountain Caverns</h1>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 text-sm">
-                <div className="flex items-center gap-2 bg-black/50 px-3 py-1.5 rounded-lg">
-                  <Coins className="w-4 h-4 text-yellow-400" />
-                  <span>{(account.gold || 0).toLocaleString()}</span>
-                </div>
-              </div>
+    <ZoneScene
+      zoneName="Mining Camp"
+      backdrop="/backdrops/base.png"
+      ambientClass="zone-ambient-cave"
+      overlayOpacity={0.5}
+      interactables={MINING_NODES.map((node, i) => ({
+        id: node.id,
+        type: "resource" as const,
+        name: node.name,
+        emoji: "💎",
+        position: { x: 20 + (i % 3) * 25, y: 30 + Math.floor(i / 3) * 25 },
+        animation: "glow" as const,
+        disabled: isMining !== null,
+        tooltip: `${node.name} - ${node.goldReward} gold`,
+        onClick: () => handleMine(node.id),
+      }))}
+    >
+      <div className="h-full flex flex-col">
+        <div className="flex-shrink-0 p-3">
+          <div className="flex items-center justify-between">
+            <div className="rpg-panel px-3 py-1.5 flex items-center gap-2">
+              <Mountain className="w-5 h-5 text-amber-400" />
+              <span className="rpg-heading text-sm">Mountain Caverns</span>
             </div>
           </div>
-        </header>
+        </div>
 
-        <main className="container mx-auto px-4 py-8">
-          <div className="text-center mb-8">
-            <h2 className="text-lg text-muted-foreground">
-              Mine precious ores and gems from the mountain depths
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="flex-1 overflow-y-auto p-3 pt-0">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {MINING_NODES.map((node) => (
-              <Card key={node.id} className="bg-card/90 backdrop-blur">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Gem className={`w-5 h-5 ${node.color}`} />
-                    {node.name}
-                  </CardTitle>
-                  <CardDescription>Difficulty: {"⭐".repeat(node.difficulty)}</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex justify-between text-sm">
-                    <span className="flex items-center gap-1">
-                      <Coins className="w-4 h-4 text-yellow-400" />
-                      {node.goldReward.toLocaleString()} gold
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Sparkles className="w-4 h-4 text-blue-400" />
-                      {node.expReward} exp
-                    </span>
+              <div key={node.id} className="rpg-card p-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Gem className={`w-5 h-5 ${node.color}`} />
+                  <span className="rpg-heading text-sm font-bold">{node.name}</span>
+                </div>
+                <p className="text-xs text-muted-foreground">Difficulty: {"⭐".repeat(node.difficulty)}</p>
+                <div className="flex justify-between text-xs">
+                  <span className="flex items-center gap-1">
+                    <Coins className="w-3 h-3 text-yellow-400" />
+                    {node.goldReward.toLocaleString()} gold
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-blue-400" />
+                    {node.expReward} exp
+                  </span>
+                </div>
+                
+                {isMining === node.id && (
+                  <div className="space-y-1">
+                    <Progress value={miningProgress} className="h-2" />
+                    <p className="text-[10px] text-center text-muted-foreground">Mining...</p>
                   </div>
-                  
-                  {isMining === node.id && (
-                    <div className="space-y-2">
-                      <Progress value={miningProgress} className="h-2" />
-                      <p className="text-xs text-center text-muted-foreground">Mining...</p>
-                    </div>
-                  )}
+                )}
 
-                  <Button 
-                    className="w-full" 
-                    onClick={() => handleMine(node.id)}
-                    disabled={isMining !== null}
-                  >
-                    <Pickaxe className="w-4 h-4 mr-2" />
-                    {isMining === node.id ? "Mining..." : "Mine"}
-                  </Button>
-                </CardContent>
-              </Card>
+                <Button 
+                  className="w-full rpg-button text-xs h-8" 
+                  onClick={() => handleMine(node.id)}
+                  disabled={isMining !== null}
+                >
+                  <Pickaxe className="w-3 h-3 mr-1" />
+                  {isMining === node.id ? "Mining..." : "Mine"}
+                </Button>
+              </div>
             ))}
           </div>
-        </main>
+        </div>
       </div>
-    </div>
+    </ZoneScene>
   );
 }

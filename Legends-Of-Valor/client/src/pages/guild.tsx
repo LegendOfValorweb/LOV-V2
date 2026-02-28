@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import type { Guild, GuildBank, Account } from "@shared/schema";
 import { useGame } from "@/lib/game-context";
+import { ZoneScene } from "@/components/zone-scene";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -46,6 +47,18 @@ interface GuildMember {
   rank: string;
   isOnline: boolean;
   isMaster: boolean;
+  role: "leader" | "officer" | "member";
+}
+
+interface GuildVaultLogEntry {
+  id: string;
+  playerName: string;
+  action: string;
+  resource: string | null;
+  quantity: number | null;
+  itemId: string | null;
+  itemName: string | null;
+  createdAt: string;
 }
 
 interface GuildWithMembers extends Guild {
@@ -65,6 +78,34 @@ interface GuildInvite {
   guild?: Guild;
 }
 
+interface GuildDungeonTierInfo {
+  tier: number;
+  name: string;
+  description: string;
+  isUnlocked: boolean;
+  isCompleted: boolean;
+  unlockRequirement: { guildLevel: number; previousDungeon: number };
+  npcStats: { Str: number; Spd: number; Int: number; Luck: number };
+  rewards: { unityCoins: number; gold: number; shards: number; label: string };
+  buff: { name: string; stat: string; bonusPercent: number };
+}
+
+interface GuildBuffInfo {
+  id: string;
+  name: string;
+  stat: string;
+  bonusPercent: number;
+  expiresAt: string;
+  fromDungeon: number;
+}
+
+interface GuildPerkInfo {
+  level: number;
+  name: string;
+  description: string;
+  unlocked: boolean;
+}
+
 interface DungeonInfo {
   floor: number;
   level: number;
@@ -79,6 +120,11 @@ interface DungeonInfo {
   rewards: { gold: number; rubies: number; soulShards: number; focusedShards: number; runes: number };
   onlineMembers: { accountId: string; username: string; equippedPet?: { id: string; name: string; tier: string; elements: string[] } | null }[];
   memberCount: number;
+  dungeons: GuildDungeonTierInfo[];
+  unityCoins: number;
+  dungeonsCompleted: number;
+  activeBuffs: GuildBuffInfo[];
+  perks: GuildPerkInfo[];
 }
 
 interface GuildBattle {
@@ -115,6 +161,10 @@ export default function GuildPage() {
   const [depositDialogOpen, setDepositDialogOpen] = useState(false);
   const [depositAmount, setDepositAmount] = useState("");
   const [depositResource, setDepositResource] = useState<"gold" | "rubies" | "soulShards" | "focusedShards">("gold");
+  const [vaultLogsDialogOpen, setVaultLogsDialogOpen] = useState(false);
+  const [roleDialogOpen, setRoleDialogOpen] = useState(false);
+  const [roleTarget, setRoleTarget] = useState<{ accountId: string; username: string; currentRole: string } | null>(null);
+  const [selectedRole, setSelectedRole] = useState<"officer" | "member">("member");
 
   const { data: guild, isLoading: guildLoading } = useQuery<GuildWithMembers | null>({
     queryKey: ["/api/accounts", account?.id, "guild"],
@@ -128,7 +178,7 @@ export default function GuildPage() {
 
   const { data: availablePlayers = [] } = useQuery<AvailablePlayer[]>({
     queryKey: ["/api/players/available-for-guild"],
-    enabled: !!account && !!guild && guild.masterId === account.id,
+    enabled: !!account && !!guild && (guild.masterId === account.id || guild.members?.some(m => m.accountId === account.id && m.role === "officer")),
   });
 
   const { data: dungeonInfo } = useQuery<DungeonInfo>({
@@ -232,7 +282,7 @@ export default function GuildPage() {
     mutationFn: async (memberId: string) => {
       const res = await apiRequest("POST", `/api/guilds/${guild!.id}/kick`, {
         accountId: memberId,
-        masterId: account!.id,
+        kickedBy: account!.id,
       });
       return res.json();
     },
@@ -243,8 +293,8 @@ export default function GuildPage() {
   });
 
   const fightDungeonMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/guilds/${guild!.id}/dungeon/fight`, { accountId: account!.id });
+    mutationFn: async (dungeonTier: number) => {
+      const res = await apiRequest("POST", `/api/guilds/${guild!.id}/dungeon/fight`, { accountId: account!.id, dungeonTier });
       return res.json();
     },
     onSuccess: (data) => {
@@ -252,11 +302,11 @@ export default function GuildPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/accounts", account?.id, "guild"] });
       if (data.victory) {
         toast({ 
-          title: "Victory!", 
-          description: `Earned ${data.rewards.gold.toLocaleString()} gold for guild bank!` 
+          title: `Victory in ${data.dungeonName}!`, 
+          description: `Earned ${data.rewards.unityCoins} Unity Coins and ${data.rewards.gold.toLocaleString()} gold! Guild buff "${data.buff.name}" active for 24h.` 
         });
       } else {
-        toast({ title: "Defeat", description: "The dungeon monsters were too strong.", variant: "destructive" });
+        toast({ title: "Defeat", description: `${data.dungeonName} proved too challenging. Try again with more members!`, variant: "destructive" });
       }
     },
   });
@@ -338,6 +388,35 @@ export default function GuildPage() {
     },
   });
 
+  const myMember = guild?.members.find(m => m.accountId === account?.id);
+  const myRole = myMember?.role || "member";
+  const canManage = myRole === "leader" || myRole === "officer";
+
+  const { data: vaultLogs = [] } = useQuery<GuildVaultLogEntry[]>({
+    queryKey: ["/api/guilds", guild?.id, "vault-logs", { accountId: account?.id }],
+    enabled: !!guild && canManage && vaultLogsDialogOpen,
+  });
+
+  const setRoleMutation = useMutation({
+    mutationFn: async (data: { targetAccountId: string; role: "officer" | "member" }) => {
+      const res = await apiRequest("POST", `/api/guilds/${guild!.id}/set-role`, {
+        accountId: account!.id,
+        targetAccountId: data.targetAccountId,
+        role: data.role,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts", account?.id, "guild"] });
+      setRoleDialogOpen(false);
+      setRoleTarget(null);
+      toast({ title: "Role updated!" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to set role", variant: "destructive" });
+    },
+  });
+
   const depositMutation = useMutation({
     mutationFn: async (data: { resource: string; amount: number }) => {
       const res = await apiRequest("POST", `/api/guilds/${guild!.id}/deposit`, {
@@ -390,7 +469,13 @@ export default function GuildPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <ZoneScene
+      zoneName="Guild Hall"
+      backdrop="/backdrops/base.png"
+      ambientClass="zone-ambient-shop"
+      overlayOpacity={0.45}
+    >
+      <div className="h-full flex flex-col text-foreground">
       <header className="border-b border-border bg-card/50 backdrop-blur sticky top-0 z-50">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -563,39 +648,67 @@ export default function GuildPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  {guild.members.map((member) => (
-                    <div
-                      key={member.accountId}
-                      className="flex items-center justify-between p-3 rounded-lg border border-border"
-                    >
-                      <div className="flex items-center gap-3">
-                        {member.isMaster && <Crown className="w-4 h-4 text-yellow-500" />}
-                        <div>
-                          <p className="font-medium flex items-center gap-2">
-                            {member.username}
-                            {member.isOnline && (
-                              <span className="w-2 h-2 rounded-full bg-green-500" />
-                            )}
-                          </p>
-                          <p className="text-xs text-muted-foreground">{member.rank}</p>
+                  {guild.members.map((member) => {
+                    const memberRole = member.role || "member";
+                    const canKickThis = (myRole === "leader" && memberRole !== "leader") ||
+                      (myRole === "officer" && memberRole === "member");
+                    return (
+                      <div
+                        key={member.accountId}
+                        className="flex items-center justify-between p-3 rounded-lg border border-border"
+                      >
+                        <div className="flex items-center gap-3">
+                          {member.isMaster && <Crown className="w-4 h-4 text-yellow-500" />}
+                          <div>
+                            <p className="font-medium flex items-center gap-2">
+                              {member.username}
+                              {member.isOnline && (
+                                <span className="w-2 h-2 rounded-full bg-green-500" />
+                              )}
+                              <Badge variant="outline" className={
+                                memberRole === "leader" ? "border-yellow-500 text-yellow-500 text-[10px]" :
+                                memberRole === "officer" ? "border-blue-500 text-blue-500 text-[10px]" :
+                                "text-[10px]"
+                              }>
+                                {memberRole.charAt(0).toUpperCase() + memberRole.slice(1)}
+                              </Badge>
+                            </p>
+                            <p className="text-xs text-muted-foreground">{member.rank}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {isMaster && !member.isMaster && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setRoleTarget({ accountId: member.accountId, username: member.username, currentRole: memberRole });
+                                setSelectedRole(memberRole === "officer" ? "member" : "officer");
+                                setRoleDialogOpen(true);
+                              }}
+                              data-testid={`button-role-${member.accountId}`}
+                            >
+                              <Shield className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {canKickThis && member.accountId !== account?.id && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => kickMemberMutation.mutate(member.accountId)}
+                              data-testid={`button-kick-${member.accountId}`}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          )}
                         </div>
                       </div>
-                      {isMaster && !member.isMaster && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => kickMemberMutation.mutate(member.accountId)}
-                          data-testid={`button-kick-${member.accountId}`}
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 <div className="flex gap-2">
-                  {isMaster && guild.members.length < 4 && (
+                  {canManage && guild.members.length < 4 && (
                     <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
                       <DialogTrigger asChild>
                         <Button variant="outline" className="flex-1" data-testid="button-invite">
@@ -891,6 +1004,46 @@ export default function GuildPage() {
                     </DialogContent>
                   </Dialog>
 
+                  {canManage && (
+                    <Dialog open={vaultLogsDialogOpen} onOpenChange={setVaultLogsDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button className="flex-1" variant="outline" data-testid="button-vault-logs">
+                          <ScrollText className="w-4 h-4 mr-2" />
+                          Vault Logs
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-lg">
+                        <DialogHeader>
+                          <DialogTitle>Guild Vault Logs</DialogTitle>
+                          <DialogDescription>
+                            Transaction history for guild vault
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="max-h-80 overflow-y-auto space-y-2">
+                          {vaultLogs.length === 0 ? (
+                            <p className="text-muted-foreground text-center py-4">No vault transactions yet</p>
+                          ) : (
+                            vaultLogs.map((log) => (
+                              <div key={log.id} className="flex items-center justify-between p-3 rounded-lg border text-sm">
+                                <div>
+                                  <p className="font-medium">{log.playerName}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {log.action === "deposit" ? "Deposited" : "Withdrew"}{" "}
+                                    {log.quantity?.toLocaleString()} {log.resource}
+                                    {log.itemName && ` (${log.itemName})`}
+                                  </p>
+                                </div>
+                                <span className="text-xs text-muted-foreground">
+                                  {new Date(log.createdAt).toLocaleDateString()} {new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  )}
+
                   {isMaster && (
                     <Dialog open={distributeDialogOpen} onOpenChange={setDistributeDialogOpen}>
                       <DialogTrigger asChild>
@@ -1019,124 +1172,189 @@ export default function GuildPage() {
               </CardContent>
             </Card>
 
+            {dungeonInfo?.activeBuffs && dungeonInfo.activeBuffs.length > 0 && (
+              <Card className="md:col-span-2">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-yellow-400" />
+                    Active Guild Buffs
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-3">
+                    {dungeonInfo.activeBuffs.map((buff) => {
+                      const timeLeft = Math.max(0, Math.floor((new Date(buff.expiresAt).getTime() - Date.now()) / 3600000));
+                      return (
+                        <div key={buff.id} className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-yellow-400" />
+                          <div>
+                            <p className="font-medium text-yellow-400 text-sm">{buff.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              +{buff.bonusPercent}% {buff.stat === "all" ? "All Stats" : buff.stat} · {timeLeft}h remaining
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {dungeonInfo?.unityCoins !== undefined && (
+              <Card className="md:col-span-2">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Coins className="w-5 h-5 text-blue-400" />
+                    Unity Coins: {dungeonInfo.unityCoins.toLocaleString()}
+                    <Badge variant="outline" className="ml-2 border-blue-400 text-blue-400">
+                      {dungeonInfo.dungeonsCompleted}/5 Dungeons Completed
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+              </Card>
+            )}
+
             <Card className="md:col-span-2">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Castle className={`w-5 h-5 ${dungeonInfo?.isDemonLordDungeon ? 'text-purple-500' : 'text-red-500'}`} />
-                  {dungeonInfo?.dungeonName || "Great Dungeon"}
-                  <Badge variant="destructive" className={`ml-2 ${dungeonInfo?.isDemonLordDungeon ? 'bg-purple-500' : ''}`}>
-                    {dungeonInfo?.isDemonLordDungeon ? '15x Stronger + 3x Rewards' : '10x Stronger'}
-                  </Badge>
-                  {dungeonInfo?.petsAllowed && (
-                    <Badge variant="outline" className="ml-2 border-green-500 text-green-500">
-                      Pets Allowed
-                    </Badge>
-                  )}
+                  <Castle className="w-5 h-5 text-red-500" />
+                  Guild Dungeons (5-Tier Chain)
                 </CardTitle>
                 <CardDescription>
-                  {dungeonInfo?.isDemonLordDungeon 
-                    ? "The ultimate challenge! Use your pets to conquer the Demon Lord's realm!"
-                    : "Fight alongside online guild members for massive rewards!"}
+                  Complete each dungeon to unlock the next. Difficulty scales with online member stats.
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {dungeonInfo && (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Floor</span>
-                        <Badge variant="outline" className="text-lg">
-                          {dungeonInfo.displayFloor || dungeonInfo.floor} / 50
-                        </Badge>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Level</span>
-                        <Badge variant="outline" className="text-lg">
-                          {dungeonInfo.level} / 100
-                        </Badge>
-                      </div>
-                      <Progress value={(dungeonInfo.level / 100) * 100} className="h-2" />
-                      
-                      <div className="mt-4">
-                        <p className="text-sm text-muted-foreground mb-2">Online Guild Members:</p>
-                        <div className="flex flex-wrap gap-2">
-                          {dungeonInfo.onlineMembers.length === 0 ? (
-                            <span className="text-muted-foreground text-sm">None online</span>
-                          ) : (
-                            dungeonInfo.onlineMembers.map((m) => (
-                              <div key={m.accountId} className="flex items-center gap-1">
-                                <Badge variant="secondary">
-                                  {m.username}
+                  <div className="space-y-4">
+                    <div className="mb-4">
+                      <p className="text-sm text-muted-foreground mb-2">Online Guild Members:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {dungeonInfo.onlineMembers.length === 0 ? (
+                          <span className="text-muted-foreground text-sm">None online</span>
+                        ) : (
+                          dungeonInfo.onlineMembers.map((m) => (
+                            <div key={m.accountId} className="flex items-center gap-1">
+                              <Badge variant="secondary">{m.username}</Badge>
+                              {m.equippedPet && (
+                                <Badge variant="outline" className="text-xs border-purple-400 text-purple-400">
+                                  {m.equippedPet.name}
                                 </Badge>
-                                {dungeonInfo.petsAllowed && m.equippedPet && (
-                                  <Badge variant="outline" className="text-xs border-purple-400 text-purple-400">
-                                    {m.equippedPet.name}
-                                  </Badge>
-                                )}
-                              </div>
-                            ))
-                          )}
-                        </div>
+                              )}
+                            </div>
+                          ))
+                        )}
                       </div>
                     </div>
 
-                    <div className="space-y-3">
-                      <div className={`p-3 rounded-lg ${dungeonInfo.isDemonLordDungeon ? 'bg-purple-500/10 border border-purple-500/30' : 'bg-red-500/10 border border-red-500/30'}`}>
-                        <p className={`font-medium ${dungeonInfo.isDemonLordDungeon ? 'text-purple-500' : 'text-red-500'} flex items-center gap-2`}>
-                          {dungeonInfo.isBoss && <Crown className="w-4 h-4" />}
-                          {dungeonInfo.isDemonLordDungeon ? 'Demon Lord\'s Minion' : 'Dungeon Monster'} (Lvl {dungeonInfo.globalLevel})
-                        </p>
-                        <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
-                          <span>STR: {dungeonInfo.npcStats.Str.toLocaleString()}</span>
-                          <span>SPD: {dungeonInfo.npcStats.Spd.toLocaleString()}</span>
-                          <span>INT: {dungeonInfo.npcStats.Int.toLocaleString()}</span>
-                          <span>LUCK: {dungeonInfo.npcStats.Luck.toLocaleString()}</span>
-                        </div>
-                        {dungeonInfo.immunities.length > 0 && (
-                          <div className="mt-2">
-                            <p className="text-xs text-muted-foreground">Immune to:</p>
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {dungeonInfo.immunities.map((el) => (
-                                <Badge key={el} variant="outline" className="text-xs">
-                                  {el}
+                    <div className="grid gap-4 md:grid-cols-1">
+                      {(dungeonInfo.dungeons || []).map((dungeon) => (
+                        <div
+                          key={dungeon.tier}
+                          className={`p-4 rounded-lg border ${
+                            dungeon.isCompleted
+                              ? 'bg-green-500/10 border-green-500/30'
+                              : dungeon.isUnlocked
+                              ? 'bg-red-500/10 border-red-500/30'
+                              : 'bg-muted/30 border-border opacity-60'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <Castle className={`w-5 h-5 ${dungeon.isCompleted ? 'text-green-500' : dungeon.isUnlocked ? 'text-red-500' : 'text-muted-foreground'}`} />
+                              <span className="font-bold">Tier {dungeon.tier}: {dungeon.name}</span>
+                              {dungeon.isCompleted && (
+                                <Badge className="bg-green-600 text-white">Completed</Badge>
+                              )}
+                              {!dungeon.isUnlocked && (
+                                <Badge variant="outline" className="text-muted-foreground">
+                                  Locked (Guild Lv{dungeon.unlockRequirement.guildLevel}{dungeon.unlockRequirement.previousDungeon > 0 ? ` + Dungeon ${dungeon.unlockRequirement.previousDungeon}` : ''})
                                 </Badge>
-                              ))}
+                              )}
                             </div>
                           </div>
-                        )}
-                      </div>
-
-                      <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
-                        <p className="font-medium text-yellow-500">
-                          Rewards (to Guild Bank)
-                          {dungeonInfo.isDemonLordDungeon && <span className="text-xs ml-2">(3x Bonus!)</span>}
-                        </p>
-                        <div className="text-sm mt-1">
-                          <span className="text-yellow-500">{dungeonInfo.rewards.gold.toLocaleString()} Gold</span>
-                          {dungeonInfo.rewards.rubies > 0 && (
-                            <span className="text-red-400 ml-2">{dungeonInfo.rewards.rubies} Rubies</span>
+                          <p className="text-sm text-muted-foreground mb-3">{dungeon.description}</p>
+                          
+                          {dungeon.isUnlocked && !dungeon.isCompleted && (
+                            <div className="grid gap-3 md:grid-cols-3">
+                              <div className="p-2 rounded bg-card/50 border border-border">
+                                <p className="text-xs text-muted-foreground mb-1">Enemy Stats</p>
+                                <div className="grid grid-cols-2 gap-1 text-xs">
+                                  <span>STR: {dungeon.npcStats.Str.toLocaleString()}</span>
+                                  <span>SPD: {dungeon.npcStats.Spd.toLocaleString()}</span>
+                                  <span>INT: {dungeon.npcStats.Int.toLocaleString()}</span>
+                                  <span>LUCK: {dungeon.npcStats.Luck.toLocaleString()}</span>
+                                </div>
+                              </div>
+                              <div className="p-2 rounded bg-yellow-500/10 border border-yellow-500/30">
+                                <p className="text-xs text-yellow-500 mb-1">Rewards</p>
+                                <div className="text-xs space-y-0.5">
+                                  <p className="text-blue-400">{dungeon.rewards.unityCoins} Unity Coins</p>
+                                  <p className="text-yellow-400">{dungeon.rewards.gold.toLocaleString()} Gold</p>
+                                  {dungeon.rewards.shards > 0 && (
+                                    <p className="text-purple-400">{dungeon.rewards.shards} Shards</p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="p-2 rounded bg-blue-500/10 border border-blue-500/30">
+                                <p className="text-xs text-blue-400 mb-1">Buff (24h)</p>
+                                <p className="text-xs">{dungeon.buff.name}</p>
+                                <p className="text-xs text-muted-foreground">+{dungeon.buff.bonusPercent}% {dungeon.buff.stat === "all" ? "All Stats" : dungeon.buff.stat}</p>
+                              </div>
+                            </div>
                           )}
-                          {dungeonInfo.rewards.soulShards > 0 && (
-                            <span className="text-purple-400 ml-2">{dungeonInfo.rewards.soulShards} Soul Shards</span>
+
+                          {dungeon.isUnlocked && !dungeon.isCompleted && (
+                            <Button
+                              className="w-full mt-3"
+                              size="sm"
+                              onClick={() => fightDungeonMutation.mutate(dungeon.tier)}
+                              disabled={fightDungeonMutation.isPending || dungeonInfo.onlineMembers.length === 0}
+                              data-testid={`button-fight-dungeon-${dungeon.tier}`}
+                            >
+                              <Swords className="w-4 h-4 mr-2" />
+                              {fightDungeonMutation.isPending ? "Fighting..." : `Fight with ${dungeonInfo.onlineMembers.length} Members`}
+                            </Button>
                           )}
                         </div>
-                      </div>
-
-                      <Button
-                        className="w-full"
-                        size="lg"
-                        onClick={() => fightDungeonMutation.mutate()}
-                        disabled={fightDungeonMutation.isPending || dungeonInfo.onlineMembers.length === 0}
-                        data-testid="button-fight-dungeon"
-                      >
-                        <Swords className="w-4 h-4 mr-2" />
-                        {fightDungeonMutation.isPending ? "Fighting..." : `Fight with ${dungeonInfo.onlineMembers.length} Members`}
-                      </Button>
+                      ))}
                     </div>
                   </div>
                 )}
               </CardContent>
             </Card>
+
+            {dungeonInfo?.perks && dungeonInfo.perks.length > 0 && (
+              <Card className="md:col-span-2">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Trophy className="w-5 h-5 text-amber-500" />
+                    Guild Perks
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {dungeonInfo.perks.map((perk) => (
+                      <div
+                        key={perk.level}
+                        className={`p-3 rounded-lg border flex items-center gap-3 ${
+                          perk.unlocked ? 'bg-amber-500/10 border-amber-500/30' : 'bg-muted/20 border-border opacity-50'
+                        }`}
+                      >
+                        <Badge variant={perk.unlocked ? "default" : "outline"} className="shrink-0">
+                          Lv{perk.level}
+                        </Badge>
+                        <div>
+                          <p className={`text-sm font-medium ${perk.unlocked ? 'text-amber-400' : 'text-muted-foreground'}`}>{perk.name}</p>
+                          <p className="text-xs text-muted-foreground">{perk.description}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Guild Battles Section */}
             <Card className="md:col-span-2">
@@ -1352,6 +1570,47 @@ export default function GuildPage() {
           </div>
         )}
       </main>
+
+      <Dialog open={roleDialogOpen} onOpenChange={setRoleDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Role</DialogTitle>
+            <DialogDescription>
+              Set role for {roleTarget?.username}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Select value={selectedRole} onValueChange={(v) => setSelectedRole(v as "officer" | "member")}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="officer">Officer</SelectItem>
+                <SelectItem value="member">Member</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {selectedRole === "officer" 
+                ? "Officers can invite players and kick members (but not other officers or the leader)."
+                : "Members have basic guild access."}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRoleDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                if (roleTarget) {
+                  setRoleMutation.mutate({ targetAccountId: roleTarget.accountId, role: selectedRole });
+                }
+              }}
+              disabled={setRoleMutation.isPending}
+            >
+              {setRoleMutation.isPending ? "Saving..." : "Save Role"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+    </ZoneScene>
   );
 }

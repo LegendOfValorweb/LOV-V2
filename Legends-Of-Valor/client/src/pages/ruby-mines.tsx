@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useGame } from "@/lib/game-context";
+import { ZoneScene } from "@/components/zone-scene";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -95,14 +96,13 @@ export default function RubyMines() {
   };
 
   return (
-    <div className="min-h-screen relative">
-      <div 
-        className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: "url('/backdrops/base.png')" }}
-      />
-      <div className="absolute inset-0 bg-gradient-to-b from-red-900/30 via-black/60 to-black/80" />
-      
-      <div className="relative z-10">
+    <ZoneScene
+      zoneName="Ruby Mines"
+      backdrop="/backdrops/base.png"
+      ambientClass="zone-ambient-cave"
+      overlayOpacity={0.5}
+    >
+      <div className="h-full flex flex-col">
         <header className="border-b border-red-500/30 bg-black/50 backdrop-blur-sm">
           <div className="container mx-auto px-4 py-4">
             <div className="flex items-center justify-between">
@@ -192,6 +192,6 @@ export default function RubyMines() {
           </div>
         </main>
       </div>
-    </div>
+    </ZoneScene>
   );
 }

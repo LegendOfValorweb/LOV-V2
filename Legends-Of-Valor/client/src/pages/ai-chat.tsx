@@ -240,7 +240,7 @@ export default function AIChat() {
 
   if (!account) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-gray-900 via-purple-900 to-gray-900 flex items-center justify-center p-4">
+      <div className="h-full bg-gradient-to-b from-gray-900 via-purple-900 to-gray-900 flex items-center justify-center p-4">
         <Card className="bg-gray-800/90 border-purple-500/30">
           <CardContent className="p-8 text-center">
             <Sparkles className="w-12 h-12 mx-auto mb-4 text-purple-400" />
@@ -260,7 +260,7 @@ export default function AIChat() {
   const messages = storyline?.conversationHistory || [];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-purple-900 to-gray-900 p-4">
+    <div className="h-full bg-gradient-to-b from-gray-900 via-purple-900 to-gray-900 p-4">
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">

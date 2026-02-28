@@ -112,7 +112,7 @@ function StatDisplay({ statName, value }: { statName: string; value: number }) {
     <div className="flex items-center gap-1.5" data-testid={`stat-${statName.toLowerCase()}`}>
       <Icon className={cn("w-3.5 h-3.5", config.color)} />
       <span className="text-xs font-mono text-muted-foreground">{statName}</span>
-      <span className={cn("text-xs font-mono font-semibold", config.color)}>+{value}</span>
+      <span className={cn("text-xs rpg-stat-number font-semibold", config.color)}>+{value}</span>
     </div>
   );
 }
@@ -153,7 +153,7 @@ export function ItemCard({
             <ItemIcon type={item.type} />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-serif font-semibold text-sm truncate" data-testid={`text-item-name-${item.id}`}>
+            <h3 className="font-serif font-semibold text-sm truncate rpg-embossed" data-testid={`text-item-name-${item.id}`}>
               {item.name}
             </h3>
             <Badge
@@ -184,7 +184,7 @@ export function ItemCard({
       <CardFooter className="px-4 pb-4 pt-0 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1" data-testid={`text-price-${item.id}`}>
           <Coins className="w-4 h-4 text-primary" />
-          <span className="font-mono font-bold text-primary">{item.price.toLocaleString()}</span>
+          <span className="rpg-stat-number font-bold text-primary">{item.price.toLocaleString()}</span>
         </div>
         <div className="flex items-center gap-2">
           {showSellButton && onSell && (

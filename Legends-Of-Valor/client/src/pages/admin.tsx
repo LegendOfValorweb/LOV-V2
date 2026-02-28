@@ -1303,7 +1303,7 @@ export default function Admin() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-red-950/30 via-background to-orange-950/20">
+    <div className="h-full bg-gradient-to-br from-red-950/30 via-background to-orange-950/20">
       <header className="sticky top-0 z-50 border-b-2 border-red-500/30 bg-gradient-to-r from-red-950/80 via-background/95 to-orange-950/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between gap-4">

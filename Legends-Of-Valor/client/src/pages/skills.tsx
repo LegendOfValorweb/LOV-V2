@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useGame } from "@/lib/game-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { ZoneScene } from "@/components/zone-scene";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -212,7 +213,7 @@ export default function Skills() {
 
   if (!account) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="h-full bg-background flex items-center justify-center">
         <Card className="p-6">
           <CardTitle>Please log in to access Skills</CardTitle>
           <Button className="mt-4" onClick={() => navigate("/")}>Go to Login</Button>
@@ -225,7 +226,13 @@ export default function Skills() {
   const minBid = auctionData?.highestBid ? auctionData.highestBid.amount + 1 : 100;
 
   return (
-    <div className="min-h-screen bg-background">
+    <ZoneScene
+      zoneName="Skill Chamber"
+      backdrop="/backdrops/tower.png"
+      ambientClass="zone-ambient-tower"
+      overlayOpacity={0.5}
+    >
+      <div className="h-full flex flex-col">
       <header className="sticky top-0 z-50 bg-card/95 backdrop-blur border-b border-border">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -517,5 +524,6 @@ export default function Skills() {
         </DialogContent>
       </Dialog>
     </div>
+    </ZoneScene>
   );
 }

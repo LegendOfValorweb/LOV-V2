@@ -15,6 +15,7 @@ import {
   Sparkles, Zap, Clover, Flame, ArrowUp, Plus, Minus, Target, ScrollText, Trophy, Coins, GitMerge, ArrowLeftRight, Palette
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { ZoneScene } from "@/components/zone-scene";
 import {
   Dialog,
   DialogContent,
@@ -635,7 +636,44 @@ export default function Pets() {
               </Button>
             )}
           </div>
-          <div className="text-xs text-muted-foreground mt-2 flex items-center gap-2">
+          {pet.isFainted && (
+            <div className="bg-red-500/20 border border-red-500/30 rounded p-2 text-xs text-red-400 flex items-center justify-between">
+              <span>⚠️ Fainted - Cannot use in combat</span>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="h-6 text-xs"
+                onClick={async () => {
+                  try {
+                    const res = await apiRequest("POST", `/api/pets/${pet.id}/revive`, { accountId: account.id });
+                    const data = await res.json();
+                    await refetchPets();
+                    const accountRes = await apiRequest("GET", `/api/accounts/${account.id}`);
+                    setAccount(await accountRes.json());
+                    toast({ title: "Pet Revived!", description: data.message });
+                  } catch (error: any) {
+                    const errorData = await error.json?.() || { error: "Failed" };
+                    toast({ title: "Revive Failed", description: errorData.error, variant: "destructive" });
+                  }
+                }}
+              >
+                Revive (500g)
+              </Button>
+            </div>
+          )}
+          {(pet as any).mutationTrait && (
+            <div className="bg-purple-500/10 border border-purple-500/30 rounded p-1.5 text-xs text-purple-400 flex items-center gap-1">
+              <Sparkles className="w-3 h-3" />
+              <span>Mutation: {(pet as any).mutationTrait.replace(/_/g, ' ')}</span>
+            </div>
+          )}
+          {(pet as any).tempElement && (pet as any).tempElementExpires && new Date((pet as any).tempElementExpires) > new Date() && (
+            <div className="bg-cyan-500/10 border border-cyan-500/30 rounded p-1.5 text-xs text-cyan-400 flex items-center gap-1">
+              <Flame className="w-3 h-3" />
+              <span>Temp Element: {(pet as any).tempElement} (expires {new Date((pet as any).tempElementExpires).toLocaleTimeString()})</span>
+            </div>
+          )}
+          <div className="text-xs text-muted-foreground mt-2 flex items-center gap-2 flex-wrap">
             <span>Bond: {pet.bondLevel || 0}</span>
             {(pet.rebirthCount || 0) > 0 && (
               <Badge variant="secondary" className="text-xs">
@@ -654,14 +692,13 @@ export default function Pets() {
   };
 
   return (
-    <div className="min-h-screen relative">
-      <div 
-        className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: "url('/backdrops/pets.png')" }}
-      />
-      <div className="absolute inset-0 bg-black/60" />
-      
-      <div className="relative z-10 min-h-screen">
+    <ZoneScene
+      zoneName="Pet Sanctuary"
+      backdrop="/backdrops/pets.png"
+      ambientClass="zone-ambient-forest"
+      overlayOpacity={0.4}
+    >
+      <div className="h-full flex flex-col">
       <header className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -744,7 +781,7 @@ export default function Pets() {
       </main>
 
       {mythicPets.length >= 2 && (
-        <div className="fixed bottom-6 right-6 z-50">
+        <div className="absolute bottom-6 right-6 z-50">
           <Button
             size="lg"
             onClick={() => setMergeDialogOpen(true)}
@@ -1196,6 +1233,6 @@ export default function Pets() {
         </DialogContent>
       </Dialog>
       </div>
-    </div>
+    </ZoneScene>
   );
 }

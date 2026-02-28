@@ -23,7 +23,7 @@ export function GoldDisplay({ amount, className, size = "md" }: GoldDisplayProps
   return (
     <div
       className={cn(
-        "flex items-center font-mono font-bold text-primary",
+        "flex items-center rpg-stat-number font-bold text-primary",
         sizeClasses[size],
         className
       )}

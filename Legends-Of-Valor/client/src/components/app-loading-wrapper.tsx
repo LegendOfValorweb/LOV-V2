@@ -13,5 +13,5 @@ export function AppLoadingWrapper({ children }: AppLoadingWrapperProps) {
     return <LoadingScreen message="Preparing your adventure..." />;
   }
 
-  return <>{children}</>;
+  return <div className="relative w-full h-full">{children}</div>;
 }

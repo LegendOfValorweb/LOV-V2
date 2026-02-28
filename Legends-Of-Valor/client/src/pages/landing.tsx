@@ -128,10 +128,10 @@ export default function Landing() {
 
   if (showRaceSelection && raceData) {
     return (
-      <div className="min-h-screen relative overflow-hidden">
+      <div className="h-full relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-accent/20" />
         
-        <div className="relative z-10 min-h-screen flex flex-col">
+        <div className="relative z-10 h-full flex flex-col">
           <header className="p-6 flex items-center justify-center">
             <div className="flex items-center gap-3">
               <Sword className="w-8 h-8 text-primary" />
@@ -275,7 +275,7 @@ export default function Landing() {
   }
 
   return (
-    <div className="min-h-screen relative overflow-hidden">
+    <div className="h-full relative overflow-hidden">
       <div
         className="absolute inset-0"
         style={{
@@ -312,7 +312,7 @@ export default function Landing() {
         <div className="w-full h-full rounded-full bg-gradient-to-br from-blue-400 to-cyan-500 blur-lg" />
       </div>
 
-      <div className="relative z-10 min-h-screen flex flex-col">
+      <div className="relative z-10 h-full flex flex-col">
         <header className="p-6 flex items-center justify-center">
           <div className="flex items-center gap-3">
             <Sword className="w-8 h-8 text-primary" />

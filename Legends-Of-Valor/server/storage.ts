@@ -1,4 +1,4 @@
-import { accounts, inventoryItems, events, eventRegistrations, challenges, pets, leaderboardCache, quests, questAssignments, guilds, guildMembers, guildInvites, guildChat, skillAuctions, skillBids, playerSkills, activityFeed, guildBattles, trades, tradeItems, type Account, type InsertAccount, type InventoryItem, type InsertInventoryItem, type PlayerStats, type Equipped, type PlayerRank, type Event, type InsertEvent, type EventRegistration, type InsertEventRegistration, type Challenge, type InsertChallenge, type ChallengeStatus, type Pet, type InsertPet, type PetStats, type PetTier, type LeaderboardCache, type LeaderboardEntry, type Quest, type InsertQuest, type QuestAssignment, type InsertQuestAssignment, type QuestAssignmentStatus, type QuestRewards, type Guild, type InsertGuild, type GuildMember, type InsertGuildMember, type GuildInvite, type InsertGuildInvite, type GuildBank, type SkillAuction, type InsertSkillAuction, type SkillBid, type InsertSkillBid, type PlayerSkill, type InsertPlayerSkill, type ActivityFeed, type InsertActivityFeed, type GuildBattle, type InsertGuildBattle, type GuildBattleStatus, type Trade, type InsertTrade, type TradeItem, type InsertTradeItem, type TradeStatus, type GuildChatMessage, type InsertGuildChat } from "@shared/schema";
+import { accounts, inventoryItems, events, eventRegistrations, challenges, pets, leaderboardCache, quests, questAssignments, guilds, guildMembers, guildInvites, guildChat, guildVaultLogs, skillAuctions, skillBids, playerSkills, activityFeed, guildBattles, trades, tradeItems, tradeHistory, soulLinks, type Account, type InsertAccount, type InventoryItem, type InsertInventoryItem, type PlayerStats, type Equipped, type PlayerRank, type Event, type InsertEvent, type EventRegistration, type InsertEventRegistration, type Challenge, type InsertChallenge, type ChallengeStatus, type Pet, type InsertPet, type PetStats, type PetTier, type LeaderboardCache, type LeaderboardEntry, type Quest, type InsertQuest, type QuestAssignment, type InsertQuestAssignment, type QuestAssignmentStatus, type QuestRewards, type Guild, type InsertGuild, type GuildMember, type InsertGuildMember, type GuildInvite, type InsertGuildInvite, type GuildBank, type GuildRole, type GuildVaultLog, type InsertGuildVaultLog, type SkillAuction, type InsertSkillAuction, type SkillBid, type InsertSkillBid, type PlayerSkill, type InsertPlayerSkill, type ActivityFeed, type InsertActivityFeed, type GuildBattle, type InsertGuildBattle, type GuildBattleStatus, type Trade, type InsertTrade, type TradeItem, type InsertTradeItem, type TradeStatus, type TradeHistory, type InsertTradeHistory, type SoulLink, type InsertSoulLink, type SoulLinkStatus, type GuildChatMessage, type InsertGuildChat } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, desc, asc, sql } from "drizzle-orm";
 import type { Stats } from "@shared/schema";
@@ -86,6 +86,10 @@ export interface IStorage {
   getGuildMember(accountId: string): Promise<GuildMember | undefined>;
   getGuildMembers(guildId: string): Promise<GuildMember[]>;
   removeGuildMember(accountId: string): Promise<void>;
+  updateGuildMemberRole(accountId: string, role: GuildRole): Promise<GuildMember | undefined>;
+  
+  createGuildVaultLog(log: InsertGuildVaultLog): Promise<GuildVaultLog>;
+  getGuildVaultLogs(guildId: string, limit?: number): Promise<GuildVaultLog[]>;
   
   createGuildInvite(invite: InsertGuildInvite): Promise<GuildInvite>;
   getGuildInvite(id: string): Promise<GuildInvite | undefined>;
@@ -140,6 +144,14 @@ export interface IStorage {
   updateGuildLevel(id: string, level: number): Promise<Guild | undefined>;
   getGuildChat(guildId: string, limit?: number): Promise<GuildChatMessage[]>;
   createGuildChatMessage(message: InsertGuildChat): Promise<GuildChatMessage>;
+
+  createTradeHistory(entry: InsertTradeHistory): Promise<TradeHistory>;
+  getTradeHistory(accountId: string, limit?: number): Promise<TradeHistory[]>;
+
+  createSoulLink(link: InsertSoulLink): Promise<SoulLink>;
+  getSoulLink(id: string): Promise<SoulLink | undefined>;
+  getActiveSoulLinks(accountId: string): Promise<SoulLink[]>;
+  updateSoulLink(id: string, data: Partial<SoulLink>): Promise<SoulLink | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -598,6 +610,23 @@ export class DatabaseStorage implements IStorage {
     await db.delete(guildMembers).where(eq(guildMembers.accountId, accountId));
   }
 
+  async updateGuildMemberRole(accountId: string, role: GuildRole): Promise<GuildMember | undefined> {
+    const [member] = await db.update(guildMembers).set({ role }).where(eq(guildMembers.accountId, accountId)).returning();
+    return member || undefined;
+  }
+
+  async createGuildVaultLog(log: InsertGuildVaultLog): Promise<GuildVaultLog> {
+    const [newLog] = await db.insert(guildVaultLogs).values([log as any]).returning();
+    return newLog;
+  }
+
+  async getGuildVaultLogs(guildId: string, limit = 100): Promise<GuildVaultLog[]> {
+    return db.select().from(guildVaultLogs)
+      .where(eq(guildVaultLogs.guildId, guildId))
+      .orderBy(desc(guildVaultLogs.createdAt))
+      .limit(limit);
+  }
+
   async createGuildInvite(invite: InsertGuildInvite): Promise<GuildInvite> {
     const [newInvite] = await db.insert(guildInvites).values([invite as any]).returning();
     return newInvite;
@@ -800,6 +829,42 @@ export class DatabaseStorage implements IStorage {
   async createGuildChatMessage(message: InsertGuildChat): Promise<GuildChatMessage> {
     const [newMsg] = await db.insert(guildChat).values([message as any]).returning();
     return newMsg;
+  }
+
+  async createTradeHistory(entry: InsertTradeHistory): Promise<TradeHistory> {
+    const [newEntry] = await db.insert(tradeHistory).values([entry as any]).returning();
+    return newEntry;
+  }
+
+  async getTradeHistory(accountId: string, limit = 50): Promise<TradeHistory[]> {
+    return db.select().from(tradeHistory)
+      .where(or(eq(tradeHistory.initiatorId, accountId), eq(tradeHistory.recipientId, accountId)))
+      .orderBy(desc(tradeHistory.completedAt))
+      .limit(limit);
+  }
+
+  async createSoulLink(link: InsertSoulLink): Promise<SoulLink> {
+    const [newLink] = await db.insert(soulLinks).values([link as any]).returning();
+    return newLink;
+  }
+
+  async getSoulLink(id: string): Promise<SoulLink | undefined> {
+    const [link] = await db.select().from(soulLinks).where(eq(soulLinks.id, id));
+    return link || undefined;
+  }
+
+  async getActiveSoulLinks(accountId: string): Promise<SoulLink[]> {
+    return db.select().from(soulLinks).where(
+      and(
+        or(eq(soulLinks.player1Id, accountId), eq(soulLinks.player2Id, accountId)),
+        eq(soulLinks.status, "active")
+      )
+    );
+  }
+
+  async updateSoulLink(id: string, data: Partial<SoulLink>): Promise<SoulLink | undefined> {
+    const [link] = await db.update(soulLinks).set(data).where(eq(soulLinks.id, id)).returning();
+    return link || undefined;
   }
 }
 

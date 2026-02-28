@@ -2,9 +2,45 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, petElements, type GuildBank, playerRaces, playerGenders, raceModifiers, accounts } from "@shared/schema";
+import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX } from "@shared/schema";
 import { z } from "zod";
 import type { Account, Event, Challenge, PlayerRace, PlayerGender } from "@shared/schema";
+import {
+  calculateRepairCost,
+  calculateAuctionListingFee,
+  calculateAuctionSaleTax,
+  getMarketPrice,
+  getAllMarketPrices,
+  getMarketItemInfo,
+  recordPurchase,
+  recordSale,
+  initializeMarketItem,
+  startMarketUpdates,
+  AUCTION_LISTING_TAX_RATE,
+  AUCTION_SALE_TAX_RATE,
+} from "./economy-system";
+import {
+  getActiveMonster,
+  clearActiveMonster,
+  checkTimerSpawn,
+  checkActionSpawn,
+  spawnMonster,
+  calculateMonsterRewards,
+  getZoneWeather,
+  getAllZoneWeather,
+  getActiveMonsterCount,
+  getZoneMonsterTemplates,
+  getWeatherExclusiveBosses,
+  type SpawnedMonster,
+} from "./monster-spawn";
+import {
+  getZoneResources,
+  getAllGatherableZones,
+  getAvailableResources,
+  gatherResources,
+  getZoneExhaustionInfo,
+  getRankRequirementLabel,
+} from "./resource-system";
 import { eq, sql } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { 
@@ -12,9 +48,14 @@ import {
   calculateCombatRewards, 
   applyRaceModifiers, 
   calculateMaxHP,
+  calculateDeathPenalty,
+  applyWeaknessDebuff,
+  applyRacePassiveSkill,
+  getRaceActiveSpellInfo,
   type Combatant, 
   type CombatStats,
-  type ElementalAffinity
+  type ElementalAffinity,
+  type DeathPenaltyResult
 } from "./combat-engine";
 
 // V2: Max 28 players per server (2 per race x 14 races)
@@ -23,6 +64,100 @@ const MAX_PLAYERS = 28;
 const MAX_PLAYERS_PER_RACE = 2;
 const SESSION_TIMEOUT = 5 * 60 * 1000; // 5 minutes of inactivity
 const SLEEP_TIMEOUT = 10 * 60 * 1000; // 10 minutes of inactivity to sleep the app
+
+const ENERGY_COSTS: Record<string, number> = {
+  gathering: 2,
+  fishing: 3,
+  crafting: 5,
+  combat: 0,
+  travel: 1,
+};
+
+const ENERGY_CAP_BY_RANK: Record<string, number> = {
+  "Novice": 50,
+  "Apprentice": 60,
+  "Initiate": 70,
+  "Journeyman": 80,
+  "Adept": 90,
+  "Expert": 100,
+  "Master": 110,
+  "Grandmaster": 120,
+  "Champion": 130,
+  "Overlord": 140,
+  "Sovereign": 150,
+  "Ascendant": 160,
+  "Legend": 170,
+  "Mythic": 185,
+  "Mythical Legend": 200,
+};
+
+function getMaxEnergyForRank(rank: string): number {
+  return ENERGY_CAP_BY_RANK[rank] || 50;
+}
+
+function regenerateEnergy(account: any): { energy: number; lastEnergyUpdate: Date } {
+  const now = new Date();
+  const lastUpdate = account.lastEnergyUpdate ? new Date(account.lastEnergyUpdate) : now;
+  const elapsedMs = now.getTime() - lastUpdate.getTime();
+  const elapsedMinutes = Math.floor(elapsedMs / 60000);
+
+  const maxEnergy = getMaxEnergyForRank(account.rank || "Novice");
+  const currentEnergy = account.energy ?? maxEnergy;
+
+  const isAtBase = account.respawnLocation === "base";
+  const regenRate = isAtBase ? 2 : 1;
+
+  const newEnergy = Math.min(maxEnergy, currentEnergy + elapsedMinutes * regenRate);
+  const newLastUpdate = elapsedMinutes > 0 ? now : lastUpdate;
+
+  return { energy: newEnergy, lastEnergyUpdate: newLastUpdate };
+}
+
+function getTierFromItemId(itemId: string): string {
+  const lastDash = itemId.lastIndexOf("-");
+  if (lastDash > 0) {
+    return itemId.substring(0, lastDash);
+  }
+  return "normal";
+}
+
+async function getPlayerCarryInfo(accountId: string) {
+  const account = await storage.getAccount(accountId);
+  if (!account) return null;
+
+  const strength = (account.stats as any)?.Str || 10;
+
+  let petsCarryBonus = 0;
+  if (account.equippedPetId) {
+    const pet = await storage.getPet(account.equippedPetId);
+    if (pet) {
+      petsCarryBonus = Math.floor((pet.stats as any)?.Str || 0);
+    }
+  }
+
+  const maxCapacity = calculateCarryCapacity(account.rank || "Novice", strength, petsCarryBonus);
+
+  const inventory = await storage.getInventoryByAccount(accountId);
+  let currentWeight = 0;
+  for (const inv of inventory) {
+    const tier = getTierFromItemId(inv.itemId);
+    currentWeight += ITEM_WEIGHT_BY_TIER[tier] || 1;
+  }
+
+  const { fish: fishTable } = await import("@shared/schema");
+  const accountFish = await db.select().from(fishTable).where(eq(fishTable.accountId, accountId));
+  for (const f of accountFish) {
+    currentWeight += FISH_WEIGHT_BY_RARITY[f.rarity] || 1;
+  }
+
+  return {
+    currentWeight,
+    maxCapacity,
+    remaining: Math.max(0, maxCapacity - currentWeight),
+    isFull: currentWeight >= maxCapacity,
+    petsCarryBonus,
+  };
+}
 
 interface ActiveSession {
   accountId: string;
@@ -120,6 +255,65 @@ function cleanupInactiveSessions() {
 }
 
 setInterval(cleanupInactiveSessions, 60000);
+
+async function collectOfflineTraining(account: any): Promise<any | null> {
+  if (!account.offlineTrainingStat || !account.offlineTrainingStartedAt) return null;
+  
+  const startedAt = new Date(account.offlineTrainingStartedAt);
+  const now = new Date();
+  const elapsedMs = now.getTime() - startedAt.getTime();
+  const elapsedHours = elapsedMs / (1000 * 60 * 60);
+  
+  if (elapsedHours < 0.01) return null;
+  
+  const baseTier = account.baseTier || 1;
+  const trainingRoomLevel = (account.baseRoomLevels?.training || 1);
+  const xpPerHour = (OFFLINE_TRAINING_XP_PER_HOUR[baseTier] || 5) * trainingRoomLevel;
+  const maxHours = 24;
+  const cappedHours = Math.min(elapsedHours, maxHours);
+  const totalXp = Math.floor(cappedHours * xpPerHour);
+  
+  if (totalXp <= 0) return null;
+  
+  const stat = account.offlineTrainingStat;
+  const currentStats = account.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 };
+  const updatedStats = { ...currentStats, [stat]: (currentStats[stat] || 10) + totalXp };
+  
+  await db.update(accounts).set({
+    stats: updatedStats,
+    offlineTrainingStat: null,
+    offlineTrainingStartedAt: null,
+  }).where(eq(accounts.id, account.id));
+  
+  return { stat, xpGained: totalXp, hoursElapsed: Math.floor(cappedHours * 10) / 10 };
+}
+
+async function collectVaultInterest(account: any): Promise<any | null> {
+  const vaultGold = account.vaultGold || 0;
+  if (vaultGold <= 0) return null;
+  
+  const lastInterest = account.lastVaultInterest ? new Date(account.lastVaultInterest) : new Date();
+  const now = new Date();
+  const elapsedMs = now.getTime() - lastInterest.getTime();
+  const elapsedHours = elapsedMs / (1000 * 60 * 60);
+  
+  if (elapsedHours < 1) return null;
+  
+  const baseTier = account.baseTier || 1;
+  const vaultLevel = (account.baseRoomLevels?.vault || 1);
+  const rate = (VAULT_INTEREST_RATE[baseTier] || 0.001) * vaultLevel;
+  const cappedHours = Math.min(elapsedHours, 24);
+  const interest = Math.floor(vaultGold * rate * (cappedHours / 24));
+  
+  if (interest <= 0) return null;
+  
+  await db.update(accounts).set({
+    vaultGold: vaultGold + interest,
+    lastVaultInterest: now,
+  }).where(eq(accounts.id, account.id));
+  
+  return { interest, hoursElapsed: Math.floor(cappedHours * 10) / 10 };
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -253,7 +447,14 @@ export async function registerRoutes(
           lastActivity: Date.now(),
         });
         
-        return res.json(existing);
+        let loginAccount = existing;
+        const offlineTrainingResult = await collectOfflineTraining(existing);
+        const vaultInterestResult = await collectVaultInterest(existing);
+        if (offlineTrainingResult || vaultInterestResult) {
+          loginAccount = (await storage.getAccount(existing.id))!;
+        }
+        
+        return res.json(loginAccount);
       }
       
       if (activeSessions.size >= MAX_PLAYERS) {
@@ -363,16 +564,19 @@ export async function registerRoutes(
         return res.status(400).json({ error: "You are not dead" });
       }
       
-      // Respawn at base with full HP recovery
+      const weaknessExpires = new Date(Date.now() + 5 * 60 * 1000);
       await db.update(accounts).set({
         isDead: false,
+        ghostState: false,
         respawnLocation: "base",
+        weaknessDebuffExpires: weaknessExpires,
       }).where(eq(accounts.id, req.params.id));
       
       res.json({ 
         success: true, 
-        message: "You have respawned at your Base. Your wounds have healed.",
-        location: "base"
+        message: "You have respawned at Capital City. A Weakness debuff reduces your stats by 20% for 5 minutes.",
+        location: "base",
+        weaknessDebuffExpires: weaknessExpires.toISOString(),
       });
     } catch (error) {
       console.error("Respawn error:", error);
@@ -394,9 +598,9 @@ export async function registerRoutes(
         return res.status(400).json({ error: "No revive tokens available. Respawn at base instead." });
       }
       
-      // Use revive token to revive at current location
       await db.update(accounts).set({
         isDead: false,
+        ghostState: false,
         reviveTokens: account.reviveTokens - 1,
       }).where(eq(accounts.id, req.params.id));
       
@@ -435,9 +639,9 @@ export async function registerRoutes(
       // Delete the pet (sacrifice)
       await db.delete(pets).where(eq(pets.id, account.equippedPetId));
       
-      // Revive player and unequip pet
       await db.update(accounts).set({
         isDead: false,
+        ghostState: false,
         equippedPetId: null,
       }).where(eq(accounts.id, req.params.id));
       
@@ -459,16 +663,86 @@ export async function registerRoutes(
       if (!account) {
         return res.status(404).json({ error: "Account not found" });
       }
+      const now = new Date();
+      const hasWeakness = account.weaknessDebuffExpires && new Date(account.weaknessDebuffExpires) > now;
       res.json({
         isDead: account.isDead,
+        ghostState: account.ghostState,
         deathCount: account.deathCount,
         reviveTokens: account.reviveTokens,
         lastDeathTime: account.lastDeathTime,
         hasEquippedPet: !!account.equippedPetId,
+        hasWeaknessDebuff: hasWeakness,
+        weaknessDebuffExpires: hasWeakness ? account.weaknessDebuffExpires : null,
       });
     } catch (error) {
       console.error("Death status error:", error);
       res.status(500).json({ error: "Failed to get death status" });
+    }
+  });
+
+  app.get("/api/accounts/:id/carry-capacity", async (req, res) => {
+    try {
+      const carryInfo = await getPlayerCarryInfo(req.params.id);
+      if (!carryInfo) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      res.json(carryInfo);
+    } catch (error) {
+      console.error("Carry capacity error:", error);
+      res.status(500).json({ error: "Failed to get carry capacity" });
+    }
+  });
+
+  app.post("/api/pets/:petId/revive", async (req, res) => {
+    try {
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const { pets: petsTable } = await import("@shared/schema");
+      const [pet] = await db.select().from(petsTable).where(eq(petsTable.id, req.params.petId));
+      if (!pet) return res.status(404).json({ error: "Pet not found" });
+      if (pet.accountId !== accountId) return res.status(403).json({ error: "Not your pet" });
+      if (!pet.isFainted) return res.status(400).json({ error: "Pet is not fainted" });
+
+      const reviveCost = 500;
+      if (account.gold < reviveCost) return res.status(400).json({ error: `Need ${reviveCost} gold to revive pet` });
+
+      await db.update(petsTable).set({ isFainted: false }).where(eq(petsTable.id, req.params.petId));
+      await db.update(accounts).set({ gold: account.gold - reviveCost }).where(eq(accounts.id, accountId));
+
+      res.json({ success: true, message: `${pet.name} has been revived!`, goldSpent: reviveCost });
+    } catch (error) {
+      console.error("Pet revive error:", error);
+      res.status(500).json({ error: "Failed to revive pet" });
+    }
+  });
+
+  app.post("/api/inventory/:itemId/repair", async (req, res) => {
+    try {
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const { inventoryItems } = await import("@shared/schema");
+      const [item] = await db.select().from(inventoryItems).where(eq(inventoryItems.id, req.params.itemId));
+      if (!item) return res.status(404).json({ error: "Item not found" });
+      if (item.accountId !== accountId) return res.status(403).json({ error: "Not your item" });
+      if (item.durability >= item.maxDurability) return res.status(400).json({ error: "Item is already at full durability" });
+
+      const durabilityToRepair = item.maxDurability - item.durability;
+      const itemTier = getTierFromItemId(item.itemId);
+      const repairCost = calculateRepairCost(itemTier, durabilityToRepair);
+      if (account.gold < repairCost) return res.status(400).json({ error: `Need ${repairCost} gold to repair` });
+
+      await db.update(inventoryItems).set({ durability: item.maxDurability }).where(eq(inventoryItems.id, req.params.itemId));
+      await db.update(accounts).set({ gold: account.gold - repairCost }).where(eq(accounts.id, accountId));
+
+      res.json({ success: true, message: "Item repaired!", goldSpent: repairCost, newDurability: item.maxDurability });
+    } catch (error) {
+      console.error("Repair error:", error);
+      res.status(500).json({ error: "Failed to repair item" });
     }
   });
 
@@ -869,9 +1143,14 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Base already at maximum tier" });
       }
 
-      // Tier upgrade costs
-      const tierCosts = [0, 50000, 200000, 1000000, 10000000]; // Cost to upgrade TO each tier
-      const upgradeCost = tierCosts[currentTier]; // Cost to go to next tier
+      const upgradeCost = BASE_TIER_COSTS[currentTier];
+      const requiredRank = BASE_TIER_RANK_REQUIREMENTS[currentTier];
+      const rankIndex = playerRanks.indexOf(account.rank as any);
+      const requiredRankIndex = playerRanks.indexOf(requiredRank as any);
+
+      if (rankIndex < requiredRankIndex) {
+        return res.status(400).json({ error: `Need rank ${requiredRank} to upgrade to tier ${currentTier + 1}` });
+      }
 
       if (account.gold < upgradeCost) {
         return res.status(400).json({ error: `Need ${upgradeCost.toLocaleString()} gold to upgrade` });
@@ -883,42 +1162,280 @@ export async function registerRoutes(
         baseTier: newTier 
       });
 
-      // Grant trophy for reaching tier 5
       if (newTier === 5 && !account.trophies?.includes("base_fortress")) {
         const updatedTrophies = [...(account.trophies || []), "base_fortress"];
         await storage.updateAccount(accountId, { trophies: updatedTrophies });
       }
       
       const updatedAccount = await storage.getAccount(accountId);
-      const tierNames = ["", "Humble Camp", "Wooden Lodge", "Stone Keep", "Grand Manor", "Fortress Castle"];
       res.json({ 
         account: updatedAccount, 
-        message: `Base upgraded to ${tierNames[newTier]}!` 
+        message: `Base upgraded to ${BASE_TIER_NAMES[newTier]}!` 
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to upgrade base" });
     }
   });
 
-  // Room level upgrade endpoint
   app.patch("/api/accounts/:id/room-levels", async (req, res) => {
     try {
       const accountId = req.params.id;
-      const { roomId, newLevel } = req.body;
+      const { roomId } = req.body;
       
       const account = await storage.getAccount(accountId);
       if (!account) {
         return res.status(404).json({ error: "Account not found" });
       }
 
-      const currentLevels = (account as any).baseRoomLevels || { storage: 1, rest: 1, crafting: 1, training: 1, vault: 1, defenses: 1 };
+      const baseTier = account.baseTier || 1;
+      const maxLevel = ROOM_MAX_LEVEL_BY_TIER[baseTier] || 3;
+      const currentLevels = (account as any).baseRoomLevels || { storage: 1, weapon_locker: 1, rest: 1, crafting: 1, training: 1, vault: 1, defenses: 1 };
+      const currentLevel = currentLevels[roomId] || 1;
+
+      if (currentLevel >= maxLevel) {
+        return res.status(400).json({ error: `Room is at max level for base tier ${baseTier} (max ${maxLevel})` });
+      }
+
+      const baseCost = ROOM_UPGRADE_BASE_COST[roomId] || 5000;
+      const upgradeCost = baseCost * currentLevel;
+
+      if (account.gold < upgradeCost) {
+        return res.status(400).json({ error: `Need ${upgradeCost.toLocaleString()} gold to upgrade` });
+      }
+
+      const newLevel = currentLevel + 1;
       const updatedLevels = { ...currentLevels, [roomId]: newLevel };
       
-      await storage.updateAccount(accountId, { baseRoomLevels: updatedLevels } as any);
+      await storage.updateAccount(accountId, { 
+        gold: account.gold - upgradeCost,
+        baseRoomLevels: updatedLevels 
+      } as any);
       
-      res.json({ roomLevels: updatedLevels });
+      const updatedAccount = await storage.getAccount(accountId);
+      res.json({ roomLevels: updatedLevels, account: updatedAccount, goldSpent: upgradeCost });
     } catch (error) {
       res.status(500).json({ error: "Failed to update room level" });
+    }
+  });
+
+  app.post("/api/accounts/:id/offline-training/start", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      const { stat } = z.object({ stat: z.enum(["Str", "Def", "Spd", "Int", "Luck"]) }).parse(req.body);
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const baseTier = account.baseTier || 1;
+      const trainingRoomAvailable = baseTier >= 3;
+      if (!trainingRoomAvailable) {
+        return res.status(400).json({ error: "Training room requires base tier 3 (Keep) or higher" });
+      }
+
+      if (account.offlineTrainingStat) {
+        return res.status(400).json({ error: "Already training. Stop current training first." });
+      }
+
+      await db.update(accounts).set({
+        offlineTrainingStat: stat,
+        offlineTrainingStartedAt: new Date(),
+      }).where(eq(accounts.id, accountId));
+
+      const trainingRoomLevel = (account.baseRoomLevels as any)?.training || 1;
+      const xpPerHour = (OFFLINE_TRAINING_XP_PER_HOUR[baseTier] || 5) * trainingRoomLevel;
+
+      res.json({ 
+        success: true, 
+        message: `Started offline training for ${stat}. Earning ${xpPerHour} XP/hour.`,
+        stat,
+        xpPerHour,
+      });
+    } catch (error) {
+      console.error("Offline training start error:", error);
+      res.status(500).json({ error: "Failed to start training" });
+    }
+  });
+
+  app.post("/api/accounts/:id/offline-training/stop", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      if (!account.offlineTrainingStat) {
+        return res.status(400).json({ error: "No active training session" });
+      }
+
+      const result = await collectOfflineTraining(account);
+      const updatedAccount = await storage.getAccount(accountId);
+
+      res.json({ 
+        success: true, 
+        message: result 
+          ? `Training complete! Gained ${result.xpGained} ${result.stat} XP over ${result.hoursElapsed} hours.`
+          : "Training stopped (no XP accumulated yet).",
+        training: result,
+        account: updatedAccount,
+      });
+    } catch (error) {
+      console.error("Offline training stop error:", error);
+      res.status(500).json({ error: "Failed to stop training" });
+    }
+  });
+
+  app.get("/api/accounts/:id/offline-training/status", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.id);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const baseTier = account.baseTier || 1;
+      const trainingRoomLevel = (account.baseRoomLevels as any)?.training || 1;
+      const xpPerHour = (OFFLINE_TRAINING_XP_PER_HOUR[baseTier] || 5) * trainingRoomLevel;
+
+      if (!account.offlineTrainingStat || !account.offlineTrainingStartedAt) {
+        return res.json({ active: false, xpPerHour, maxHours: 24 });
+      }
+
+      const startedAt = new Date(account.offlineTrainingStartedAt);
+      const now = new Date();
+      const elapsedHours = Math.min((now.getTime() - startedAt.getTime()) / (1000 * 60 * 60), 24);
+      const accumulatedXp = Math.floor(elapsedHours * xpPerHour);
+
+      res.json({
+        active: true,
+        stat: account.offlineTrainingStat,
+        startedAt: startedAt.toISOString(),
+        elapsedHours: Math.floor(elapsedHours * 10) / 10,
+        accumulatedXp,
+        xpPerHour,
+        maxHours: 24,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get training status" });
+    }
+  });
+
+  app.post("/api/accounts/:id/vault/deposit", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      const { amount } = z.object({ amount: z.number().min(1) }).parse(req.body);
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const baseTier = account.baseTier || 1;
+      const vaultAvailable = baseTier >= 4;
+      if (!vaultAvailable) {
+        return res.status(400).json({ error: "Vault requires base tier 4 (Manor) or higher" });
+      }
+
+      if (account.gold < amount) {
+        return res.status(400).json({ error: "Not enough gold" });
+      }
+
+      const vaultLevel = (account.baseRoomLevels as any)?.vault || 1;
+      const maxVault = (VAULT_MAX_GOLD[baseTier] || 100000) * vaultLevel;
+      const currentVault = account.vaultGold || 0;
+
+      if (currentVault + amount > maxVault) {
+        return res.status(400).json({ error: `Vault capacity is ${maxVault.toLocaleString()} gold (currently ${currentVault.toLocaleString()})` });
+      }
+
+      await db.update(accounts).set({
+        gold: account.gold - amount,
+        vaultGold: currentVault + amount,
+      }).where(eq(accounts.id, accountId));
+
+      const updatedAccount = await storage.getAccount(accountId);
+      res.json({ success: true, message: `Deposited ${amount.toLocaleString()} gold into vault.`, account: updatedAccount });
+    } catch (error) {
+      console.error("Vault deposit error:", error);
+      res.status(500).json({ error: "Failed to deposit" });
+    }
+  });
+
+  app.post("/api/accounts/:id/vault/withdraw", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      const { amount } = z.object({ amount: z.number().min(1) }).parse(req.body);
+      
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const currentVault = account.vaultGold || 0;
+      if (currentVault < amount) {
+        return res.status(400).json({ error: "Not enough gold in vault" });
+      }
+
+      await db.update(accounts).set({
+        gold: account.gold + amount,
+        vaultGold: currentVault - amount,
+      }).where(eq(accounts.id, accountId));
+
+      const updatedAccount = await storage.getAccount(accountId);
+      res.json({ success: true, message: `Withdrew ${amount.toLocaleString()} gold from vault.`, account: updatedAccount });
+    } catch (error) {
+      console.error("Vault withdraw error:", error);
+      res.status(500).json({ error: "Failed to withdraw" });
+    }
+  });
+
+  app.get("/api/accounts/:id/vault/status", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.id);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const baseTier = account.baseTier || 1;
+      const vaultLevel = (account.baseRoomLevels as any)?.vault || 1;
+      const maxVault = (VAULT_MAX_GOLD[baseTier] || 100000) * vaultLevel;
+      const rate = (VAULT_INTEREST_RATE[baseTier] || 0.001) * vaultLevel;
+
+      res.json({
+        vaultGold: account.vaultGold || 0,
+        maxCapacity: maxVault,
+        interestRate: rate,
+        dailyInterest: Math.floor((account.vaultGold || 0) * rate),
+        lastInterestCollected: account.lastVaultInterest,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get vault status" });
+    }
+  });
+
+  app.get("/api/accounts/:id/base-info", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.id);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const baseTier = account.baseTier || 1;
+      const roomLevels = (account.baseRoomLevels as any) || {};
+      const maxRoomLevel = ROOM_MAX_LEVEL_BY_TIER[baseTier] || 3;
+
+      const availableRooms: string[] = [];
+      if (baseTier >= 1) availableRooms.push("storage", "rest");
+      if (baseTier >= 2) availableRooms.push("weapon_locker", "crafting");
+      if (baseTier >= 3) availableRooms.push("training", "defenses");
+      if (baseTier >= 4) availableRooms.push("vault");
+
+      const trainingStatus = account.offlineTrainingStat ? {
+        active: true,
+        stat: account.offlineTrainingStat,
+        startedAt: account.offlineTrainingStartedAt,
+      } : { active: false };
+
+      res.json({
+        baseTier,
+        tierName: BASE_TIER_NAMES[baseTier],
+        roomLevels,
+        maxRoomLevel,
+        availableRooms,
+        nextTierCost: baseTier < 5 ? BASE_TIER_COSTS[baseTier] : null,
+        nextTierRank: baseTier < 5 ? BASE_TIER_RANK_REQUIREMENTS[baseTier] : null,
+        vaultGold: account.vaultGold || 0,
+        trainingStatus,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get base info" });
     }
   });
 
@@ -1074,6 +1591,7 @@ export async function registerRoutes(
       });
 
       const item = await storage.addToInventory(body);
+      recordPurchase(body.itemId);
       res.status(201).json(item);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -1125,11 +1643,12 @@ export async function registerRoutes(
 
       // Get item price from the request body (frontend sends it based on items-data.ts)
       const { originalPrice } = z.object({ originalPrice: z.number().min(0) }).parse(req.body);
-      const sellPrice = Math.floor(originalPrice * SELL_PRICE_MULTIPLIER);
+      const dynamicPrice = getMarketPrice(inventoryItem.itemId, originalPrice);
+      const sellPrice = Math.floor(dynamicPrice * SELL_PRICE_MULTIPLIER);
 
-      // Remove item and give gold
       await storage.removeFromInventory(inventoryItem.id);
       await storage.updateAccount(account.id, { gold: account.gold + sellPrice });
+      recordSale(inventoryItem.itemId);
 
       const updatedAccount = await storage.getAccount(account.id);
       
@@ -1522,6 +2041,10 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Player not found" });
       }
 
+      if (challenger.ghostState || challenger.isDead) {
+        return res.status(403).json({ error: "You are in Ghost State and cannot initiate PvP. Respawn first." });
+      }
+
       // Check NPC challenge rate limit
       const { isNPCAccount, autoAcceptNPCChallenge } = await import("./npc-accounts");
       const isNPC = isNPCAccount(challenged.username);
@@ -1727,6 +2250,10 @@ export async function registerRoutes(
       
       if (!challenger || !challenged) {
         return res.status(404).json({ error: "Players not found" });
+      }
+
+      if (challenged.ghostState || challenged.isDead) {
+        return res.status(403).json({ error: "You are in Ghost State and cannot accept PvP challenges. Respawn first." });
       }
       
       // Get pets and birds for both players to add their stats
@@ -2174,29 +2701,45 @@ export async function registerRoutes(
           if (winner) await storage.updateAccountWins(winnerId, winner.wins + 1);
           if (loser) await storage.updateAccountLosses(loserId, loser.losses + 1);
           
-          // V2: Death & Revival - Apply PvP drops and death state
           let goldDropped = 0;
+          let durabilityLost = 0;
           let deathMessage = "";
           if (loser && !isNPCAccount(loser.username)) {
-            // Loser drops 10% of their gold (min 100, max 10000)
-            goldDropped = Math.min(10000, Math.max(100, Math.floor(loser.gold * 0.1)));
+            const penalty = calculateDeathPenalty(loser.gold);
+            goldDropped = penalty.goldLost;
+            durabilityLost = penalty.durabilityDamage;
             
-            // Update loser: mark as dead, lose gold, increment death count
             await db.update(accounts).set({
-              gold: loser.gold - goldDropped,
+              gold: Math.max(0, loser.gold - goldDropped),
               isDead: true,
+              ghostState: true,
               lastDeathTime: new Date(),
               deathCount: loser.deathCount + 1,
             }).where(eq(accounts.id, loserId));
             
-            // Update winner: gain gold
+            const { inventoryItems } = await import("@shared/schema");
+            const loserEquipped = loser.equipped as any;
+            for (const slot of ["weapon", "armor", "accessory1", "accessory2"] as const) {
+              const invId = loserEquipped?.[slot];
+              if (invId) {
+                await db.update(inventoryItems).set({
+                  durability: sql`GREATEST(0, ${inventoryItems.durability} - ${durabilityLost})`,
+                }).where(eq(inventoryItems.id, invId));
+              }
+            }
+            
+            if (loser.equippedPetId) {
+              const { pets: petsTable } = await import("@shared/schema");
+              await db.update(petsTable).set({ isFainted: true }).where(eq(petsTable.id, loser.equippedPetId));
+            }
+            
             if (winner) {
               await db.update(accounts).set({
                 gold: winner.gold + goldDropped,
               }).where(eq(accounts.id, winnerId));
             }
             
-            deathMessage = ` You dropped ${goldDropped} gold. Return to your Base to respawn.`;
+            deathMessage = ` You dropped ${goldDropped} gold. Equipment lost ${durabilityLost} durability. You are now a Ghost — return to Base to respawn.`;
           }
           
           broadcastToPlayer(winnerId, "challengeResult", {
@@ -2462,15 +3005,12 @@ export async function registerRoutes(
         return res.status(400).json({ error: `Need ${REBIRTH_COST.toLocaleString()} gold for rebirth` });
       }
       
-      // Rebirth bonuses: Each rebirth adds +10% to base stats
       const rebirthCount = (pet.rebirthCount || 0) + 1;
-      const rebirthMultiplier = 1 + (rebirthCount * 0.1); // 1.1, 1.2, 1.3, etc.
+      const rebirthMultiplier = 1 + (rebirthCount * 0.1);
       
-      // Keep elements from mythic stage
       const elements = pet.elements || [pet.element];
       const primaryElement = pet.element;
       
-      // New egg stats are boosted based on rebirth count
       const newStats = {
         Str: Math.floor(5 * rebirthMultiplier),
         Spd: Math.floor(5 * rebirthMultiplier),
@@ -2478,16 +3018,36 @@ export async function registerRoutes(
         ElementalPower: Math.floor(10 * rebirthMultiplier),
       };
       
-      // Update pet to egg tier with boosted stats, preserving elements and personality
-      await storage.updatePet(pet.id, {
+      let mutationTrait: string | null = pet.mutationTrait || null;
+      let mutationMessage = "";
+      const mutationRoll = Math.random();
+      if (mutationRoll < PET_MUTATION_CHANCE) {
+        const traitKeys = Object.keys(PET_MUTATION_TRAITS) as PetMutationTrait[];
+        const randomTrait = traitKeys[Math.floor(Math.random() * traitKeys.length)];
+        mutationTrait = randomTrait;
+        const traitInfo = PET_MUTATION_TRAITS[randomTrait];
+        mutationMessage = ` MUTATION! ${traitInfo.name}: ${traitInfo.description}`;
+      }
+      
+      const updateData: any = {
         tier: "egg",
         exp: 0,
         stats: newStats,
         rebirthCount,
-        bondLevel: (pet.bondLevel || 0) + 5, // Rebirth increases bond
-        elements: elements, // Preserve all elements
-        element: primaryElement, // Preserve primary element
-      });
+        bondLevel: (pet.bondLevel || 0) + 5,
+        elements: elements,
+        element: primaryElement,
+      };
+      if (mutationTrait) {
+        updateData.mutationTrait = mutationTrait;
+      }
+      
+      await storage.updatePet(pet.id, updateData);
+      
+      const { pets: petsTable } = await import("@shared/schema");
+      if (mutationTrait) {
+        await db.update(petsTable).set({ mutationTrait }).where(eq(petsTable.id, pet.id));
+      }
       
       await storage.updateAccount(accountId, { gold: account.gold - REBIRTH_COST });
       
@@ -2495,8 +3055,9 @@ export async function registerRoutes(
       
       res.json({ 
         pet: updatedPet, 
-        message: `${pet.name} has been reborn! Rebirth count: ${rebirthCount}`,
-        rebirthBonus: `${(rebirthMultiplier * 100 - 100).toFixed(0)}% stat bonus`
+        message: `${pet.name} has been reborn! Rebirth count: ${rebirthCount}${mutationMessage}`,
+        rebirthBonus: `${(rebirthMultiplier * 100 - 100).toFixed(0)}% stat bonus`,
+        mutation: mutationTrait ? { trait: mutationTrait, info: PET_MUTATION_TRAITS[mutationTrait as PetMutationTrait] } : null,
       });
     } catch (error) {
       console.error("Failed to rebirth pet:", error);
@@ -3006,6 +3567,10 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Player not found" });
       }
       
+      if (account.ghostState || account.isDead) {
+        return res.status(403).json({ error: "You are in Ghost State. Return to Base to respawn before entering combat." });
+      }
+      
       const floor = account.npcFloor || 1;
       const level = account.npcLevel || 1;
       const globalLevel = (floor - 1) * 100 + level;
@@ -3079,16 +3644,43 @@ export async function registerRoutes(
         }
       }
       
+      // Load equipped spell for combat
+      let playerSpell: any = undefined;
+      const equippedSkillRecord = await storage.getEquippedSkill(account.id);
+      if (equippedSkillRecord) {
+        const { getSkillById, RANK_MULTIPLIER } = await import("@shared/skills-data");
+        const skillDef = getSkillById(equippedSkillRecord.skillId);
+        if (skillDef) {
+          const rankMult = RANK_MULTIPLIER[account.rank || "Novice"] || 1.0;
+          playerSpell = {
+            name: skillDef.name,
+            multiplier: skillDef.spellPower || 1.5,
+            element: skillDef.element,
+            isAoE: skillDef.spellCategory === "aoe",
+            targetCount: skillDef.targetCount,
+            spellCategory: skillDef.spellCategory || "damage",
+            spellPower: skillDef.spellPower || 1.5,
+            ccType: skillDef.ccType,
+            ccDuration: skillDef.ccDuration,
+            buffStat: skillDef.buffStat,
+            buffAmount: skillDef.buffAmount,
+            rankMultiplier: rankMult,
+          };
+        }
+      }
+
       // Build player combatant
       const playerCombatant: Combatant = {
         id: account.id,
         name: account.username,
         stats: playerCombatStats,
         race: account.race,
+        rank: account.rank,
         elements: petElements.length > 0 ? { elements: petElements, elementalPower: petElementalPower } : undefined,
         immunities: [],
         level: globalLevel,
         isPlayer: true,
+        spell: playerSpell || null,
       };
       
       // Build NPC combatant with scaled stats
@@ -3164,6 +3756,31 @@ export async function registerRoutes(
         
         // Update NPC progress separately (sequential - only advance by 1)
         await storage.updateNpcProgress(account.id, newFloor, newLevel);
+      } else {
+        const penalty = calculateDeathPenalty(account.gold);
+        await db.update(accounts).set({
+          gold: Math.max(0, account.gold - penalty.goldLost),
+          isDead: true,
+          ghostState: true,
+          lastDeathTime: new Date(),
+          deathCount: account.deathCount + 1,
+        }).where(eq(accounts.id, account.id));
+
+        const { inventoryItems: invTable } = await import("@shared/schema");
+        const acctEquipped = account.equipped as any;
+        for (const slot of ["weapon", "armor", "accessory1", "accessory2"] as const) {
+          const invId = acctEquipped?.[slot];
+          if (invId) {
+            await db.update(invTable).set({
+              durability: sql`GREATEST(0, ${invTable.durability} - ${penalty.durabilityDamage})`,
+            }).where(eq(invTable.id, invId));
+          }
+        }
+
+        if (equippedPet) {
+          const { pets: petsTable } = await import("@shared/schema");
+          await db.update(petsTable).set({ isFainted: true }).where(eq(petsTable.id, equippedPet.id));
+        }
       }
       
       const playerTotalPower = playerCombatStats.Str + playerCombatStats.Def + playerCombatStats.Spd + playerCombatStats.Int + playerCombatStats.Luck + playerCombatStats.Pot;
@@ -3402,9 +4019,10 @@ export async function registerRoutes(
         const allGuilds = await storage.getAllGuilds();
         const sortedGuilds = allGuilds
           .sort((a, b) => {
-            const aGlobal = ((a.dungeonFloor || 1) - 1) * 100 + (a.dungeonLevel || 1);
-            const bGlobal = ((b.dungeonFloor || 1) - 1) * 100 + (b.dungeonLevel || 1);
-            return bGlobal - aGlobal;
+            const aDungeons = (a.dungeonsCompleted || 0);
+            const bDungeons = (b.dungeonsCompleted || 0);
+            if (bDungeons !== aDungeons) return bDungeons - aDungeons;
+            return ((b.unityCoins || 0) - (a.unityCoins || 0));
           })
           .slice(0, 50);
         
@@ -3414,9 +4032,11 @@ export async function registerRoutes(
             guildId: guild.id,
             guildName: guild.name,
             masterName: master?.username || "Unknown",
-            value: `Floor ${guild.dungeonFloor || 1} - Level ${guild.dungeonLevel || 1}`,
+            value: `${guild.dungeonsCompleted || 0}/5 Dungeons · ${(guild.unityCoins || 0).toLocaleString()} Unity Coins`,
             dungeonFloor: guild.dungeonFloor || 1,
             dungeonLevel: guild.dungeonLevel || 1,
+            dungeonsCompleted: guild.dungeonsCompleted || 0,
+            unityCoins: guild.unityCoins || 0,
             rank: idx + 1,
           };
         }));
@@ -3897,8 +4517,7 @@ export async function registerRoutes(
 
       const guild = await storage.createGuild({ name, masterId });
       
-      // Add master as first member
-      await storage.addGuildMember({ guildId: guild.id, accountId: masterId });
+      await storage.addGuildMember({ guildId: guild.id, accountId: masterId, role: "leader" });
 
       res.json(guild);
     } catch (error) {
@@ -3926,6 +4545,7 @@ export async function registerRoutes(
           rank: account?.rank,
           isOnline,
           isMaster: m.accountId === guild.masterId,
+          role: m.accountId === guild.masterId ? "leader" : (m.role || "member"),
         };
       });
 
@@ -3960,6 +4580,7 @@ export async function registerRoutes(
           rank: account?.rank,
           isOnline,
           isMaster: m.accountId === guild.masterId,
+          role: m.accountId === guild.masterId ? "leader" : (m.role || "member"),
         };
       });
 
@@ -3969,7 +4590,7 @@ export async function registerRoutes(
     }
   });
 
-  // Invite player to guild (master only)
+  // Invite player to guild (leader or officer)
   app.post("/api/guilds/:guildId/invite", async (req, res) => {
     try {
       const inviteSchema = z.object({
@@ -3983,8 +4604,10 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Guild not found" });
       }
 
-      if (guild.masterId !== invitedBy) {
-        return res.status(403).json({ error: "Only guild master can invite players" });
+      const inviterMember = await storage.getGuildMember(invitedBy);
+      const inviterRole = invitedBy === guild.masterId ? "leader" : (inviterMember?.role || "member");
+      if (inviterRole !== "leader" && inviterRole !== "officer") {
+        return res.status(403).json({ error: "Only leader or officers can invite players" });
       }
 
       const members = await storage.getGuildMembers(guild.id);
@@ -4121,26 +4744,40 @@ export async function registerRoutes(
     }
   });
 
-  // Kick member from guild (master only)
+  // Kick member from guild (leader or officer, with role hierarchy)
   app.post("/api/guilds/:guildId/kick", async (req, res) => {
     try {
       const kickSchema = z.object({
         accountId: z.string(),
-        masterId: z.string(),
+        kickedBy: z.string().optional(),
+        masterId: z.string().optional(),
       });
-      const { accountId, masterId } = kickSchema.parse(req.body);
+      const parsed = kickSchema.parse(req.body);
+      const accountId = parsed.accountId;
+      const kickerId = parsed.kickedBy || parsed.masterId;
+      if (!kickerId) {
+        return res.status(400).json({ error: "Kicker ID required" });
+      }
 
       const guild = await storage.getGuild(req.params.guildId);
       if (!guild) {
         return res.status(404).json({ error: "Guild not found" });
       }
 
-      if (guild.masterId !== masterId) {
-        return res.status(403).json({ error: "Only guild master can kick members" });
+      if (accountId === kickerId) {
+        return res.status(400).json({ error: "Cannot kick yourself" });
       }
 
-      if (accountId === masterId) {
-        return res.status(400).json({ error: "Cannot kick yourself" });
+      const kickerMember = await storage.getGuildMember(kickerId);
+      const kickerRole = kickerId === guild.masterId ? "leader" : (kickerMember?.role || "member");
+      if (kickerRole !== "leader" && kickerRole !== "officer") {
+        return res.status(403).json({ error: "Only leader or officers can kick members" });
+      }
+
+      const targetMember = await storage.getGuildMember(accountId);
+      const targetRole = accountId === guild.masterId ? "leader" : (targetMember?.role || "member");
+      if (kickerRole === "officer" && (targetRole === "leader" || targetRole === "officer")) {
+        return res.status(403).json({ error: "Officers can only kick members, not other officers or the leader" });
       }
 
       await storage.removeGuildMember(accountId);
@@ -4152,7 +4789,7 @@ export async function registerRoutes(
     }
   });
 
-  // Distribute guild bank rewards (master only)
+  // Distribute guild bank rewards (leader only)
   app.post("/api/guilds/:guildId/distribute", async (req, res) => {
     try {
       const distributeSchema = z.object({
@@ -4174,7 +4811,7 @@ export async function registerRoutes(
       }
 
       if (guild.masterId !== masterId) {
-        return res.status(403).json({ error: "Only guild master can distribute rewards" });
+        return res.status(403).json({ error: "Only guild leader can distribute rewards" });
       }
 
       // Calculate totals
@@ -4196,6 +4833,9 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Not enough resources in guild bank" });
       }
 
+      const leaderAccount = await storage.getAccount(masterId);
+      const leaderName = leaderAccount?.username || "Unknown";
+
       // Apply rewards to each player
       for (const dist of distributions) {
         const account = await storage.getAccount(dist.accountId);
@@ -4207,7 +4847,19 @@ export async function registerRoutes(
             focusedShards: (account.focusedShards || 0) + (dist.focusedShards || 0),
           });
           
-          // Notify player
+          for (const [resource, amount] of Object.entries({ gold: dist.gold, rubies: dist.rubies, soulShards: dist.soulShards, focusedShards: dist.focusedShards, runes: dist.runes })) {
+            if (amount && amount > 0) {
+              await storage.createGuildVaultLog({
+                guildId: guild.id,
+                accountId: masterId,
+                playerName: leaderName,
+                action: "withdraw",
+                resource,
+                quantity: amount,
+              });
+            }
+          }
+          
           broadcastToPlayer(dist.accountId, "guildReward", {
             gold: dist.gold,
             rubies: dist.rubies,
@@ -4283,7 +4935,6 @@ export async function registerRoutes(
       const allAccounts = await storage.getAllAccounts();
       const allPets = await storage.getAllPets();
 
-      // Get online guild members with their pets
       const onlineMembers = members.filter(m => activeSessions.has(m.accountId)).map(m => {
         const account = allAccounts.find(a => a.id === m.accountId);
         const equippedPet = account?.equippedPetId ? allPets.find(p => p.id === account.equippedPetId) : null;
@@ -4295,93 +4946,93 @@ export async function registerRoutes(
         };
       });
 
-      const floor = guild.dungeonFloor;
-      const level = guild.dungeonLevel;
-      const globalLevel = (floor - 1) * 100 + level;
-      
-      // Determine dungeon type
-      const isDemonLordDungeon = floor > 50;
-      const dungeonName = isDemonLordDungeon ? "The Demon Lord's Dungeon" : "The Great Dungeon";
-      const displayFloor = isDemonLordDungeon ? floor - 50 : floor;
-      
-      // Demon Lord's Dungeon is stronger than NPC tower (15x vs 10x for regular)
-      // and allows pets, with 3x rewards compared to Great Dungeon
-      const strengthMultiplier = isDemonLordDungeon ? 15 : 10;
-      const rewardMultiplier = isDemonLordDungeon ? 3 : 1; // 3x rewards for Demon Lord's Dungeon
-      
-      const baseStats = {
-        Str: Math.floor((10 + globalLevel * 5) * strengthMultiplier),
-        Spd: Math.floor((10 + globalLevel * 4) * strengthMultiplier),
-        Int: Math.floor((10 + globalLevel * 3) * strengthMultiplier),
-        Luck: Math.floor((5 + globalLevel * 2) * strengthMultiplier),
-      };
-
-      const isBoss = level % 10 === 0;
-      const floorMultiplier = 1 + (floor - 1) * 0.5;
-      
-      if (isBoss) {
-        baseStats.Str = Math.floor(baseStats.Str * 2 * floorMultiplier);
-        baseStats.Spd = Math.floor(baseStats.Spd * 1.5 * floorMultiplier);
-        baseStats.Int = Math.floor(baseStats.Int * 1.5 * floorMultiplier);
-      }
-
-      // Determine immunities
-      const immunities: string[] = [];
-      if (floor >= 5) {
-        const numImmunities = Math.min(Math.floor((floor - 4) / 3) + 1, 6);
-        const seed = floor * 100 + level;
-        const shuffledElements = [...petElements].sort((a, b) => {
-          const hashA = (seed * a.charCodeAt(0)) % 1000;
-          const hashB = (seed * b.charCodeAt(0)) % 1000;
-          return hashA - hashB;
-        });
-        for (let i = 0; i < numImmunities; i++) {
-          immunities.push(shuffledElements[i]);
+      let combinedMemberStats = { Str: 0, Def: 0, Spd: 0, Int: 0, Luck: 0 };
+      for (const m of onlineMembers) {
+        const account = allAccounts.find(a => a.id === m.accountId);
+        if (account) {
+          combinedMemberStats.Str += account.stats.Str;
+          combinedMemberStats.Def += account.stats.Def || 0;
+          combinedMemberStats.Spd += account.stats.Spd;
+          combinedMemberStats.Int += account.stats.Int;
+          combinedMemberStats.Luck += account.stats.Luck;
         }
       }
 
-      // Calculate rewards (3x for Demon Lord's Dungeon)
-      // Note: We need the accountId here, which should be passed in or available from context
-      // For this GET route, we'll assume the caller wants to see rewards based on the guild's state
-      // or we use a query param if specific player context is needed.
-      // Since it's /api/guilds/:guildId/dungeon, let's use the guild master as fallback if no accountId provided
-      const dungeonGuild = await storage.getGuild(req.params.guildId);
-      const guildMultiplier = dungeonGuild ? 1 + (dungeonGuild.level * 0.1) : 1; // 10% bonus per level
-      
-      const baseGold = Math.floor((100 + globalLevel * 50) * 10 * rewardMultiplier * guildMultiplier);
-      const rewards = {
-        gold: isBoss ? baseGold * 5 : baseGold,
-        rubies: isBoss ? Math.floor(level / 2) * 10 * rewardMultiplier * guildMultiplier : 0,
-        soulShards: floor >= 10 ? Math.floor(floor / 5) * 10 * rewardMultiplier * guildMultiplier : 0,
-        focusedShards: floor >= 25 ? Math.floor((floor - 20) / 5) * 10 * rewardMultiplier * guildMultiplier : 0,
-        runes: floor >= 15 ? Math.floor(floor / 10) * 10 * rewardMultiplier * guildMultiplier : 0,
-      };
+      const now = new Date();
+      const activeBuffs = ((guild as any).guildBuffs || []).filter((b: GuildBuff) => new Date(b.expiresAt) > now);
+
+      const dungeons = GUILD_DUNGEON_TIERS.map(dt => {
+        const isUnlocked = (guild.level || 1) >= dt.unlockRequirement.guildLevel &&
+          (guild.dungeonsCompleted || 0) >= dt.unlockRequirement.previousDungeon;
+        const isCompleted = (guild.dungeonsCompleted || 0) >= dt.tier;
+
+        const avgMemberPower = onlineMembers.length > 0
+          ? (combinedMemberStats.Str + combinedMemberStats.Spd + combinedMemberStats.Int) / onlineMembers.length
+          : 50;
+        const scaledDifficulty = Math.floor(avgMemberPower * dt.difficultyMultiplier * 1.2);
+
+        const npcStats = {
+          Str: Math.floor(scaledDifficulty * 1.0),
+          Spd: Math.floor(scaledDifficulty * 0.8),
+          Int: Math.floor(scaledDifficulty * 0.7),
+          Luck: Math.floor(scaledDifficulty * 0.4),
+        };
+
+        return {
+          tier: dt.tier,
+          name: dt.name,
+          description: dt.description,
+          isUnlocked,
+          isCompleted,
+          unlockRequirement: dt.unlockRequirement,
+          npcStats,
+          rewards: {
+            unityCoins: dt.rewards.unityCoins,
+            gold: dt.rewards.gold,
+            shards: dt.rewards.shards,
+            label: dt.rewards.label,
+          },
+          buff: dt.buff,
+        };
+      });
+
+      const perks: { level: number; name: string; description: string; unlocked: boolean }[] = [];
+      for (let lvl = 1; lvl <= 10; lvl++) {
+        const perk = GUILD_PERKS[lvl];
+        if (perk) {
+          perks.push({ level: lvl, ...perk, unlocked: (guild.level || 1) >= lvl });
+        }
+      }
 
       res.json({
-        floor,
-        level,
-        displayFloor,
-        globalLevel,
-        dungeonName,
-        isDemonLordDungeon,
-        petsAllowed: isDemonLordDungeon, // Pets only allowed in Demon Lord's Dungeon
-        isBoss,
-        npcStats: baseStats,
-        immunities,
-        rewards,
+        floor: guild.dungeonFloor,
+        level: guild.dungeonLevel,
+        displayFloor: guild.dungeonFloor,
+        globalLevel: (guild.dungeonFloor - 1) * 100 + guild.dungeonLevel,
+        dungeonName: "Guild Dungeons",
+        isDemonLordDungeon: false,
+        petsAllowed: true,
+        isBoss: false,
+        npcStats: { Str: 0, Spd: 0, Int: 0, Luck: 0 },
+        immunities: [],
+        rewards: { gold: 0, rubies: 0, soulShards: 0, focusedShards: 0, runes: 0 },
         onlineMembers,
         memberCount: members.length,
+        dungeons,
+        unityCoins: (guild as any).unityCoins || 0,
+        dungeonsCompleted: (guild as any).dungeonsCompleted || 0,
+        activeBuffs,
+        perks,
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch dungeon info" });
     }
   });
 
-  // Fight in Great Dungeon / Demon Lord's Dungeon (multiplayer - combines online members' stats)
   app.post("/api/guilds/:guildId/dungeon/fight", async (req, res) => {
     try {
-      const fightSchema = z.object({ accountId: z.string() });
-      const { accountId } = fightSchema.parse(req.body);
+      const fightSchema = z.object({ accountId: z.string(), dungeonTier: z.number().min(1).max(5).optional() });
+      const { accountId, dungeonTier } = fightSchema.parse(req.body);
 
       const membership = await storage.getGuildMember(accountId);
       if (!membership || membership.guildId !== req.params.guildId) {
@@ -4393,21 +5044,31 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Guild not found" });
       }
 
+      const tier = dungeonTier || 1;
+      const dungeonConfig = GUILD_DUNGEON_TIERS.find(d => d.tier === tier);
+      if (!dungeonConfig) {
+        return res.status(400).json({ error: "Invalid dungeon tier" });
+      }
+
+      if ((guild.level || 1) < dungeonConfig.unlockRequirement.guildLevel) {
+        return res.status(400).json({ error: `Guild level ${dungeonConfig.unlockRequirement.guildLevel} required to access ${dungeonConfig.name}` });
+      }
+      if ((guild.dungeonsCompleted || 0) < dungeonConfig.unlockRequirement.previousDungeon) {
+        return res.status(400).json({ error: `Complete dungeon ${dungeonConfig.unlockRequirement.previousDungeon} first` });
+      }
+      if ((guild.dungeonsCompleted || 0) >= tier) {
+        return res.status(400).json({ error: `${dungeonConfig.name} has already been completed` });
+      }
+
       const members = await storage.getGuildMembers(guild.id);
       const allAccounts = await storage.getAllAccounts();
       const allPets = await storage.getAllPets();
 
-      const floor = guild.dungeonFloor;
-      const level = guild.dungeonLevel;
-      const isDemonLordDungeon = floor > 50;
-      
-      // Get online members and combine their stats
       const onlineMembers = members.filter(m => activeSessions.has(m.accountId));
-      
+
       let combinedStats = { Str: 0, Spd: 0, Int: 0, Luck: 0 };
-      let combinedElementsRaw: string[] = [];
       let combinedPetPower = 0;
-      
+
       for (const member of onlineMembers) {
         const account = allAccounts.find(a => a.id === member.accountId);
         if (account) {
@@ -4415,129 +5076,95 @@ export async function registerRoutes(
           combinedStats.Spd += account.stats.Spd;
           combinedStats.Int += account.stats.Int;
           combinedStats.Luck += account.stats.Luck;
-          
-          // Add equipped pet stats - only in Demon Lord's Dungeon
-          if (isDemonLordDungeon && account.equippedPetId) {
+
+          if (account.equippedPetId) {
             const pet = allPets.find(p => p.id === account.equippedPetId);
             if (pet) {
               const petStats = pet.stats as any;
               combinedPetPower += petStats.Str + petStats.Spd + petStats.Luck + (petStats.ElementalPower || 0);
-              if (pet.elements) {
-                combinedElementsRaw.push(...pet.elements);
-              }
             }
           }
         }
       }
-      
-      // Combined elements (unique set)
-      const combinedElements = Array.from(new Set(combinedElementsRaw));
 
-      // Calculate dungeon NPC stats - 15x for Demon Lord's, 10x for Great Dungeon
-      const globalLevel = (floor - 1) * 100 + level;
-      const strengthMultiplier = isDemonLordDungeon ? 15 : 10;
-      
+      const avgMemberPower = onlineMembers.length > 0
+        ? (combinedStats.Str + combinedStats.Spd + combinedStats.Int) / onlineMembers.length
+        : 50;
+      const scaledDifficulty = Math.floor(avgMemberPower * dungeonConfig.difficultyMultiplier * 1.2);
+
       const npcStats = {
-        Str: Math.floor((10 + globalLevel * 5) * strengthMultiplier),
-        Spd: Math.floor((10 + globalLevel * 4) * strengthMultiplier),
-        Int: Math.floor((10 + globalLevel * 3) * strengthMultiplier),
-        Luck: Math.floor((5 + globalLevel * 2) * strengthMultiplier),
+        Str: Math.floor(scaledDifficulty * 1.0),
+        Spd: Math.floor(scaledDifficulty * 0.8),
+        Int: Math.floor(scaledDifficulty * 0.7),
+        Luck: Math.floor(scaledDifficulty * 0.4),
       };
 
-      const isBoss = level % 10 === 0;
-      const floorMultiplier = 1 + (floor - 1) * 0.5;
-      
-      if (isBoss) {
-        npcStats.Str = Math.floor(npcStats.Str * 2 * floorMultiplier);
-        npcStats.Spd = Math.floor(npcStats.Spd * 1.5 * floorMultiplier);
-        npcStats.Int = Math.floor(npcStats.Int * 1.5 * floorMultiplier);
-      }
-
-      // Calculate immunities
-      const immunities: string[] = [];
-      if (floor >= 5) {
-        const numImmunities = Math.min(Math.floor((floor - 4) / 3) + 1, 6);
-        const seed = floor * 100 + level;
-        const shuffledElements = [...petElements].sort((a, b) => {
-          const hashA = (seed * a.charCodeAt(0)) % 1000;
-          const hashB = (seed * b.charCodeAt(0)) % 1000;
-          return hashA - hashB;
-        });
-        for (let i = 0; i < numImmunities; i++) {
-          immunities.push(shuffledElements[i]);
-        }
-      }
-
-      // Check if any combined elements bypass immunities
-      const effectiveElements = combinedElements.filter(e => !immunities.includes(e));
-      const elementBonus = effectiveElements.length > 0 ? 1.25 : 1;
-
-      // Battle calculation - include pet power in Demon Lord's Dungeon
-      const basePower = combinedStats.Str * 2 + combinedStats.Spd + combinedStats.Int;
-      const playerPower = (basePower + (isDemonLordDungeon ? combinedPetPower : 0)) * elementBonus;
+      const playerPower = (combinedStats.Str * 2 + combinedStats.Spd + combinedStats.Int + combinedPetPower);
       const npcPower = npcStats.Str * 2 + npcStats.Spd + npcStats.Int;
-      
-      // Minimum power check - must have at least 40% of NPC power to have any chance
-      const powerRatio = playerPower / npcPower;
+
+      const powerRatio = npcPower > 0 ? playerPower / npcPower : 1;
       if (powerRatio < 0.4) {
         return res.json({
           victory: false,
-          message: isDemonLordDungeon 
-            ? "Your combined power is too weak! Equip pets and get more guild members online."
-            : "Your combined power is too weak! You need more guild members online or stronger stats.",
+          message: "Your combined power is too weak! Get more guild members online or grow stronger.",
           playerPower: Math.floor(playerPower),
           npcPower: Math.floor(npcPower),
           powerRatio: Math.floor(powerRatio * 100),
           onlineMembers: onlineMembers.length,
-          petsUsed: isDemonLordDungeon,
         });
       }
-      
+
       const luckFactor = 1 + (combinedStats.Luck * 0.01);
       const roll = Math.random() * luckFactor;
-      
-      // Victory chance scales with power ratio - need at least 60% power for decent odds
       const victory = playerPower * roll > npcPower * 0.8;
 
       if (victory) {
-        // Calculate rewards - 3x for Demon Lord's Dungeon
-        const rewardMultiplier = isDemonLordDungeon ? 3 : 1;
-        const baseGold = Math.floor((100 + globalLevel * 50) * 10 * rewardMultiplier);
         const rewards = {
-          gold: isBoss ? baseGold * 5 : baseGold,
-          rubies: isBoss ? Math.floor(level / 2) * 10 * rewardMultiplier : 0,
-          soulShards: floor >= 10 ? Math.floor(floor / 5) * 10 * rewardMultiplier : 0,
-          focusedShards: floor >= 25 ? Math.floor((floor - 20) / 5) * 10 * rewardMultiplier : 0,
-          runes: floor >= 15 ? Math.floor(floor / 10) * 10 * rewardMultiplier : 0,
-          trainingPoints: floor >= 5 ? Math.floor(floor / 3) * 5 * rewardMultiplier : 0,
+          unityCoins: dungeonConfig.rewards.unityCoins,
+          gold: dungeonConfig.rewards.gold,
+          shards: dungeonConfig.rewards.shards,
         };
 
-        // Add rewards to guild bank
         const newBank: GuildBank = {
           gold: guild.bank.gold + rewards.gold,
-          rubies: guild.bank.rubies + rewards.rubies,
-          soulShards: guild.bank.soulShards + rewards.soulShards,
-          focusedShards: guild.bank.focusedShards + rewards.focusedShards,
-          runes: guild.bank.runes + rewards.runes,
-          trainingPoints: (guild.bank.trainingPoints || 0) + rewards.trainingPoints,
+          rubies: guild.bank.rubies,
+          soulShards: guild.bank.soulShards + rewards.shards,
+          focusedShards: guild.bank.focusedShards,
+          runes: guild.bank.runes,
+          trainingPoints: guild.bank.trainingPoints || 0,
         };
         await storage.updateGuildBank(guild.id, newBank);
 
-        // Advance dungeon progress - now goes up to 100 (50 Great Dungeon + 50 Demon Lord's Dungeon)
-        let newFloor = floor;
-        let newLevel = level + 1;
-        if (newLevel > 50) { // NPC level max is 50 for dungeon
-          newLevel = 1;
-          newFloor = Math.min(floor + 1, 100); // Max 100 floors total (50 Great + 50 Demon Lord)
-        }
-        await storage.updateGuildDungeonProgress(guild.id, newFloor, newLevel);
+        const newDungeonsCompleted = Math.max((guild.dungeonsCompleted || 0), tier);
+        const newUnityCoins = ((guild as any).unityCoins || 0) + rewards.unityCoins;
 
-        // Notify all guild members
+        const buffExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        const newBuff: GuildBuff = {
+          id: `buff_${tier}_${Date.now()}`,
+          name: dungeonConfig.buff.name,
+          stat: dungeonConfig.buff.stat,
+          bonusPercent: dungeonConfig.buff.bonusPercent,
+          expiresAt: buffExpires.toISOString(),
+          fromDungeon: tier,
+        };
+
+        const existingBuffs: GuildBuff[] = ((guild as any).guildBuffs || []).filter(
+          (b: GuildBuff) => new Date(b.expiresAt) > new Date() && b.fromDungeon !== tier
+        );
+        const updatedBuffs = [...existingBuffs, newBuff];
+
+        await db.update(guildsTable).set({
+          dungeonsCompleted: newDungeonsCompleted,
+          unityCoins: newUnityCoins,
+          guildBuffs: updatedBuffs,
+        }).where(eq(guildsTable.id, guild.id));
+
         for (const member of members) {
           broadcastToPlayer(member.accountId, "dungeonVictory", {
             rewards,
-            newFloor,
-            newLevel,
+            dungeonName: dungeonConfig.name,
+            dungeonTier: tier,
+            buff: newBuff,
             participants: onlineMembers.length,
           });
         }
@@ -4545,8 +5172,9 @@ export async function registerRoutes(
         res.json({
           victory: true,
           rewards,
-          newFloor,
-          newLevel,
+          dungeonName: dungeonConfig.name,
+          dungeonTier: tier,
+          buff: newBuff,
           participants: onlineMembers.length,
           combinedStats,
           npcStats,
@@ -4554,6 +5182,8 @@ export async function registerRoutes(
       } else {
         res.json({
           victory: false,
+          dungeonName: dungeonConfig.name,
+          dungeonTier: tier,
           participants: onlineMembers.length,
           combinedStats,
           npcStats,
@@ -5522,45 +6152,42 @@ export async function registerRoutes(
       const highestBid = await storage.getHighestBid(activeAuction.id);
       
       if (highestBid) {
-        // Deduct gold from winner
         const winner = await storage.getAccount(highestBid.bidderId);
-        if (winner && winner.gold >= highestBid.amount) {
-          await storage.updateAccountGold(winner.id, winner.gold - highestBid.amount);
+        const saleTax = calculateAuctionSaleTax(highestBid.amount);
+        const totalCost = highestBid.amount + saleTax;
+        if (winner && winner.gold >= totalCost) {
+          await storage.updateAccountGold(winner.id, winner.gold - totalCost);
           
-          // Grant skill to winner
           await storage.addPlayerSkill({
             accountId: winner.id,
             skillId: activeAuction.skillId,
             source: "auction",
           });
 
-          // Update auction
           await storage.updateSkillAuction(activeAuction.id, {
             status: "completed",
             winningBidId: highestBid.id,
             winnerId: winner.id,
           });
 
-          // Add to activity feed
           await storage.createActivityFeed({
             type: "bid_won",
             accountId: winner.id,
             accountName: winner.username,
-            message: `${winner.username} won the auction for a skill with a bid of ${highestBid.amount.toLocaleString()} gold!`,
-            metadata: { skillId: activeAuction.skillId, amount: highestBid.amount },
+            message: `${winner.username} won the auction for a skill with a bid of ${highestBid.amount.toLocaleString()} gold! (${saleTax.toLocaleString()} gold tax)`,
+            metadata: { skillId: activeAuction.skillId, amount: highestBid.amount, saleTax },
           });
 
-          // Broadcast to all
           broadcastToAllPlayers("auction_ended", {
             auctionId: activeAuction.id,
             winnerId: winner.id,
             winnerName: winner.username,
             amount: highestBid.amount,
+            saleTax,
             skillId: activeAuction.skillId,
           });
         }
       } else {
-        // No bids, just complete the auction
         await storage.updateSkillAuction(activeAuction.id, {
           status: "completed",
         });
@@ -5660,6 +6287,51 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/spells/catalog", async (req, res) => {
+    try {
+      const { ALL_SKILLS, getSkillsByCategory, getSkillsByRank, getAdminExclusiveSkills, getValorExclusiveSkills, getAvailableSkillsForRank } = await import("@shared/skills-data");
+      const category = req.query.category as string | undefined;
+      const rank = req.query.rank as string | undefined;
+      const includeExclusive = req.query.includeExclusive === "true";
+
+      let skills = ALL_SKILLS.filter(s => !s.isAdminExclusive && !s.isValorExclusive);
+
+      if (category) {
+        skills = skills.filter(s => s.spellCategory === category);
+      }
+      if (rank) {
+        skills = getAvailableSkillsForRank(rank);
+        if (category) {
+          skills = skills.filter(s => s.spellCategory === category);
+        }
+      }
+
+      const result: any = { skills, total: skills.length };
+      if (includeExclusive) {
+        result.adminExclusive = getAdminExclusiveSkills();
+        result.valorExclusive = getValorExclusiveSkills();
+      }
+
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get spell catalog" });
+    }
+  });
+
+  app.get("/api/accounts/:accountId/equipped-spell", async (req, res) => {
+    try {
+      const equippedSkill = await storage.getEquippedSkill(req.params.accountId);
+      if (!equippedSkill) {
+        return res.json({ equipped: false, spell: null });
+      }
+      const { getSkillById } = await import("@shared/skills-data");
+      const skillDef = getSkillById(equippedSkill.skillId);
+      res.json({ equipped: true, spell: skillDef || null, record: equippedSkill });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get equipped spell" });
+    }
+  });
+
   // =============================================
   // ACTIVITY FEED ROUTES
   // =============================================
@@ -5703,6 +6375,206 @@ export async function registerRoutes(
   });
 
   // =============================================
+  // RACE SKILL TREE ROUTES
+  // =============================================
+
+  app.get("/api/accounts/:accountId/race-skills", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      if (!account.race) {
+        return res.status(400).json({ error: "No race selected" });
+      }
+
+      const { getUnlockedRaceSkills, getRaceSkillTree } = await import("@shared/skills-data");
+      const allSkills = getRaceSkillTree(account.race);
+      const unlockedSkills = getUnlockedRaceSkills(account.race, account.rank);
+
+      const customNames = (account as any).customSkillNames || {};
+
+      const skillsWithState = allSkills.map(skill => {
+        const isUnlocked = unlockedSkills.some(u => u.id === skill.id);
+        const displayName = customNames[skill.id] || skill.name;
+        return {
+          ...skill,
+          name: displayName,
+          originalName: skill.name,
+          isUnlocked,
+          isEquippedActive: (account as any).equippedRaceActive === skill.id,
+          isEquippedPassive: (account as any).equippedRacePassive === skill.id,
+        };
+      });
+
+      res.json({
+        race: account.race,
+        rank: account.rank,
+        skills: skillsWithState,
+        equippedActive: (account as any).equippedRaceActive,
+        equippedPassive: (account as any).equippedRacePassive,
+        canRenameSkills: account.rank === "Mythical Legend",
+      });
+    } catch (error) {
+      console.error("Error getting race skills:", error);
+      res.status(500).json({ error: "Failed to get race skills" });
+    }
+  });
+
+  app.post("/api/accounts/:accountId/race-skills/equip-active", async (req, res) => {
+    try {
+      const { accountId } = req.params;
+      const { skillId } = z.object({ skillId: z.string() }).parse(req.body);
+
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      if (!account.race) {
+        return res.status(400).json({ error: "No race selected" });
+      }
+
+      const { isRaceSkillUnlocked, getRaceSkillById } = await import("@shared/skills-data");
+      const skill = getRaceSkillById(skillId);
+      if (!skill) {
+        return res.status(404).json({ error: "Skill not found" });
+      }
+      if (skill.type !== "active") {
+        return res.status(400).json({ error: "Not an active skill" });
+      }
+      if (skill.race !== account.race) {
+        return res.status(400).json({ error: "Skill does not belong to your race" });
+      }
+      if (!isRaceSkillUnlocked(skillId, account.race, account.rank)) {
+        return res.status(400).json({ error: "Skill not yet unlocked at your rank" });
+      }
+
+      await db.update(accounts).set({
+        equippedRaceActive: skillId,
+      }).where(eq(accounts.id, accountId));
+
+      res.json({ success: true, equippedActive: skillId, skillName: skill.name });
+    } catch (error) {
+      console.error("Error equipping race active skill:", error);
+      res.status(500).json({ error: "Failed to equip active skill" });
+    }
+  });
+
+  app.post("/api/accounts/:accountId/race-skills/equip-passive", async (req, res) => {
+    try {
+      const { accountId } = req.params;
+      const { skillId } = z.object({ skillId: z.string() }).parse(req.body);
+
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      if (!account.race) {
+        return res.status(400).json({ error: "No race selected" });
+      }
+
+      const { isRaceSkillUnlocked, getRaceSkillById } = await import("@shared/skills-data");
+      const skill = getRaceSkillById(skillId);
+      if (!skill) {
+        return res.status(404).json({ error: "Skill not found" });
+      }
+      if (skill.type !== "passive") {
+        return res.status(400).json({ error: "Not a passive skill" });
+      }
+      if (skill.race !== account.race) {
+        return res.status(400).json({ error: "Skill does not belong to your race" });
+      }
+      if (!isRaceSkillUnlocked(skillId, account.race, account.rank)) {
+        return res.status(400).json({ error: "Skill not yet unlocked at your rank" });
+      }
+
+      await db.update(accounts).set({
+        equippedRacePassive: skillId,
+      }).where(eq(accounts.id, accountId));
+
+      res.json({ success: true, equippedPassive: skillId, skillName: skill.name });
+    } catch (error) {
+      console.error("Error equipping race passive skill:", error);
+      res.status(500).json({ error: "Failed to equip passive skill" });
+    }
+  });
+
+  app.post("/api/accounts/:accountId/race-skills/unequip-active", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+
+      await db.update(accounts).set({
+        equippedRaceActive: null,
+      }).where(eq(accounts.id, req.params.accountId));
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to unequip active skill" });
+    }
+  });
+
+  app.post("/api/accounts/:accountId/race-skills/unequip-passive", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+
+      await db.update(accounts).set({
+        equippedRacePassive: null,
+      }).where(eq(accounts.id, req.params.accountId));
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to unequip passive skill" });
+    }
+  });
+
+  app.post("/api/accounts/:accountId/race-skills/rename", async (req, res) => {
+    try {
+      const { accountId } = req.params;
+      const { skillId, newName } = z.object({
+        skillId: z.string(),
+        newName: z.string().min(2).max(30),
+      }).parse(req.body);
+
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      if (account.rank !== "Mythical Legend") {
+        return res.status(400).json({ error: "Custom skill naming requires Mythical Legend rank" });
+      }
+
+      const { getRaceSkillById } = await import("@shared/skills-data");
+      const skill = getRaceSkillById(skillId);
+      if (!skill) {
+        return res.status(404).json({ error: "Skill not found" });
+      }
+      if (skill.race !== account.race) {
+        return res.status(400).json({ error: "Not your race's skill" });
+      }
+
+      const customNames = { ...((account as any).customSkillNames || {}), [skillId]: newName };
+
+      await db.update(accounts).set({
+        customSkillNames: customNames,
+      }).where(eq(accounts.id, accountId));
+
+      res.json({ success: true, skillId, newName, message: `Skill renamed to "${newName}"` });
+    } catch (error) {
+      console.error("Error renaming skill:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid name", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to rename skill" });
+    }
+  });
+
+  // =============================================
   // AUCTION TIMER CHECK (for automatic finalization)
   // =============================================
 
@@ -5718,8 +6590,10 @@ export async function registerRoutes(
           
           if (highestBid) {
             const winner = await storage.getAccount(highestBid.bidderId);
-            if (winner && winner.gold >= highestBid.amount) {
-              await storage.updateAccountGold(winner.id, winner.gold - highestBid.amount);
+            const autoSaleTax = calculateAuctionSaleTax(highestBid.amount);
+            const autoTotalCost = highestBid.amount + autoSaleTax;
+            if (winner && winner.gold >= autoTotalCost) {
+              await storage.updateAccountGold(winner.id, winner.gold - autoTotalCost);
               
               await storage.addPlayerSkill({
                 accountId: winner.id,
@@ -5737,8 +6611,8 @@ export async function registerRoutes(
                 type: "bid_won",
                 accountId: winner.id,
                 accountName: winner.username,
-                message: `${winner.username} won the auction for a skill with a bid of ${highestBid.amount.toLocaleString()} gold!`,
-                metadata: { skillId: activeAuction.skillId, amount: highestBid.amount },
+                message: `${winner.username} won the auction for a skill with a bid of ${highestBid.amount.toLocaleString()} gold! (${autoSaleTax.toLocaleString()} gold tax)`,
+                metadata: { skillId: activeAuction.skillId, amount: highestBid.amount, saleTax: autoSaleTax },
               });
 
               broadcastToAllPlayers("auction_ended", {
@@ -5746,6 +6620,7 @@ export async function registerRoutes(
                 winnerId: winner.id,
                 winnerName: winner.username,
                 amount: highestBid.amount,
+                saleTax: autoSaleTax,
                 skillId: activeAuction.skillId,
               });
             }
@@ -5790,6 +6665,30 @@ export async function registerRoutes(
       
       if (initiatorId === recipientId) {
         return res.status(400).json({ error: "Cannot trade with yourself" });
+      }
+
+      const { TRADE_RANK_RESTRICTIONS, TRADE_MIN_RANK, TRADE_MAX_RANK_DIFF } = await import("@shared/schema");
+
+      const initiator = await storage.getAccount(initiatorId);
+      const recipient = await storage.getAccount(recipientId);
+      if (!initiator || !recipient) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+
+      const initiatorRankIdx = TRADE_RANK_RESTRICTIONS[initiator.rank] ?? 0;
+      const recipientRankIdx = TRADE_RANK_RESTRICTIONS[recipient.rank] ?? 0;
+      const minRankIdx = TRADE_RANK_RESTRICTIONS[TRADE_MIN_RANK] ?? 1;
+
+      if (initiatorRankIdx < minRankIdx) {
+        return res.status(400).json({ error: `You must be at least ${TRADE_MIN_RANK} rank to trade` });
+      }
+      if (recipientRankIdx < minRankIdx) {
+        return res.status(400).json({ error: `${recipient.username} must be at least ${TRADE_MIN_RANK} rank to trade` });
+      }
+
+      const rankDiff = Math.abs(initiatorRankIdx - recipientRankIdx);
+      if (rankDiff > TRADE_MAX_RANK_DIFF) {
+        return res.status(400).json({ error: `Rank difference too large (max ${TRADE_MAX_RANK_DIFF} ranks apart). You are ${initiator.rank}, they are ${recipient.rank}.` });
       }
       
       const trade = await storage.createTrade({ initiatorId, recipientId });
@@ -5873,19 +6772,20 @@ export async function registerRoutes(
     }
   });
   
-  // Accept trade (both parties must accept)
+  // Accept trade (both parties must accept, then time lock applies)
   app.patch("/api/trades/:tradeId/accept", async (req, res) => {
     try {
       const schema = z.object({ accountId: z.string() });
       const { accountId } = schema.parse(req.body);
+      const { TRADE_TIME_LOCK_SECONDS } = await import("@shared/schema");
       
       const trade = await storage.getTrade(req.params.tradeId);
       if (!trade) {
         return res.status(404).json({ error: "Trade not found" });
       }
       
-      if (trade.status !== "pending") {
-        return res.status(400).json({ error: "Trade is not pending" });
+      if (trade.status !== "pending" && trade.status !== "accepted") {
+        return res.status(400).json({ error: "Trade is not in an acceptable state" });
       }
       
       const isInitiator = accountId === trade.initiatorId;
@@ -5899,54 +6799,128 @@ export async function registerRoutes(
       if (isInitiator) updates.initiatorAccepted = true;
       if (isRecipient) updates.recipientAccepted = true;
       
-      const updated = await storage.updateTrade(trade.id, updates);
+      const bothAccepted = (isInitiator && trade.recipientAccepted) || (isRecipient && trade.initiatorAccepted);
       
-      // Check if both accepted
-      if ((isInitiator && trade.recipientAccepted) || (isRecipient && trade.initiatorAccepted)) {
-        // Execute trade - transfer items
-        const items = await storage.getTradeItems(trade.id);
-        
-        for (const item of items) {
-          if (item.type === "item") {
-            const inventoryItem = await storage.getInventoryItem(item.refId);
-            if (inventoryItem) {
-              // Remove from original owner and add to new owner
-              const newOwnerId = item.ownerId === trade.initiatorId ? trade.recipientId : trade.initiatorId;
-              await storage.removeFromInventory(item.refId);
-              await storage.addToInventory({
-                ...inventoryItem,
-                accountId: newOwnerId,
-              });
-            }
-          } else {
-            const skill = await storage.getPlayerSkill(item.refId);
-            if (skill) {
-              const newOwnerId = item.ownerId === trade.initiatorId ? trade.recipientId : trade.initiatorId;
-              await storage.updatePlayerSkill(item.refId, { accountId: newOwnerId, isEquipped: false });
-            }
-          }
-        }
-        
-        const completed = await storage.updateTrade(trade.id, {
-          status: "completed",
-          completedAt: new Date(),
-        });
-        
-        // Activity feed
-        const initiator = await storage.getAccount(trade.initiatorId);
-        const recipient = await storage.getAccount(trade.recipientId);
-        await storage.createActivityFeed({
-          type: "trade_complete",
-          message: `${initiator?.username} and ${recipient?.username} completed a trade!`,
-          metadata: { tradeId: trade.id },
-        });
-        
-        res.json(completed);
-      } else {
-        res.json(updated);
+      if (bothAccepted && !trade.timeLockUntil) {
+        const timeLockUntil = new Date(Date.now() + TRADE_TIME_LOCK_SECONDS * 1000);
+        updates.timeLockUntil = timeLockUntil;
+        updates.status = "accepted";
+        const updated = await storage.updateTrade(trade.id, updates);
+        return res.json({ ...updated, message: `Trade accepted by both parties. Time lock active for ${TRADE_TIME_LOCK_SECONDS} seconds. Trade will complete after lock expires.`, timeLockUntil: timeLockUntil.toISOString() });
       }
+      
+      const updated = await storage.updateTrade(trade.id, updates);
+      res.json(updated);
     } catch (error) {
       res.status(500).json({ error: "Failed to accept trade" });
+    }
+  });
+
+  // Confirm trade after time lock expires
+  app.patch("/api/trades/:tradeId/confirm", async (req, res) => {
+    try {
+      const schema = z.object({ accountId: z.string() });
+      const { accountId } = schema.parse(req.body);
+      
+      const trade = await storage.getTrade(req.params.tradeId);
+      if (!trade) {
+        return res.status(404).json({ error: "Trade not found" });
+      }
+      
+      if (trade.status !== "accepted") {
+        return res.status(400).json({ error: "Trade has not been accepted by both parties yet" });
+      }
+
+      if (!trade.initiatorAccepted || !trade.recipientAccepted) {
+        return res.status(400).json({ error: "Both parties must accept before confirming" });
+      }
+
+      const isParty = accountId === trade.initiatorId || accountId === trade.recipientId;
+      if (!isParty) {
+        return res.status(403).json({ error: "Not a party to this trade" });
+      }
+      
+      if (trade.timeLockUntil && new Date() < new Date(trade.timeLockUntil)) {
+        const remaining = Math.ceil((new Date(trade.timeLockUntil).getTime() - Date.now()) / 1000);
+        return res.status(400).json({ error: `Time lock still active. ${remaining} seconds remaining.`, timeLockUntil: trade.timeLockUntil });
+      }
+
+      const items = await storage.getTradeItems(trade.id);
+      const initiatorItemNames: { type: string; refId: string; name: string }[] = [];
+      const recipientItemNames: { type: string; refId: string; name: string }[] = [];
+      
+      for (const item of items) {
+        let itemName = item.refId;
+        if (item.type === "item") {
+          const inventoryItem = await storage.getInventoryItem(item.refId);
+          if (inventoryItem) {
+            itemName = inventoryItem.itemId;
+            const newOwnerId = item.ownerId === trade.initiatorId ? trade.recipientId : trade.initiatorId;
+            await storage.removeFromInventory(item.refId);
+            await storage.addToInventory({
+              ...inventoryItem,
+              accountId: newOwnerId,
+            });
+          }
+        } else {
+          const skill = await storage.getPlayerSkill(item.refId);
+          if (skill) {
+            itemName = (skill as any).skillId || item.refId;
+            const newOwnerId = item.ownerId === trade.initiatorId ? trade.recipientId : trade.initiatorId;
+            await storage.updatePlayerSkill(item.refId, { accountId: newOwnerId, isEquipped: false });
+          }
+        }
+
+        const entry = { type: item.type, refId: item.refId, name: itemName };
+        if (item.ownerId === trade.initiatorId) {
+          initiatorItemNames.push(entry);
+        } else {
+          recipientItemNames.push(entry);
+        }
+      }
+      
+      const completed = await storage.updateTrade(trade.id, {
+        status: "completed",
+        completedAt: new Date(),
+      });
+
+      await storage.createTradeHistory({
+        tradeId: trade.id,
+        initiatorId: trade.initiatorId,
+        recipientId: trade.recipientId,
+        initiatorItems: initiatorItemNames,
+        recipientItems: recipientItemNames,
+        status: "completed",
+        completedAt: new Date(),
+      });
+      
+      const initiator = await storage.getAccount(trade.initiatorId);
+      const recipient = await storage.getAccount(trade.recipientId);
+      await storage.createActivityFeed({
+        type: "trade_complete",
+        message: `${initiator?.username} and ${recipient?.username} completed a trade!`,
+        metadata: { tradeId: trade.id },
+      });
+      
+      res.json(completed);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to confirm trade" });
+    }
+  });
+
+  // Get trade history for account
+  app.get("/api/trade-history/:accountId", async (req, res) => {
+    try {
+      const history = await storage.getTradeHistory(req.params.accountId);
+      const allAccounts = await storage.getAllAccounts();
+      const historyWithNames = history.map(h => ({
+        ...h,
+        initiatorName: allAccounts.find(a => a.id === h.initiatorId)?.username || "Unknown",
+        recipientName: allAccounts.find(a => a.id === h.recipientId)?.username || "Unknown",
+      }));
+      res.json(historyWithNames);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get trade history" });
     }
   });
   
@@ -5972,6 +6946,152 @@ export async function registerRoutes(
     }
   });
   
+  // ==================== SOUL-LINKING SYSTEM ROUTES ====================
+
+  // Create a soul link between two players
+  app.post("/api/soul-links", async (req, res) => {
+    try {
+      const schema = z.object({
+        player1Id: z.string(),
+        player2Id: z.string(),
+      });
+      const { player1Id, player2Id } = schema.parse(req.body);
+      const { SOUL_LINK_COST_GOLD, SOUL_LINK_DURATION_HOURS, SOUL_LINK_STAT_SHARE_PERCENT } = await import("@shared/schema");
+
+      if (player1Id === player2Id) {
+        return res.status(400).json({ error: "Cannot soul-link with yourself" });
+      }
+
+      const player1 = await storage.getAccount(player1Id);
+      const player2 = await storage.getAccount(player2Id);
+      if (!player1 || !player2) {
+        return res.status(404).json({ error: "Player not found" });
+      }
+
+      if (player1.gold < SOUL_LINK_COST_GOLD) {
+        return res.status(400).json({ error: `You need ${SOUL_LINK_COST_GOLD} gold to create a soul link` });
+      }
+      if (player2.gold < SOUL_LINK_COST_GOLD) {
+        return res.status(400).json({ error: `${player2.username} doesn't have enough gold (${SOUL_LINK_COST_GOLD} required)` });
+      }
+
+      const existingLinks = await storage.getActiveSoulLinks(player1Id);
+      const alreadyLinked = existingLinks.find(l =>
+        (l.player1Id === player2Id || l.player2Id === player2Id) && new Date(l.expiresAt) > new Date()
+      );
+      if (alreadyLinked) {
+        return res.status(400).json({ error: "You already have an active soul link with this player" });
+      }
+
+      await storage.updateAccountGold(player1Id, player1.gold - SOUL_LINK_COST_GOLD);
+      await storage.updateAccountGold(player2Id, player2.gold - SOUL_LINK_COST_GOLD);
+
+      const expiresAt = new Date(Date.now() + SOUL_LINK_DURATION_HOURS * 60 * 60 * 1000);
+      const link = await storage.createSoulLink({
+        player1Id,
+        player2Id,
+        statSharePercent: SOUL_LINK_STAT_SHARE_PERCENT,
+        goldCostEach: SOUL_LINK_COST_GOLD,
+        expiresAt,
+      });
+
+      await storage.createActivityFeed({
+        type: "soul_link",
+        message: `${player1.username} and ${player2.username} have soul-linked! They share ${SOUL_LINK_STAT_SHARE_PERCENT}% of each other's stats for ${SOUL_LINK_DURATION_HOURS} hour(s).`,
+        metadata: { soulLinkId: link.id },
+      });
+
+      res.json({
+        ...link,
+        player1Name: player1.username,
+        player2Name: player2.username,
+        message: `Soul link established! You and ${player2.username} now share ${SOUL_LINK_STAT_SHARE_PERCENT}% of each other's stats for ${SOUL_LINK_DURATION_HOURS} hour(s). Each player paid ${SOUL_LINK_COST_GOLD} gold.`,
+      });
+    } catch (error) {
+      console.error("Soul link error:", error);
+      res.status(500).json({ error: "Failed to create soul link" });
+    }
+  });
+
+  // Get active soul links for a player
+  app.get("/api/soul-links/:accountId", async (req, res) => {
+    try {
+      const links = await storage.getActiveSoulLinks(req.params.accountId);
+      const now = new Date();
+      const allAccounts = await storage.getAllAccounts();
+
+      const activeLinks = [];
+      for (const link of links) {
+        if (new Date(link.expiresAt) <= now) {
+          await storage.updateSoulLink(link.id, { status: "expired" });
+          continue;
+        }
+        const p1 = allAccounts.find(a => a.id === link.player1Id);
+        const p2 = allAccounts.find(a => a.id === link.player2Id);
+        activeLinks.push({
+          ...link,
+          player1Name: p1?.username || "Unknown",
+          player2Name: p2?.username || "Unknown",
+          player1Stats: p1?.stats,
+          player2Stats: p2?.stats,
+        });
+      }
+
+      res.json(activeLinks);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get soul links" });
+    }
+  });
+
+  // Cancel a soul link
+  app.patch("/api/soul-links/:linkId/cancel", async (req, res) => {
+    try {
+      const schema = z.object({ accountId: z.string() });
+      const { accountId } = schema.parse(req.body);
+
+      const link = await storage.getSoulLink(req.params.linkId);
+      if (!link) {
+        return res.status(404).json({ error: "Soul link not found" });
+      }
+
+      if (accountId !== link.player1Id && accountId !== link.player2Id) {
+        return res.status(403).json({ error: "Not a party to this soul link" });
+      }
+
+      const updated = await storage.updateSoulLink(link.id, { status: "cancelled" });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to cancel soul link" });
+    }
+  });
+
+  // Get soul link stat bonuses for a player (used by combat engine)
+  app.get("/api/soul-links/:accountId/bonuses", async (req, res) => {
+    try {
+      const links = await storage.getActiveSoulLinks(req.params.accountId);
+      const now = new Date();
+      let totalBonuses = { Str: 0, Def: 0, Spd: 0, Int: 0, Luck: 0 };
+
+      for (const link of links) {
+        if (new Date(link.expiresAt) <= now) continue;
+        const partnerId = link.player1Id === req.params.accountId ? link.player2Id : link.player1Id;
+        const partner = await storage.getAccount(partnerId);
+        if (!partner) continue;
+        const partnerStats = partner.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10 };
+        const sharePercent = link.statSharePercent / 100;
+        totalBonuses.Str += Math.floor((partnerStats.Str || 10) * sharePercent);
+        totalBonuses.Def += Math.floor((partnerStats.Def || 10) * sharePercent);
+        totalBonuses.Spd += Math.floor((partnerStats.Spd || 10) * sharePercent);
+        totalBonuses.Int += Math.floor((partnerStats.Int || 10) * sharePercent);
+        totalBonuses.Luck += Math.floor((partnerStats.Luck || 10) * sharePercent);
+      }
+
+      res.json(totalBonuses);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get soul link bonuses" });
+    }
+  });
+
   // ==================== PET FOOD SHOP ROUTES ====================
   
   // Get pet food items
@@ -6060,14 +7180,20 @@ export async function registerRoutes(
         return res.status(400).json({ error: `Not enough ${resource}` });
       }
       
-      // Deduct from player
       await storage.updateAccount(accountId, { [resource]: accountResource - amount });
       
-      // Add to guild bank
       const newBank = { ...guild.bank, [resource]: (guild.bank[resource] || 0) + amount };
       const updatedGuild = await storage.updateGuildBank(guild.id, newBank);
       
-      // Activity feed
+      await storage.createGuildVaultLog({
+        guildId: guild.id,
+        accountId,
+        playerName: account.username,
+        action: "deposit",
+        resource,
+        quantity: amount,
+      });
+      
       await storage.createActivityFeed({
         type: "guild_deposit",
         message: `${account.username} deposited ${amount.toLocaleString()} ${resource} into ${guild.name}'s bank!`,
@@ -6080,6 +7206,77 @@ export async function registerRoutes(
     }
   });
   
+  // ==================== GUILD VAULT LOGS ====================
+  
+  app.get("/api/guilds/:guildId/vault-logs", async (req, res) => {
+    try {
+      const accountId = req.query.accountId as string;
+      if (!accountId) {
+        return res.status(400).json({ error: "Account ID required" });
+      }
+
+      const guild = await storage.getGuild(req.params.guildId);
+      if (!guild) {
+        return res.status(404).json({ error: "Guild not found" });
+      }
+
+      const member = await storage.getGuildMember(accountId);
+      if (!member || member.guildId !== req.params.guildId) {
+        return res.status(403).json({ error: "Not a member of this guild" });
+      }
+
+      const memberRole = accountId === guild.masterId ? "leader" : (member.role || "member");
+      if (memberRole !== "leader" && memberRole !== "officer") {
+        return res.status(403).json({ error: "Only leader and officers can view vault logs" });
+      }
+
+      const logs = await storage.getGuildVaultLogs(req.params.guildId);
+      res.json(logs);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch vault logs" });
+    }
+  });
+
+  // ==================== GUILD ROLE MANAGEMENT ====================
+  
+  app.post("/api/guilds/:guildId/set-role", async (req, res) => {
+    try {
+      const schema = z.object({
+        accountId: z.string(),
+        targetAccountId: z.string(),
+        role: z.enum(["officer", "member"]),
+      });
+      const { accountId, targetAccountId, role } = schema.parse(req.body);
+
+      const guild = await storage.getGuild(req.params.guildId);
+      if (!guild) {
+        return res.status(404).json({ error: "Guild not found" });
+      }
+
+      if (guild.masterId !== accountId) {
+        return res.status(403).json({ error: "Only the guild leader can change member roles" });
+      }
+
+      if (targetAccountId === guild.masterId) {
+        return res.status(400).json({ error: "Cannot change the leader's role" });
+      }
+
+      const targetMember = await storage.getGuildMember(targetAccountId);
+      if (!targetMember || targetMember.guildId !== guild.id) {
+        return res.status(404).json({ error: "Target is not a member of this guild" });
+      }
+
+      const updated = await storage.updateGuildMemberRole(targetAccountId, role);
+      
+      const targetAccount = await storage.getAccount(targetAccountId);
+      broadcastToPlayer(targetAccountId, "guildRoleUpdate", { role, guildName: guild.name });
+
+      res.json({ success: true, member: updated });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to set role" });
+    }
+  });
+
   // ==================== GUILD LEVEL UP ROUTES ====================
   
   // ==================== GUILD SHOP SYSTEM ====================
@@ -6858,8 +8055,8 @@ export async function registerRoutes(
 
       const achievements = playerAchievements.get(accountId) || new Set();
       const trophies = playerTrophiesMapMap.get(accountId) || new Set();
-      const pets = await storage.getAccountPets(accountId);
-      const petsCount = pets?.length || 0;
+      const acctPets = await storage.getPetsByAccount(accountId);
+      const petsCount = acctPets?.length || 0;
       
       const rankIndex = playerRanks.indexOf(account.rank);
       const floor = (account as any).towerFloor || 1;
@@ -7048,6 +8245,238 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== TITLES SYSTEM ====================
+  const AVAILABLE_TITLES: { id: string; name: string; category: "rank" | "guild" | "event"; requirement: string }[] = [
+    { id: "title_novice", name: "The Newcomer", category: "rank", requirement: "Reach Novice rank" },
+    { id: "title_apprentice", name: "Apprentice of Valor", category: "rank", requirement: "Reach Apprentice rank" },
+    { id: "title_initiate", name: "Initiated One", category: "rank", requirement: "Reach Initiate rank" },
+    { id: "title_journeyman", name: "Seasoned Traveler", category: "rank", requirement: "Reach Journeyman rank" },
+    { id: "title_adept", name: "The Adept", category: "rank", requirement: "Reach Adept rank" },
+    { id: "title_expert", name: "Expert Warrior", category: "rank", requirement: "Reach Expert rank" },
+    { id: "title_master", name: "Master of Arms", category: "rank", requirement: "Reach Master rank" },
+    { id: "title_grandmaster", name: "Grandmaster", category: "rank", requirement: "Reach Grandmaster rank" },
+    { id: "title_champion", name: "Champion of the Realm", category: "rank", requirement: "Reach Champion rank" },
+    { id: "title_overlord", name: "The Overlord", category: "rank", requirement: "Reach Overlord rank" },
+    { id: "title_sovereign", name: "Sovereign Ruler", category: "rank", requirement: "Reach Sovereign rank" },
+    { id: "title_ascendant", name: "The Ascended", category: "rank", requirement: "Reach Ascendant rank" },
+    { id: "title_legend", name: "Living Legend", category: "rank", requirement: "Reach Legend rank" },
+    { id: "title_mythic", name: "Mythic Being", category: "rank", requirement: "Reach Mythic rank" },
+    { id: "title_mythical_legend", name: "Mythical Legend", category: "rank", requirement: "Reach Mythical Legend rank" },
+    { id: "title_guild_member", name: "Guild Loyalist", category: "guild", requirement: "Join a guild" },
+    { id: "title_guild_leader", name: "Guildmaster", category: "guild", requirement: "Become a guild leader" },
+    { id: "title_guild_champion", name: "Guild Champion", category: "guild", requirement: "Win 50 guild battles" },
+    { id: "title_guild_conqueror", name: "Guild Conqueror", category: "guild", requirement: "Win 100 guild battles" },
+    { id: "title_pvp_warrior", name: "Arena Warrior", category: "event", requirement: "Win 50 PvP battles" },
+    { id: "title_pvp_legend", name: "Arena Legend", category: "event", requirement: "Win 500 PvP battles" },
+    { id: "title_tower_master", name: "Tower Master", category: "event", requirement: "Reach Tower Floor 50" },
+    { id: "title_tower_conqueror", name: "Tower Conqueror", category: "event", requirement: "Complete all 100 Tower floors" },
+    { id: "title_millionaire", name: "The Wealthy", category: "event", requirement: "Earn 1 million gold" },
+    { id: "title_billionaire", name: "The Tycoon", category: "event", requirement: "Earn 1 billion gold" },
+    { id: "title_pet_master", name: "Beastmaster", category: "event", requirement: "Own 10 pets" },
+    { id: "title_tournament_winner", name: "Tournament Victor", category: "event", requirement: "Win a tournament" },
+    { id: "title_hell_survivor", name: "Hell Survivor", category: "event", requirement: "Survive the Hell Zone" },
+  ];
+
+  const RANK_TO_TITLE: Record<string, string> = {
+    "Novice": "title_novice",
+    "Apprentice": "title_apprentice",
+    "Initiate": "title_initiate",
+    "Journeyman": "title_journeyman",
+    "Adept": "title_adept",
+    "Expert": "title_expert",
+    "Master": "title_master",
+    "Grandmaster": "title_grandmaster",
+    "Champion": "title_champion",
+    "Overlord": "title_overlord",
+    "Sovereign": "title_sovereign",
+    "Ascendant": "title_ascendant",
+    "Legend": "title_legend",
+    "Mythic": "title_mythic",
+    "Mythical Legend": "title_mythical_legend",
+  };
+
+  async function syncTitlesAndBadges(accountId: string) {
+    try {
+      const { playerTitles: ptTable, playerBadges: pbTable } = await import("@shared/schema");
+      const account = await storage.getAccount(accountId);
+      if (!account) return;
+
+      const existingTitles = await db.select().from(ptTable).where(eq(ptTable.accountId, accountId));
+      const existingTitleIds = new Set(existingTitles.map(t => t.titleId));
+
+      const rankTitleId = RANK_TO_TITLE[account.rank];
+      if (rankTitleId && !existingTitleIds.has(rankTitleId)) {
+        const titleDef = AVAILABLE_TITLES.find(t => t.id === rankTitleId);
+        if (titleDef) {
+          await db.insert(ptTable).values({ accountId, titleId: titleDef.id, category: titleDef.category, name: titleDef.name });
+        }
+      }
+
+      const wins = account.wins || 0;
+      const floor = account.npcFloor || 1;
+      const gold = account.gold || 0;
+
+      const guildMember = await storage.getGuildMember(accountId);
+      if (guildMember && !existingTitleIds.has("title_guild_member")) {
+        const t = AVAILABLE_TITLES.find(t => t.id === "title_guild_member")!;
+        await db.insert(ptTable).values({ accountId, titleId: t.id, category: t.category, name: t.name });
+      }
+
+      if (guildMember) {
+        const guild = await storage.getGuild(guildMember.guildId);
+        if (guild && guild.masterId === accountId && !existingTitleIds.has("title_guild_leader")) {
+          const t = AVAILABLE_TITLES.find(t => t.id === "title_guild_leader")!;
+          await db.insert(ptTable).values({ accountId, titleId: t.id, category: t.category, name: t.name });
+        }
+      }
+
+      if (wins >= 50 && !existingTitleIds.has("title_pvp_warrior")) {
+        const t = AVAILABLE_TITLES.find(t => t.id === "title_pvp_warrior")!;
+        await db.insert(ptTable).values({ accountId, titleId: t.id, category: t.category, name: t.name });
+      }
+      if (wins >= 500 && !existingTitleIds.has("title_pvp_legend")) {
+        const t = AVAILABLE_TITLES.find(t => t.id === "title_pvp_legend")!;
+        await db.insert(ptTable).values({ accountId, titleId: t.id, category: t.category, name: t.name });
+      }
+      if (floor >= 50 && !existingTitleIds.has("title_tower_master")) {
+        const t = AVAILABLE_TITLES.find(t => t.id === "title_tower_master")!;
+        await db.insert(ptTable).values({ accountId, titleId: t.id, category: t.category, name: t.name });
+      }
+      if (floor >= 100 && !existingTitleIds.has("title_tower_conqueror")) {
+        const t = AVAILABLE_TITLES.find(t => t.id === "title_tower_conqueror")!;
+        await db.insert(ptTable).values({ accountId, titleId: t.id, category: t.category, name: t.name });
+      }
+      if (gold >= 1000000 && !existingTitleIds.has("title_millionaire")) {
+        const t = AVAILABLE_TITLES.find(t => t.id === "title_millionaire")!;
+        await db.insert(ptTable).values({ accountId, titleId: t.id, category: t.category, name: t.name });
+      }
+
+      const playerPets = await storage.getPetsByAccount(accountId);
+      if ((playerPets?.length || 0) >= 10 && !existingTitleIds.has("title_pet_master")) {
+        const t = AVAILABLE_TITLES.find(t => t.id === "title_pet_master")!;
+        await db.insert(ptTable).values({ accountId, titleId: t.id, category: t.category, name: t.name });
+      }
+
+      const existingBadges = await db.select().from(pbTable).where(eq(pbTable.accountId, accountId));
+      const existingBadgeIds = new Set(existingBadges.map(b => b.badgeId));
+
+      const rankIndex = playerRanks.indexOf(account.rank);
+      const rankBadges: { id: string; name: string; minRank: number }[] = [
+        { id: "badge_rank_novice", name: "Novice", minRank: 0 },
+        { id: "badge_rank_journeyman", name: "Journeyman", minRank: 3 },
+        { id: "badge_rank_master", name: "Master", minRank: 6 },
+        { id: "badge_rank_champion", name: "Champion", minRank: 8 },
+        { id: "badge_rank_legend", name: "Legend", minRank: 12 },
+        { id: "badge_rank_mythical", name: "Mythical Legend", minRank: 14 },
+      ];
+      for (const rb of rankBadges) {
+        if (rankIndex >= rb.minRank && !existingBadgeIds.has(rb.id)) {
+          await db.insert(pbTable).values({ accountId, badgeId: rb.id, badgeType: "rank", name: rb.name, icon: "crown" });
+        }
+      }
+
+      if (guildMember && !existingBadgeIds.has("badge_guild_member")) {
+        await db.insert(pbTable).values({ accountId, badgeId: "badge_guild_member", badgeType: "guild", name: "Guild Member", icon: "shield" });
+      }
+      if (guildMember) {
+        const guild = await storage.getGuild(guildMember.guildId);
+        if (guild && guild.masterId === accountId && !existingBadgeIds.has("badge_guild_leader")) {
+          await db.insert(pbTable).values({ accountId, badgeId: "badge_guild_leader", badgeType: "guild", name: "Guild Leader", icon: "star" });
+        }
+      }
+
+      if (account.role === "admin" && !existingBadgeIds.has("badge_vip_admin")) {
+        await db.insert(pbTable).values({ accountId, badgeId: "badge_vip_admin", badgeType: "vip", name: "Admin", icon: "zap" });
+      }
+      if (account.vipUntil && new Date(account.vipUntil) > new Date() && !existingBadgeIds.has("badge_vip_member")) {
+        await db.insert(pbTable).values({ accountId, badgeId: "badge_vip_member", badgeType: "vip", name: "VIP", icon: "gem" });
+      }
+    } catch (error) {
+      console.error("Error syncing titles/badges:", error);
+    }
+  }
+
+  app.get("/api/accounts/:id/titles", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      await syncTitlesAndBadges(accountId);
+      const { playerTitles: ptTable } = await import("@shared/schema");
+      const titles = await db.select().from(ptTable).where(eq(ptTable.accountId, accountId));
+      const equipped = titles.filter(t => t.isEquipped);
+      res.json({
+        titles,
+        equipped,
+        maxEquipped: 3,
+        availableTitles: AVAILABLE_TITLES,
+      });
+    } catch (error) {
+      console.error("Get titles error:", error);
+      res.status(500).json({ error: "Failed to get titles" });
+    }
+  });
+
+  app.post("/api/accounts/:id/titles/equip", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      const { titleId } = z.object({ titleId: z.string() }).parse(req.body);
+      const { playerTitles: ptTable } = await import("@shared/schema");
+
+      const [title] = await db.select().from(ptTable).where(sql`${ptTable.accountId} = ${accountId} AND ${ptTable.titleId} = ${titleId}`);
+      if (!title) return res.status(404).json({ error: "Title not found or not earned" });
+
+      if (title.isEquipped) return res.status(400).json({ error: "Title already equipped" });
+
+      const equipped = await db.select().from(ptTable).where(sql`${ptTable.accountId} = ${accountId} AND ${ptTable.isEquipped} = true`);
+      const sameCategory = equipped.filter(t => t.category === title.category);
+      if (sameCategory.length > 0) {
+        await db.update(ptTable).set({ isEquipped: false }).where(eq(ptTable.id, sameCategory[0].id));
+      }
+
+      const totalEquipped = equipped.filter(t => t.category !== title.category).length + (sameCategory.length > 0 ? 0 : 0);
+      if (equipped.length >= 3 && sameCategory.length === 0) {
+        return res.status(400).json({ error: "Maximum 3 titles equipped (1 per category: rank, guild, event)" });
+      }
+
+      await db.update(ptTable).set({ isEquipped: true }).where(eq(ptTable.id, title.id));
+      const updatedTitles = await db.select().from(ptTable).where(eq(ptTable.accountId, accountId));
+      res.json({ success: true, titles: updatedTitles });
+    } catch (error) {
+      console.error("Equip title error:", error);
+      res.status(500).json({ error: "Failed to equip title" });
+    }
+  });
+
+  app.post("/api/accounts/:id/titles/unequip", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      const { titleId } = z.object({ titleId: z.string() }).parse(req.body);
+      const { playerTitles: ptTable } = await import("@shared/schema");
+
+      const [title] = await db.select().from(ptTable).where(sql`${ptTable.accountId} = ${accountId} AND ${ptTable.titleId} = ${titleId}`);
+      if (!title) return res.status(404).json({ error: "Title not found" });
+
+      await db.update(ptTable).set({ isEquipped: false }).where(eq(ptTable.id, title.id));
+      const updatedTitles = await db.select().from(ptTable).where(eq(ptTable.accountId, accountId));
+      res.json({ success: true, titles: updatedTitles });
+    } catch (error) {
+      console.error("Unequip title error:", error);
+      res.status(500).json({ error: "Failed to unequip title" });
+    }
+  });
+
+  app.get("/api/accounts/:id/badges", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      await syncTitlesAndBadges(accountId);
+      const { playerBadges: pbTable } = await import("@shared/schema");
+      const badges = await db.select().from(pbTable).where(eq(pbTable.accountId, accountId));
+      res.json({ badges });
+    } catch (error) {
+      console.error("Get badges error:", error);
+      res.status(500).json({ error: "Failed to get badges" });
+    }
+  });
+
   // Admin: Get pending AI requests - requires admin role
   app.get("/api/admin/ai-requests", async (req, res) => {
     try {
@@ -7217,7 +8646,7 @@ export async function registerRoutes(
       }
       
       if (guild.masterId !== accountId) {
-        return res.status(403).json({ error: "Only guild master can level up" });
+        return res.status(403).json({ error: "Only guild leader can level up" });
       }
       
       const currentLevel = guild.level || 1;
@@ -7266,11 +8695,14 @@ export async function registerRoutes(
   // ==================== BIRD SHOP ====================
   // Birds provide defense stats and cost focus shards
   const BIRD_SHOP = [
-    { id: "sparrow", name: "Swift Sparrow", tier: "hatchling", cost: 50, baseStats: { Def: 2, Spd: 3 } },
-    { id: "hawk", name: "Iron Hawk", tier: "fledgling", cost: 150, baseStats: { Def: 5, Spd: 4 } },
-    { id: "eagle", name: "Guardian Eagle", tier: "soarer", cost: 400, baseStats: { Def: 10, Spd: 8 } },
-    { id: "falcon", name: "Storm Falcon", tier: "raptor", cost: 1000, baseStats: { Def: 20, Spd: 15 } },
-    { id: "phoenix_bird", name: "Ash Phoenix", tier: "phoenix", cost: 2500, baseStats: { Def: 40, Spd: 30 } },
+    { id: "sparrow", name: "Swift Sparrow", tier: "egg", cost: 50, element: "Air", baseStats: { Def: 1, Spd: 2, resourceLuck: 0, carryBoost: 0 } },
+    { id: "hawk", name: "Iron Hawk", tier: "egg", cost: 100, element: "Storm", baseStats: { Def: 2, Spd: 1, resourceLuck: 1, carryBoost: 0 } },
+    { id: "eagle", name: "Guardian Eagle", tier: "egg", cost: 150, element: "Earth", baseStats: { Def: 3, Spd: 1, resourceLuck: 0, carryBoost: 1 } },
+    { id: "falcon", name: "Storm Falcon", tier: "egg", cost: 200, element: "Storm", baseStats: { Def: 1, Spd: 3, resourceLuck: 1, carryBoost: 0 } },
+    { id: "phoenix_bird", name: "Ash Phoenix", tier: "egg", cost: 300, element: "Fire", baseStats: { Def: 2, Spd: 2, resourceLuck: 1, carryBoost: 1 } },
+    { id: "frost_owl", name: "Frost Owl", tier: "egg", cost: 250, element: "Water", baseStats: { Def: 2, Spd: 2, resourceLuck: 2, carryBoost: 0 } },
+    { id: "shadow_raven", name: "Shadow Raven", tier: "egg", cost: 200, element: "Dark", baseStats: { Def: 1, Spd: 3, resourceLuck: 0, carryBoost: 1 } },
+    { id: "light_dove", name: "Light Dove", tier: "egg", cost: 200, element: "Light", baseStats: { Def: 3, Spd: 1, resourceLuck: 1, carryBoost: 1 } },
   ];
   
   app.get("/api/bird-shop", (_req, res) => {
@@ -7300,15 +8732,14 @@ export async function registerRoutes(
         return res.status(400).json({ error: `Need ${birdTemplate.cost} focus shards (have ${account.focusedShards})` });
       }
       
-      // Deduct focus shards
       await storage.updateAccount(accountId, { focusedShards: account.focusedShards - birdTemplate.cost });
       
-      // Create bird
       const { birds } = await import("@shared/schema");
       const [newBird] = await db.insert(birds).values({
         accountId,
         name: customName || birdTemplate.name,
         tier: birdTemplate.tier as any,
+        element: birdTemplate.element,
         stats: birdTemplate.baseStats,
       }).returning();
       
@@ -7328,14 +8759,107 @@ export async function registerRoutes(
       res.status(500).json({ error: "Failed to get birds" });
     }
   });
+
+  app.post("/api/birds/:birdId/evolve", async (req, res) => {
+    try {
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const { birds, getNextBirdTier, BIRD_EVOLUTION_CONFIG, birdTiers } = await import("@shared/schema");
+      const [bird] = await db.select().from(birds).where(eq(birds.id, req.params.birdId));
+      if (!bird) return res.status(404).json({ error: "Bird not found" });
+      if (bird.accountId !== accountId) return res.status(403).json({ error: "Not your bird" });
+
+      const currentTier = bird.tier as typeof birdTiers[number];
+      const nextTier = getNextBirdTier(currentTier);
+      if (!nextTier) return res.status(400).json({ error: "Bird is already at max evolution (Immortal)" });
+
+      const config = BIRD_EVOLUTION_CONFIG[currentTier];
+      if (!config.evolutionCost) return res.status(400).json({ error: "Cannot evolve from this tier" });
+
+      const { focusShards, beakCoins } = config.evolutionCost;
+      if (account.focusedShards < focusShards) {
+        return res.status(400).json({ error: `Need ${focusShards} Focus Shards (have ${account.focusedShards})` });
+      }
+      if (account.beakCoins < beakCoins) {
+        return res.status(400).json({ error: `Need ${beakCoins} Beak Coins (have ${account.beakCoins})` });
+      }
+
+      const nextConfig = BIRD_EVOLUTION_CONFIG[nextTier];
+      const currentStats = bird.stats as any;
+      const evolvedStats = {
+        Def: Math.round(currentStats.Def * (nextConfig.statMultiplier / config.statMultiplier)),
+        Spd: Math.round(currentStats.Spd * (nextConfig.statMultiplier / config.statMultiplier)),
+        resourceLuck: Math.round((currentStats.resourceLuck || 0) * (nextConfig.statMultiplier / config.statMultiplier)) + 1,
+        carryBoost: Math.round((currentStats.carryBoost || 0) * (nextConfig.statMultiplier / config.statMultiplier)) + 1,
+      };
+
+      await db.update(birds).set({ tier: nextTier, stats: evolvedStats }).where(eq(birds.id, bird.id));
+      await storage.updateAccount(accountId, {
+        focusedShards: account.focusedShards - focusShards,
+        beakCoins: account.beakCoins - beakCoins,
+      });
+
+      const [updatedBird] = await db.select().from(birds).where(eq(birds.id, bird.id));
+      res.json({
+        success: true,
+        bird: updatedBird,
+        message: `${bird.name} evolved from ${currentTier} to ${nextTier}!`,
+        cost: { focusShards, beakCoins },
+      });
+    } catch (error) {
+      console.error("Bird evolution error:", error);
+      res.status(500).json({ error: "Failed to evolve bird" });
+    }
+  });
+
+  app.get("/api/accounts/:accountId/convergence", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const { birds, calculateConvergence, raceModifiers } = await import("@shared/schema");
+      const accountBirds = await db.select().from(birds).where(eq(birds.accountId, req.params.accountId));
+
+      const raceElement = account.race ? raceModifiers[account.race as keyof typeof raceModifiers]?.element : undefined;
+
+      let petElement: string | undefined;
+      if (account.equippedPetId) {
+        const pet = await storage.getPet(account.equippedPetId);
+        if (pet) petElement = pet.element;
+      }
+
+      const convergenceResults = accountBirds.map(bird => ({
+        birdId: bird.id,
+        birdName: bird.name,
+        birdElement: bird.element,
+        convergence: calculateConvergence(raceElement, petElement, bird.element || undefined),
+      }));
+
+      res.json({
+        raceElement: raceElement || null,
+        petElement: petElement || null,
+        birds: convergenceResults,
+      });
+    } catch (error) {
+      console.error("Convergence error:", error);
+      res.status(500).json({ error: "Failed to calculate convergence" });
+    }
+  });
+
+  app.get("/api/bird-evolution-config", async (_req, res) => {
+    const { BIRD_EVOLUTION_CONFIG, birdTiers } = await import("@shared/schema");
+    res.json({ tiers: birdTiers, config: BIRD_EVOLUTION_CONFIG });
+  });
   
-  // Bird feeding - boost bird stats using gold
+  // Bird feeding - boost bird stats using beak coins
   const BIRD_FOOD = [
-    { id: "seeds", name: "Bird Seeds", price: 100, defBoost: 1, spdBoost: 0 },
-    { id: "worms", name: "Juicy Worms", price: 200, defBoost: 0, spdBoost: 2 },
-    { id: "berries", name: "Magic Berries", price: 500, defBoost: 2, spdBoost: 2 },
-    { id: "golden-nectar", name: "Golden Nectar", price: 1500, defBoost: 5, spdBoost: 5 },
-    { id: "phoenix-ash", name: "Phoenix Ash", price: 5000, defBoost: 10, spdBoost: 10 },
+    { id: "seeds", name: "Bird Seeds", price: 100, defBoost: 1, spdBoost: 0, resourceLuckBoost: 0, carryBoostBoost: 0 },
+    { id: "worms", name: "Juicy Worms", price: 200, defBoost: 0, spdBoost: 2, resourceLuckBoost: 0, carryBoostBoost: 0 },
+    { id: "berries", name: "Magic Berries", price: 500, defBoost: 2, spdBoost: 2, resourceLuckBoost: 1, carryBoostBoost: 0 },
+    { id: "golden-nectar", name: "Golden Nectar", price: 1500, defBoost: 5, spdBoost: 5, resourceLuckBoost: 2, carryBoostBoost: 2 },
+    { id: "phoenix-ash", name: "Phoenix Ash", price: 5000, defBoost: 10, spdBoost: 10, resourceLuckBoost: 5, carryBoostBoost: 5 },
   ];
   
   app.get("/api/bird-food", (_req, res) => {
@@ -7432,10 +8956,12 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Not your bird" });
       }
       
-      const currentStats = bird.stats as { Def: number; Spd: number };
+      const currentStats = bird.stats as { Def: number; Spd: number; resourceLuck?: number; carryBoost?: number };
       const newStats = {
         Def: currentStats.Def + food.defBoost,
         Spd: currentStats.Spd + food.spdBoost,
+        resourceLuck: (currentStats.resourceLuck || 0) + (food.resourceLuckBoost || 0),
+        carryBoost: (currentStats.carryBoost || 0) + (food.carryBoostBoost || 0),
       };
       
       // Use transaction-like approach: update bird stats first, then beakCoins
@@ -7451,7 +8977,7 @@ export async function registerRoutes(
       res.json({ 
         success: true, 
         bird: { ...bird, stats: newStats },
-        message: `${bird.name} enjoyed the ${food.name}! +${food.defBoost} Def, +${food.spdBoost} Spd`
+        message: `${bird.name} enjoyed the ${food.name}! +${food.defBoost} Def, +${food.spdBoost} Spd${food.resourceLuckBoost ? `, +${food.resourceLuckBoost} Luck` : ''}${food.carryBoostBoost ? `, +${food.carryBoostBoost} Carry` : ''}`
       });
     } catch (error) {
       console.error("Bird feeding error:", error);
@@ -7460,19 +8986,69 @@ export async function registerRoutes(
   });
   
   // ==================== FISHING SYSTEM ====================
-  // Fish can be fed to pets to transfer stats and elements
   const FISH_TYPES = [
-    { name: "Minnow", rarity: "common", statRange: [1, 3], elements: ["Water"] },
-    { name: "Trout", rarity: "common", statRange: [2, 5], elements: ["Water", "Nature"] },
-    { name: "Bass", rarity: "uncommon", statRange: [3, 7], elements: ["Water", "Nature"] },
-    { name: "Salmon", rarity: "uncommon", statRange: [5, 10], elements: ["Water", "Fire"] },
-    { name: "Catfish", rarity: "rare", statRange: [8, 15], elements: ["Water", "Shadow"] },
-    { name: "Swordfish", rarity: "rare", statRange: [10, 20], elements: ["Water", "Light"] },
-    { name: "Electric Eel", rarity: "epic", statRange: [15, 30], elements: ["Water", "Plasma"] },
-    { name: "Kraken Spawn", rarity: "epic", statRange: [20, 40], elements: ["Water", "Shadow", "Plasma"] },
-    { name: "Leviathan Scale", rarity: "legendary", statRange: [30, 60], elements: ["Water", "Fire", "Shadow", "Light"] },
+    { name: "Silver Minnow", rarity: "common", statRange: [1, 3], elements: ["Water"] },
+    { name: "Blue Guppy", rarity: "common", statRange: [1, 3], elements: ["Water"] },
+    { name: "River Dart", rarity: "common", statRange: [1, 4], elements: ["Water", "Nature"] },
+    { name: "Emerald Carp", rarity: "uncommon", statRange: [3, 7], elements: ["Water", "Nature"] },
+    { name: "Golden Koi", rarity: "uncommon", statRange: [4, 8], elements: ["Water", "Light"] },
+    { name: "Frostfin Trout", rarity: "rare", statRange: [6, 14], elements: ["Water", "Ice"] },
+    { name: "Ember Bass", rarity: "rare", statRange: [8, 16], elements: ["Water", "Fire"] },
+    { name: "Storm Pike", rarity: "epic", statRange: [12, 28], elements: ["Water", "Plasma", "Lightning"] },
+    { name: "Crystal Eel", rarity: "epic", statRange: [15, 32], elements: ["Water", "Light", "Arcana"] },
+    { name: "Aether Salmon", rarity: "legendary", statRange: [25, 50], elements: ["Water", "Aether"] },
+    { name: "Chrono Catfish", rarity: "legendary", statRange: [28, 55], elements: ["Water", "Chrono", "Time"] },
+    { name: "Void Leviathan Fry", rarity: "mythic", statRange: [40, 80], elements: ["Water", "Void", "Dark"] },
+    { name: "Soul Lantern Fish", rarity: "mythic", statRange: [45, 85], elements: ["Water", "Soul", "Aether"] },
   ];
-  
+
+  function resetDailyFishingIfNeeded(account: any): { dailyFishCaught: number; lastFishingReset: Date } {
+    const now = new Date();
+    const lastReset = account.lastFishingReset ? new Date(account.lastFishingReset) : new Date(0);
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (lastReset < startOfToday) {
+      return { dailyFishCaught: 0, lastFishingReset: now };
+    }
+    return { dailyFishCaught: account.dailyFishCaught || 0, lastFishingReset: lastReset };
+  }
+
+  function resetDailyPetFeedIfNeeded(account: any): { dailyPetFeedGain: number; lastPetFeedReset: Date } {
+    const now = new Date();
+    const lastReset = account.lastPetFeedReset ? new Date(account.lastPetFeedReset) : new Date(0);
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (lastReset < startOfToday) {
+      return { dailyPetFeedGain: 0, lastPetFeedReset: now };
+    }
+    return { dailyPetFeedGain: account.dailyPetFeedGain || 0, lastPetFeedReset: lastReset };
+  }
+
+  app.get("/api/fishing/status/:accountId", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const rank = account.rank || "Novice";
+      const rod = getRodForRank(rank);
+      const dailyLimit = DAILY_CATCH_LIMIT_BY_RANK[rank] || 10;
+      const { dailyFishCaught } = resetDailyFishingIfNeeded(account);
+      const feedCap = PET_FEED_CAP_BY_RANK[rank] || 5;
+      const { dailyPetFeedGain } = resetDailyPetFeedIfNeeded(account);
+
+      res.json({
+        rod,
+        dailyCatchLimit: dailyLimit,
+        dailyFishCaught,
+        catchesRemaining: Math.max(0, dailyLimit - dailyFishCaught),
+        feedCap,
+        dailyPetFeedGain,
+        feedRemaining: Math.max(0, feedCap - dailyPetFeedGain),
+      });
+    } catch (error) {
+      console.error("Fishing status error:", error);
+      res.status(500).json({ error: "Failed to get fishing status" });
+    }
+  });
+
   app.post("/api/fishing/cast", async (req, res) => {
     try {
       const schema = z.object({ accountId: z.string(), useBait: z.boolean().optional() });
@@ -7482,29 +9058,54 @@ export async function registerRoutes(
       if (!account) {
         return res.status(404).json({ error: "Account not found" });
       }
-      
-      // Check if player wants to use bait
+
+      const carryInfo = await getPlayerCarryInfo(accountId);
+      if (carryInfo && carryInfo.isFull) {
+        return res.status(400).json({ error: "Inventory full! You cannot carry any more items.", ...carryInfo });
+      }
+
+      const rank = account.rank || "Novice";
+      const dailyLimit = DAILY_CATCH_LIMIT_BY_RANK[rank] || 10;
+      const { dailyFishCaught, lastFishingReset } = resetDailyFishingIfNeeded(account);
+      if (dailyFishCaught >= dailyLimit) {
+        return res.status(400).json({ error: "Daily catch limit reached! Come back tomorrow.", dailyFishCaught, dailyLimit });
+      }
+
+      const maxEn = getMaxEnergyForRank(rank);
+      const { energy: currentEnergy, lastEnergyUpdate: lastEnUp } = regenerateEnergy(account);
+      if (currentEnergy < ENERGY_COSTS.fishing) {
+        return res.status(400).json({ error: "Not enough energy to fish", required: ENERGY_COSTS.fishing, current: currentEnergy, maxEnergy: maxEn });
+      }
+
+      const rod = getRodForRank(rank);
+      const playerLuck = (account.stats as any)?.Luck || 10;
+      const effectiveLuck = playerLuck + rod.luckBonus;
+
       let baitBonus = 0;
       if (useBait && ((account as any).bait || 0) > 0) {
-        await storage.updateAccount(accountId, { gold: account.gold } as any);
-        baitBonus = 0.15; // 15% boost to better fish chances
+        await db.update(accounts).set({ bait: (account as any).bait - 1 }).where(eq(accounts.id, accountId));
+        baitBonus = 10;
       }
-      
-      // Random fish based on rarity (bait improves chances)
-      const roll = Math.random();
+
+      const baseRoll = Math.floor(Math.random() * 100) + 1;
+      const rarityScore = Math.floor((baseRoll * rod.rarityMultiplier) + effectiveLuck + baitBonus);
+
       let rarityFilter: string;
-      if (roll < 0.5 - baitBonus * 2) rarityFilter = "common";
-      else if (roll < 0.8 - baitBonus) rarityFilter = "uncommon";
-      else if (roll < 0.95 - baitBonus / 2) rarityFilter = "rare";
-      else if (roll < 0.99) rarityFilter = "epic";
-      else rarityFilter = "legendary";
+      if (rarityScore >= 99) rarityFilter = "mythic";
+      else if (rarityScore >= 93) rarityFilter = "legendary";
+      else if (rarityScore >= 81) rarityFilter = "epic";
+      else if (rarityScore >= 66) rarityFilter = "rare";
+      else if (rarityScore >= 41) rarityFilter = "uncommon";
+      else rarityFilter = "common";
       
       const possibleFish = FISH_TYPES.filter(f => f.rarity === rarityFilter);
-      const fishTemplate = possibleFish[Math.floor(Math.random() * possibleFish.length)];
+      const fishTemplate = possibleFish.length > 0
+        ? possibleFish[Math.floor(Math.random() * possibleFish.length)]
+        : FISH_TYPES[0];
       
-      // Generate random stats
       const [minStat, maxStat] = fishTemplate.statRange;
       const randomStat = () => Math.floor(Math.random() * (maxStat - minStat + 1)) + minStat;
+      const petStatGain = FISH_PET_STAT_GAIN[fishTemplate.rarity] || 1;
       const stats = {
         Str: randomStat(),
         Spd: randomStat(),
@@ -7512,10 +9113,8 @@ export async function registerRoutes(
         ElementalPower: randomStat(),
       };
       
-      // Random element from fish's possible elements
       const element = fishTemplate.elements[Math.floor(Math.random() * fishTemplate.elements.length)];
       
-      // Create fish
       const { fish } = await import("@shared/schema");
       const [newFish] = await db.insert(fish).values({
         accountId,
@@ -7524,8 +9123,47 @@ export async function registerRoutes(
         element: element as any,
         stats,
       }).returning();
+
+      await db.update(accounts).set({
+        energy: currentEnergy - ENERGY_COSTS.fishing,
+        lastEnergyUpdate: lastEnUp,
+        dailyFishCaught: dailyFishCaught + 1,
+        lastFishingReset: lastFishingReset,
+      }).where(eq(accounts.id, accountId));
       
-      res.json({ success: true, fish: newFish });
+      let monsterEncounter = null;
+      const fishingZone = "crystal_lake";
+      const actionMonster = checkActionSpawn(fishingZone, accountId, rank);
+      if (actionMonster) {
+        await db.insert(monsterSpawnLog).values({
+          accountId,
+          zoneId: fishingZone,
+          monsterName: actionMonster.template.name,
+          monsterElement: actionMonster.template.element,
+          monsterLevel: actionMonster.level,
+          isBoss: actionMonster.template.isBoss,
+          source: "action",
+          weather: getZoneWeather(fishingZone).type,
+        });
+        monsterEncounter = formatMonsterResponse(actionMonster);
+      }
+
+      const updatedCarryInfo = await getPlayerCarryInfo(accountId);
+      const newDailyLimit = dailyLimit;
+      res.json({
+        success: true,
+        fish: newFish,
+        carryCapacity: updatedCarryInfo,
+        monsterEncounter,
+        rod,
+        rarityScore,
+        dailyFishCaught: dailyFishCaught + 1,
+        dailyCatchLimit: newDailyLimit,
+        catchesRemaining: Math.max(0, newDailyLimit - (dailyFishCaught + 1)),
+        sellPrice: FISH_SELL_PRICES[fishTemplate.rarity] || 50,
+        isCraftingMaterial: FISH_CRAFTING_MATERIAL[fishTemplate.rarity] || false,
+        petStatGain,
+      });
     } catch (error) {
       console.error("Fishing error:", error);
       res.status(500).json({ error: "Failed to fish" });
@@ -7541,8 +9179,32 @@ export async function registerRoutes(
       res.status(500).json({ error: "Failed to get fish" });
     }
   });
+
+  app.post("/api/fishing/sell", async (req, res) => {
+    try {
+      const schema = z.object({ accountId: z.string(), fishId: z.string() });
+      const { accountId, fishId } = schema.parse(req.body);
+
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const { fish } = await import("@shared/schema");
+      const [fishToSell] = await db.select().from(fish).where(eq(fish.id, fishId));
+      if (!fishToSell || fishToSell.accountId !== accountId) {
+        return res.status(404).json({ error: "Fish not found or not owned" });
+      }
+
+      const sellPrice = FISH_SELL_PRICES[fishToSell.rarity] || 50;
+      await db.delete(fish).where(eq(fish.id, fishId));
+      await db.update(accounts).set({ gold: account.gold + sellPrice }).where(eq(accounts.id, accountId));
+
+      res.json({ success: true, goldEarned: sellPrice, fishName: fishToSell.name, rarity: fishToSell.rarity });
+    } catch (error) {
+      console.error("Sell fish error:", error);
+      res.status(500).json({ error: "Failed to sell fish" });
+    }
+  });
   
-  // Feed fish to pet - transfers all stats and element
   app.post("/api/pets/:petId/feed-fish", async (req, res) => {
     try {
       const schema = z.object({
@@ -7550,7 +9212,14 @@ export async function registerRoutes(
         fishId: z.string(),
       });
       const { accountId, fishId } = schema.parse(req.body);
-      
+
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const rank = account.rank || "Novice";
+      const feedCap = PET_FEED_CAP_BY_RANK[rank] || 5;
+      const { dailyPetFeedGain, lastPetFeedReset } = resetDailyPetFeedIfNeeded(account);
+
       const pet = await storage.getPet(req.params.petId);
       if (!pet || pet.accountId !== accountId) {
         return res.status(404).json({ error: "Pet not found or not owned" });
@@ -7561,33 +9230,147 @@ export async function registerRoutes(
       if (!fishToFeed || fishToFeed.accountId !== accountId) {
         return res.status(404).json({ error: "Fish not found or not owned" });
       }
+
+      const statGain = FISH_PET_STAT_GAIN[fishToFeed.rarity] || 1;
+      if (dailyPetFeedGain + statGain > feedCap) {
+        return res.status(400).json({
+          error: "Daily pet feed cap reached! Your pet cannot gain more stats today.",
+          dailyPetFeedGain,
+          feedCap,
+          feedRemaining: Math.max(0, feedCap - dailyPetFeedGain),
+        });
+      }
       
-      // Add fish stats to pet
       const petStats = pet.stats as any;
-      const fishStats = fishToFeed.stats as any;
       const newStats = {
-        Str: (petStats.Str || 0) + (fishStats.Str || 0),
-        Spd: (petStats.Spd || 0) + (fishStats.Spd || 0),
-        Luck: (petStats.Luck || 0) + (fishStats.Luck || 0),
-        ElementalPower: (petStats.ElementalPower || 0) + (fishStats.ElementalPower || 0),
+        Str: (petStats.Str || 0) + statGain,
+        Spd: (petStats.Spd || 0) + statGain,
+        Luck: (petStats.Luck || 0) + Math.max(1, Math.floor(statGain / 2)),
+        ElementalPower: (petStats.ElementalPower || 0) + statGain,
       };
       
-      // Add fish element to pet if it doesn't have it
-      const petElements = pet.elements || [pet.element];
-      const newElements = fishToFeed.element && !petElements.includes(fishToFeed.element as any)
-        ? [...petElements, fishToFeed.element]
-        : petElements;
+      const currentPetElements = pet.elements || [pet.element];
+      const newElements = fishToFeed.element && !currentPetElements.includes(fishToFeed.element as any)
+        ? [...currentPetElements, fishToFeed.element]
+        : currentPetElements;
       
       await storage.updatePet(pet.id, { stats: newStats, elements: newElements as any });
-      
-      // Delete the fish
       await db.delete(fish).where(eq(fish.id, fishId));
+      await db.update(accounts).set({
+        dailyPetFeedGain: dailyPetFeedGain + statGain,
+        lastPetFeedReset: lastPetFeedReset,
+      }).where(eq(accounts.id, accountId));
       
       const updatedPet = await storage.getPet(pet.id);
-      res.json({ success: true, pet: updatedPet, fishConsumed: fishToFeed.name });
+      res.json({
+        success: true,
+        pet: updatedPet,
+        fishConsumed: fishToFeed.name,
+        statGain,
+        dailyPetFeedGain: dailyPetFeedGain + statGain,
+        feedCap,
+        feedRemaining: Math.max(0, feedCap - (dailyPetFeedGain + statGain)),
+      });
     } catch (error) {
       console.error("Feed fish error:", error);
       res.status(500).json({ error: "Failed to feed fish to pet" });
+    }
+  });
+
+  app.get("/api/pet-cooking-recipes", (req, res) => {
+    res.json(PET_COOKING_RECIPES);
+  });
+
+  app.post("/api/pets/:petId/cook", async (req, res) => {
+    try {
+      const schema = z.object({
+        accountId: z.string(),
+        recipeId: z.string(),
+        fishId: z.string(),
+      });
+      const { accountId, recipeId, fishId } = schema.parse(req.body);
+
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const pet = await storage.getPet(req.params.petId);
+      if (!pet || pet.accountId !== accountId) {
+        return res.status(404).json({ error: "Pet not found or not owned" });
+      }
+      if (pet.isFainted) {
+        return res.status(400).json({ error: "Cannot cook for a fainted pet" });
+      }
+
+      const recipe = PET_COOKING_RECIPES.find(r => r.id === recipeId);
+      if (!recipe) return res.status(404).json({ error: "Recipe not found" });
+
+      if (account.gold < recipe.cost) {
+        return res.status(400).json({ error: `Need ${recipe.cost} gold for ${recipe.name}` });
+      }
+
+      const { fish } = await import("@shared/schema");
+      const [fishItem] = await db.select().from(fish).where(eq(fish.id, fishId));
+      if (!fishItem || fishItem.accountId !== accountId) {
+        return res.status(404).json({ error: "Fish not found or not owned" });
+      }
+
+      const fishRarityOrder = ["common", "uncommon", "rare", "epic", "legendary", "mythic"];
+      const requiredIdx = fishRarityOrder.indexOf(recipe.requiredFishRarity);
+      const fishIdx = fishRarityOrder.indexOf(fishItem.rarity);
+      if (fishIdx < requiredIdx) {
+        return res.status(400).json({ error: `This recipe requires at least ${recipe.requiredFishRarity} rarity fish` });
+      }
+
+      const tempElementExpires = new Date(Date.now() + recipe.duration);
+      
+      const { pets: petsTable } = await import("@shared/schema");
+      await db.update(petsTable).set({
+        tempElement: recipe.element,
+        tempElementExpires: tempElementExpires,
+      }).where(eq(petsTable.id, req.params.petId));
+
+      await db.delete(fish).where(eq(fish.id, fishId));
+      await db.update(accounts).set({ gold: account.gold - recipe.cost }).where(eq(accounts.id, accountId));
+
+      const updatedPet = await storage.getPet(pet.id);
+      res.json({
+        success: true,
+        message: `${pet.name} consumed ${recipe.name}! Gained temporary ${recipe.element} element for 1 hour.`,
+        pet: updatedPet,
+        tempElement: recipe.element,
+        tempElementExpires: tempElementExpires.toISOString(),
+        goldSpent: recipe.cost,
+        fishConsumed: fishItem.name,
+      });
+    } catch (error) {
+      console.error("Pet cooking error:", error);
+      res.status(500).json({ error: "Failed to cook for pet" });
+    }
+  });
+
+  app.post("/api/pets/:petId/revive-consumable", async (req, res) => {
+    try {
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const { pets: petsTable } = await import("@shared/schema");
+      const [pet] = await db.select().from(petsTable).where(eq(petsTable.id, req.params.petId));
+      if (!pet) return res.status(404).json({ error: "Pet not found" });
+      if (pet.accountId !== accountId) return res.status(403).json({ error: "Not your pet" });
+      if (!pet.isFainted) return res.status(400).json({ error: "Pet is not fainted" });
+
+      if (account.gold < PET_REVIVE_CONSUMABLE_COST) {
+        return res.status(400).json({ error: `Need ${PET_REVIVE_CONSUMABLE_COST} gold to revive pet with consumable` });
+      }
+
+      await db.update(petsTable).set({ isFainted: false }).where(eq(petsTable.id, req.params.petId));
+      await db.update(accounts).set({ gold: account.gold - PET_REVIVE_CONSUMABLE_COST }).where(eq(accounts.id, accountId));
+
+      res.json({ success: true, message: `${pet.name} has been revived with a consumable!`, goldSpent: PET_REVIVE_CONSUMABLE_COST });
+    } catch (error) {
+      console.error("Pet revive consumable error:", error);
+      res.status(500).json({ error: "Failed to revive pet" });
     }
   });
 
@@ -7819,6 +9602,18 @@ export async function registerRoutes(
       if (!settings?.autoGather) {
         return res.status(400).json({ error: "Auto-gather not enabled" });
       }
+
+      const carryInfo = await getPlayerCarryInfo(accountId);
+      if (carryInfo && carryInfo.isFull) {
+        return res.status(400).json({ error: "Inventory full! You cannot carry any more items.", ...carryInfo });
+      }
+
+      const maxEn = getMaxEnergyForRank(account.rank || "Novice");
+      const { energy: currentEnergy, lastEnergyUpdate: lastEnUp } = regenerateEnergy(account);
+      if (currentEnergy < ENERGY_COSTS.gathering) {
+        return res.status(400).json({ error: "Not enough energy to gather", required: ENERGY_COSTS.gathering, current: currentEnergy, maxEnergy: maxEn });
+      }
+      await db.update(accounts).set({ energy: currentEnergy - ENERGY_COSTS.gathering, lastEnergyUpdate: lastEnUp }).where(eq(accounts.id, accountId));
       
       const gatherableZonesMap: Record<string, { resources: { type: string; chance: number; minAmount: number; maxAmount: number }[] }> = {
         mountain_caverns: { resources: [{ type: "ore", chance: 0.6, minAmount: 1, maxAmount: 5 }, { type: "gems", chance: 0.2, minAmount: 1, maxAmount: 2 }] },
@@ -7851,6 +9646,22 @@ export async function registerRoutes(
       if (totalGold > 0) {
         await storage.updateAccountGold(accountId, account.gold + totalGold);
       }
+
+      let monsterEncounter = null;
+      const actionMonster = checkActionSpawn(zoneId, accountId, account.rank || "Novice");
+      if (actionMonster) {
+        await db.insert(monsterSpawnLog).values({
+          accountId,
+          zoneId,
+          monsterName: actionMonster.template.name,
+          monsterElement: actionMonster.template.element,
+          monsterLevel: actionMonster.level,
+          isBoss: actionMonster.template.isBoss,
+          source: "action",
+          weather: getZoneWeather(zoneId).type,
+        });
+        monsterEncounter = formatMonsterResponse(actionMonster);
+      }
       
       res.json({
         success: true,
@@ -7858,6 +9669,7 @@ export async function registerRoutes(
         goldEarned: totalGold,
         gatherCount: gathers,
         efficiency,
+        monsterEncounter,
       });
     } catch (error) {
       res.status(500).json({ error: "Auto-gather failed" });
@@ -8866,6 +10678,132 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/accounts/:id/heritage", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.id);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+
+      const heritageCount = account.heritageCount || 0;
+      const heritageBonusPercent = account.heritageBonusPercent || 0;
+      const canRebirth = account.rank === "Mythical Legend" && heritageCount < MAX_HERITAGE_REBIRTHS;
+      const currentTitle = heritageCount > 0 ? HERITAGE_TITLES[heritageCount] || null : null;
+      const nextTitle = heritageCount < MAX_HERITAGE_REBIRTHS ? HERITAGE_TITLES[heritageCount + 1] : null;
+
+      res.json({
+        heritageCount,
+        heritageBonusPercent,
+        maxRebirths: MAX_HERITAGE_REBIRTHS,
+        bonusPerRebirth: HERITAGE_BONUS_PER_REBIRTH,
+        canRebirth,
+        currentTitle,
+        nextTitle,
+        allTitles: HERITAGE_TITLES,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get heritage info" });
+    }
+  });
+
+  app.post("/api/accounts/:id/heritage-rebirth", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+
+      if (account.rank !== "Mythical Legend") {
+        return res.status(400).json({ error: "Must be Mythical Legend rank to perform Heritage Rebirth" });
+      }
+
+      const currentHeritageCount = account.heritageCount || 0;
+      if (currentHeritageCount >= MAX_HERITAGE_REBIRTHS) {
+        return res.status(400).json({ error: `Maximum heritage rebirths (${MAX_HERITAGE_REBIRTHS}) already reached` });
+      }
+
+      const newHeritageCount = currentHeritageCount + 1;
+      const newBonusPercent = newHeritageCount * HERITAGE_BONUS_PER_REBIRTH;
+      const heritageTitle = HERITAGE_TITLES[newHeritageCount];
+
+      const baseStats = { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 };
+      let resetStats = baseStats;
+      if (account.race) {
+        const modifier = raceModifiers[account.race as keyof typeof raceModifiers];
+        if (modifier) {
+          resetStats = {
+            Str: Math.round(baseStats.Str * modifier.Str),
+            Def: Math.round(baseStats.Def * modifier.Def),
+            Spd: Math.round(baseStats.Spd * modifier.Spd),
+            Int: Math.round(baseStats.Int * modifier.Int),
+            Luck: Math.round(baseStats.Luck * modifier.Luck),
+            Pot: 0,
+          };
+        }
+      }
+
+      const bonusMultiplier = 1 + (newBonusPercent / 100);
+      const enhancedStats = {
+        Str: Math.round(resetStats.Str * bonusMultiplier),
+        Def: Math.round(resetStats.Def * bonusMultiplier),
+        Spd: Math.round(resetStats.Spd * bonusMultiplier),
+        Int: Math.round(resetStats.Int * bonusMultiplier),
+        Luck: Math.round(resetStats.Luck * bonusMultiplier),
+        Pot: 0,
+      };
+
+      await db.update(accounts).set({
+        rank: "Novice",
+        stats: enhancedStats,
+        npcFloor: 1,
+        npcLevel: 1,
+        wins: 0,
+        losses: 0,
+        heritageCount: newHeritageCount,
+        heritageBonusPercent: newBonusPercent,
+        energy: 50,
+        maxEnergy: 50,
+      }).where(eq(accounts.id, accountId));
+
+      const { playerTitles } = await import("@shared/schema");
+      if (heritageTitle) {
+        await db.insert(playerTitles).values({
+          accountId,
+          titleId: `heritage_${newHeritageCount}`,
+          category: "event",
+          name: heritageTitle,
+        });
+      }
+
+      try {
+        await storage.createActivityFeed({
+          type: "heritage_rebirth",
+          message: `${account.username} has undergone Heritage Rebirth #${newHeritageCount} and earned the title "${heritageTitle}"!`,
+          metadata: { accountId, heritageCount: newHeritageCount, bonusPercent: newBonusPercent },
+        });
+      } catch (e) {}
+
+      broadcastToAllPlayers("heritage_rebirth", {
+        username: account.username,
+        heritageCount: newHeritageCount,
+        title: heritageTitle,
+      });
+
+      res.json({
+        success: true,
+        heritageCount: newHeritageCount,
+        heritageBonusPercent: newBonusPercent,
+        title: heritageTitle,
+        newStats: enhancedStats,
+        message: `Heritage Rebirth complete! You are now "${heritageTitle}" with a permanent +${newBonusPercent}% stat bonus. You have been reset to Novice rank.`,
+      });
+    } catch (error) {
+      console.error("Heritage rebirth error:", error);
+      res.status(500).json({ error: "Failed to perform heritage rebirth" });
+    }
+  });
+
   app.post("/api/accounts/:id/trigger-raid", async (req, res) => {
     try {
       const account = await storage.getAccount(req.params.id);
@@ -9352,6 +11290,18 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Cannot gather while dead" });
       }
 
+      const carryInfo = await getPlayerCarryInfo(accountId);
+      if (carryInfo && carryInfo.isFull) {
+        return res.status(400).json({ error: "Inventory full! You cannot carry any more items.", ...carryInfo });
+      }
+
+      const maxEn = getMaxEnergyForRank(account.rank || "Novice");
+      const { energy: currentEnergy, lastEnergyUpdate: lastEnUp } = regenerateEnergy(account);
+      if (currentEnergy < ENERGY_COSTS.gathering) {
+        return res.status(400).json({ error: "Not enough energy to gather", required: ENERGY_COSTS.gathering, current: currentEnergy, maxEnergy: maxEn });
+      }
+      await db.update(accounts).set({ energy: currentEnergy - ENERGY_COSTS.gathering, lastEnergyUpdate: lastEnUp }).where(eq(accounts.id, accountId));
+
       const zoneResources = ZONE_RESOURCES[zoneId];
       if (!zoneResources) {
         return res.status(400).json({ error: "No resources available in this zone" });
@@ -9422,6 +11372,8 @@ export async function registerRoutes(
       // Remove from active gatherers
       activeGatherers.delete(gatherKey);
 
+      const updatedCarryInfo = await getPlayerCarryInfo(accountId);
+
       res.json({
         success: true,
         gathered,
@@ -9430,6 +11382,7 @@ export async function registerRoutes(
         competition: competitors,
         competitionPenalty: competitors > 0 ? `${Math.round((1 - competitionMultiplier) * 100)}%` : "None",
         gatheringTime: zoneResources.gatheringTime,
+        carryCapacity: updatedCarryInfo,
         message: gathered.length > 0 
           ? `Gathered ${gathered.map(g => `${g.quantity}x ${g.name}`).join(', ')}!`
           : "Found nothing this time. Try again!",
@@ -10657,6 +12610,11 @@ export async function registerRoutes(
       const account = await storage.getAccount(accountId);
       if (!account) return res.status(404).json({ error: "Account not found" });
 
+      const carryInfo = await getPlayerCarryInfo(accountId);
+      if (carryInfo && carryInfo.isFull) {
+        return res.status(400).json({ error: "Inventory full! You cannot carry any more items.", ...carryInfo });
+      }
+
       const requiredRankIndex = playerRanks.indexOf("Apprentice");
       const playerRankIndex = playerRanks.indexOf(account.rank);
       if (playerRankIndex < requiredRankIndex) {
@@ -10697,6 +12655,11 @@ export async function registerRoutes(
       const { accountId, nodeId } = req.body;
       const account = await storage.getAccount(accountId);
       if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const carryInfo = await getPlayerCarryInfo(accountId);
+      if (carryInfo && carryInfo.isFull) {
+        return res.status(400).json({ error: "Inventory full! You cannot carry any more items.", ...carryInfo });
+      }
 
       const requiredRankIndex = playerRanks.indexOf("Expert");
       const playerRankIndex = playerRanks.indexOf(account.rank);
@@ -10977,7 +12940,7 @@ export async function registerRoutes(
     }
     
     const stats = account.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10 };
-    const maxHp = calculateMaxHP(stats as CombatStats, playerRanks.indexOf(account.rank));
+    const maxHp = calculateMaxHP(stats as CombatStats, playerRanks.indexOf(account.rank), account.race, account.rank);
     
     battleRoyale.registrations.set(accountId, {
       accountId,
@@ -11240,5 +13203,1040 @@ export async function registerRoutes(
     });
   });
 
+  app.get("/api/accounts/:id/energy", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.id);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+
+      const maxEnergy = getMaxEnergyForRank(account.rank || "Novice");
+      const { energy, lastEnergyUpdate } = regenerateEnergy(account);
+
+      if (energy !== (account as any).energy) {
+        await db.update(accounts).set({
+          energy,
+          maxEnergy,
+          lastEnergyUpdate,
+        }).where(eq(accounts.id, req.params.id));
+      }
+
+      res.json({
+        energy,
+        maxEnergy,
+        lastEnergyUpdate: lastEnergyUpdate.toISOString(),
+        costs: ENERGY_COSTS,
+      });
+    } catch (error) {
+      console.error("Energy status error:", error);
+      res.status(500).json({ error: "Failed to get energy status" });
+    }
+  });
+
+  app.post("/api/accounts/:id/use-energy-potion", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.id);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+
+      const potionCost = 500;
+      if ((account.gold || 0) < potionCost) {
+        return res.status(400).json({ error: "Not enough gold", required: potionCost });
+      }
+
+      const maxEnergy = getMaxEnergyForRank(account.rank || "Novice");
+      const { energy } = regenerateEnergy(account);
+      const restored = Math.min(maxEnergy, energy + 25);
+
+      await db.update(accounts).set({
+        gold: (account.gold || 0) - potionCost,
+        energy: restored,
+        maxEnergy,
+        lastEnergyUpdate: new Date(),
+      }).where(eq(accounts.id, req.params.id));
+
+      res.json({
+        success: true,
+        energy: restored,
+        maxEnergy,
+        goldSpent: potionCost,
+        message: `Used an Energy Potion! Restored ${restored - energy} energy.`,
+      });
+    } catch (error) {
+      console.error("Energy potion error:", error);
+      res.status(500).json({ error: "Failed to use energy potion" });
+    }
+  });
+
+  // ========== DAY/NIGHT CYCLE & WEATHER SYSTEM ==========
+
+  app.get("/api/world-time", (_req, res) => {
+    const { getWorldTimeInfo } = require("./weather-system");
+    res.json(getWorldTimeInfo());
+  });
+
+  app.get("/api/day-night", (_req, res) => {
+    const { getDayNightState } = require("./weather-system");
+    res.json(getDayNightState());
+  });
+
+  // ========== MONSTER SPAWN SYSTEM & WEATHER ==========
+
+  app.get("/api/weather", (_req, res) => {
+    res.json(getAllZoneWeather());
+  });
+
+  app.get("/api/zones/:zoneId/weather", (req, res) => {
+    const weather = getZoneWeather(req.params.zoneId);
+    res.json(weather);
+  });
+
+  app.get("/api/zones/:zoneId/monsters/templates", (req, res) => {
+    const templates = getZoneMonsterTemplates(req.params.zoneId);
+    res.json({ zoneId: req.params.zoneId, templates });
+  });
+
+  app.get("/api/monsters/weather-bosses", (_req, res) => {
+    res.json(getWeatherExclusiveBosses());
+  });
+
+  app.get("/api/monsters/active-count", (_req, res) => {
+    res.json({ activeMonsters: getActiveMonsterCount() });
+  });
+
+  app.get("/api/zones/:zoneId/monster", async (req, res) => {
+    try {
+      const accountId = req.query.accountId as string;
+      if (!accountId) return res.status(400).json({ error: "Account ID required" });
+
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const existing = getActiveMonster(req.params.zoneId, accountId);
+      if (existing) {
+        return res.json({ monsterActive: true, monster: formatMonsterResponse(existing) });
+      }
+
+      const spawned = checkTimerSpawn(req.params.zoneId, accountId, account.rank || "Novice");
+      if (spawned) {
+        await db.insert(monsterSpawnLog).values({
+          accountId,
+          zoneId: req.params.zoneId,
+          monsterName: spawned.template.name,
+          monsterElement: spawned.template.element,
+          monsterLevel: spawned.level,
+          isBoss: spawned.template.isBoss,
+          source: "timer",
+          weather: getZoneWeather(req.params.zoneId).type,
+        });
+        return res.json({ monsterActive: true, monster: formatMonsterResponse(spawned) });
+      }
+
+      res.json({ monsterActive: false, monster: null });
+    } catch (error) {
+      console.error("Monster check error:", error);
+      res.status(500).json({ error: "Failed to check for monsters" });
+    }
+  });
+
+  app.post("/api/zones/:zoneId/monster/spawn", async (req, res) => {
+    try {
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+      if (account.isDead || account.ghostState) return res.status(403).json({ error: "Cannot encounter monsters in Ghost State" });
+
+      const existing = getActiveMonster(req.params.zoneId, accountId);
+      if (existing) {
+        return res.json({ monsterActive: true, monster: formatMonsterResponse(existing) });
+      }
+
+      const spawned = spawnMonster(req.params.zoneId, accountId, account.rank || "Novice", "timer");
+      if (!spawned) return res.status(500).json({ error: "Failed to spawn monster" });
+
+      await db.insert(monsterSpawnLog).values({
+        accountId,
+        zoneId: req.params.zoneId,
+        monsterName: spawned.template.name,
+        monsterElement: spawned.template.element,
+        monsterLevel: spawned.level,
+        isBoss: spawned.template.isBoss,
+        source: "timer",
+        weather: getZoneWeather(req.params.zoneId).type,
+      });
+
+      res.json({ monsterActive: true, monster: formatMonsterResponse(spawned) });
+    } catch (error) {
+      console.error("Monster spawn error:", error);
+      res.status(500).json({ error: "Failed to spawn monster" });
+    }
+  });
+
+  app.post("/api/zones/:zoneId/monster/fight", async (req, res) => {
+    try {
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+      if (account.isDead || account.ghostState) return res.status(403).json({ error: "Cannot fight in Ghost State" });
+
+      const monster = getActiveMonster(req.params.zoneId, accountId);
+      if (!monster) return res.status(404).json({ error: "No active monster in this zone" });
+
+      const playerStats = account.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 };
+
+      let monsterFightSpell: any = null;
+      const monsterFightEquippedSkill = await storage.getEquippedSkill(accountId);
+      if (monsterFightEquippedSkill) {
+        const { getSkillById, RANK_MULTIPLIER } = await import("@shared/skills-data");
+        const skillDef = getSkillById(monsterFightEquippedSkill.skillId);
+        if (skillDef) {
+          const rankMult = RANK_MULTIPLIER[account.rank || "Novice"] || 1.0;
+          monsterFightSpell = {
+            name: skillDef.name,
+            multiplier: skillDef.spellPower || 1.5,
+            element: skillDef.element,
+            isAoE: skillDef.spellCategory === "aoe",
+            targetCount: skillDef.targetCount,
+            spellCategory: skillDef.spellCategory || "damage",
+            spellPower: skillDef.spellPower || 1.5,
+            ccType: skillDef.ccType,
+            ccDuration: skillDef.ccDuration,
+            buffStat: skillDef.buffStat,
+            buffAmount: skillDef.buffAmount,
+            rankMultiplier: rankMult,
+          };
+        }
+      }
+
+      const playerCombatant: Combatant = {
+        id: accountId,
+        name: account.username,
+        stats: {
+          Str: Number(playerStats.Str) || 10,
+          Def: Number(playerStats.Def) || 10,
+          Spd: Number(playerStats.Spd) || 10,
+          Int: Number(playerStats.Int) || 10,
+          Luck: Number(playerStats.Luck) || 10,
+          Pot: Number(playerStats.Pot) || 0,
+        },
+        race: account.race,
+        rank: account.rank,
+        level: playerRanks.indexOf(account.rank) + 1,
+        isPlayer: true,
+        spell: monsterFightSpell,
+      };
+
+      const monsterCombatant: Combatant = {
+        id: monster.id,
+        name: monster.template.name,
+        stats: monster.scaledStats,
+        race: null,
+        rank: null,
+        elements: { elements: [monster.template.element], elementalPower: monster.level },
+        level: monster.level,
+        isPlayer: false,
+      };
+
+      const result = runAutoCombat(playerCombatant, monsterCombatant, 20);
+      const playerWon = result.winner === accountId;
+
+      clearActiveMonster(req.params.zoneId, accountId);
+
+      let rewards = { gold: 0, trainingPoints: 0, soulShards: 0, petExp: 0 };
+      if (playerWon) {
+        rewards = calculateMonsterRewards(monster);
+        await db.update(accounts).set({
+          gold: (account.gold || 0) + rewards.gold,
+          trainingPoints: (account.trainingPoints || 0) + rewards.trainingPoints,
+          soulShards: (account.soulShards || 0) + rewards.soulShards,
+          petExp: (account.petExp || 0) + rewards.petExp,
+        }).where(eq(accounts.id, accountId));
+      } else {
+        const penalty = calculateDeathPenalty(account.gold || 0);
+        await db.update(accounts).set({
+          gold: Math.max(0, (account.gold || 0) - penalty.goldLost),
+          isDead: true,
+          ghostState: true,
+          deathCount: (account.deathCount || 0) + 1,
+          lastDeathTime: new Date(),
+          weaknessDebuffExpires: penalty.weaknessDebuffExpires,
+        }).where(eq(accounts.id, accountId));
+      }
+
+      await db.update(monsterSpawnLog).set({
+        defeated: playerWon,
+        goldReward: rewards.gold,
+        completedAt: new Date(),
+      }).where(eq(monsterSpawnLog.monsterName, monster.template.name));
+
+      res.json({
+        success: true,
+        playerWon,
+        combat: result,
+        rewards: playerWon ? rewards : null,
+        monster: {
+          name: monster.template.name,
+          element: monster.template.element,
+          level: monster.level,
+          isBoss: monster.template.isBoss,
+        },
+        weather: getZoneWeather(req.params.zoneId),
+      });
+    } catch (error) {
+      console.error("Monster fight error:", error);
+      res.status(500).json({ error: "Failed to fight monster" });
+    }
+  });
+
+  app.post("/api/zones/:zoneId/monster/flee", async (req, res) => {
+    try {
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      clearActiveMonster(req.params.zoneId, accountId);
+      res.json({ success: true, message: "You fled from the monster!" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to flee" });
+    }
+  });
+
+  app.get("/api/accounts/:id/monster-history", async (req, res) => {
+    try {
+      const logs = await db.select().from(monsterSpawnLog)
+        .where(eq(monsterSpawnLog.accountId, req.params.id))
+        .orderBy(sql`${monsterSpawnLog.spawnedAt} DESC`)
+        .limit(50);
+      res.json(logs);
+    } catch (error) {
+      console.error("Monster history error:", error);
+      res.status(500).json({ error: "Failed to get monster history" });
+    }
+  });
+
+  startMarketUpdates();
+
+  app.get("/api/economy/market-prices", (_req, res) => {
+    try {
+      const prices = getAllMarketPrices();
+      res.json({
+        prices,
+        taxRates: {
+          auctionListing: AUCTION_LISTING_TAX_RATE,
+          auctionSale: AUCTION_SALE_TAX_RATE,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get market prices" });
+    }
+  });
+
+  app.get("/api/economy/item-price/:itemId", (req, res) => {
+    try {
+      const { itemId } = req.params;
+      const { basePrice } = z.object({ basePrice: z.coerce.number() }).parse(req.query);
+      const currentPrice = getMarketPrice(itemId, basePrice);
+      const info = getMarketItemInfo(itemId);
+      res.json({
+        itemId,
+        basePrice,
+        currentPrice,
+        supply: info?.supply || 10,
+        demand: info?.demand || 10,
+        lastUpdated: info?.lastUpdated || Date.now(),
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get item price" });
+    }
+  });
+
+  app.get("/api/economy/repair-estimate/:itemId", async (req, res) => {
+    try {
+      const { inventoryItems } = await import("@shared/schema");
+      const [item] = await db.select().from(inventoryItems).where(eq(inventoryItems.id, req.params.itemId));
+      if (!item) return res.status(404).json({ error: "Item not found" });
+
+      const durabilityToRepair = item.maxDurability - item.durability;
+      const itemTier = getTierFromItemId(item.itemId);
+      const repairCost = calculateRepairCost(itemTier, durabilityToRepair);
+      res.json({
+        itemId: item.id,
+        currentDurability: item.durability,
+        maxDurability: item.maxDurability,
+        durabilityToRepair,
+        repairCost,
+        tier: itemTier,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to estimate repair cost" });
+    }
+  });
+
+  app.get("/api/economy/auction-fees", (req, res) => {
+    try {
+      const { amount } = z.object({ amount: z.coerce.number() }).parse(req.query);
+      res.json({
+        listingFee: calculateAuctionListingFee(amount),
+        saleTax: calculateAuctionSaleTax(amount),
+        listingRate: AUCTION_LISTING_TAX_RATE,
+        saleRate: AUCTION_SALE_TAX_RATE,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to calculate auction fees" });
+    }
+  });
+
+  app.get("/api/resource-zones", (_req, res) => {
+    try {
+      res.json(getAllGatherableZones());
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get resource zones" });
+    }
+  });
+
+  app.get("/api/resource-zones/:zoneId", (req, res) => {
+    try {
+      const zone = getZoneResources(req.params.zoneId);
+      if (!zone) {
+        return res.status(404).json({ error: "Zone not found or has no resources" });
+      }
+      res.json(zone);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get zone resources" });
+    }
+  });
+
+  app.get("/api/resource-zones/:zoneId/available/:accountId", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+      const available = getAvailableResources(req.params.zoneId, account.rank || "Novice");
+      const allResources = getZoneResources(req.params.zoneId);
+      const locked = allResources ? allResources.resources
+        .filter(r => {
+          const rankIdx = playerRanks.indexOf(account.rank as any);
+          return rankIdx < r.rankRequired;
+        })
+        .map(r => ({
+          ...r,
+          requiredRank: getRankRequirementLabel(r.rankRequired),
+        })) : [];
+
+      res.json({ available, locked });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get available resources" });
+    }
+  });
+
+  app.get("/api/resource-zones/:zoneId/exhaustion", (req, res) => {
+    try {
+      const info = getZoneExhaustionInfo(req.params.zoneId);
+      if (info.length === 0) {
+        return res.status(404).json({ error: "Zone not found or has no resources" });
+      }
+      res.json(info);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get exhaustion info" });
+    }
+  });
+
+  app.post("/api/accounts/:id/gather", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      const { zoneId } = z.object({ zoneId: z.string() }).parse(req.body);
+
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+
+      if (account.isDead || account.ghostState) {
+        return res.status(400).json({ error: "Cannot gather while in ghost state" });
+      }
+
+      const carryInfo = await getPlayerCarryInfo(accountId);
+      if (carryInfo && carryInfo.isFull) {
+        return res.status(400).json({ error: "Inventory full! You cannot carry any more items.", ...carryInfo });
+      }
+
+      const maxEn = getMaxEnergyForRank(account.rank || "Novice");
+      const { energy: currentEnergy, lastEnergyUpdate: lastEnUp } = regenerateEnergy(account);
+      if (currentEnergy < ENERGY_COSTS.gathering) {
+        return res.status(400).json({ error: "Not enough energy to gather", required: ENERGY_COSTS.gathering, current: currentEnergy, maxEnergy: maxEn });
+      }
+
+      const zone = getZoneResources(zoneId);
+      if (!zone) {
+        return res.status(400).json({ error: "This zone has no gatherable resources" });
+      }
+
+      await db.update(accounts).set({ energy: currentEnergy - ENERGY_COSTS.gathering, lastEnergyUpdate: lastEnUp }).where(eq(accounts.id, accountId));
+
+      const playerLuck = (account.stats as any)?.Luck || 10;
+
+      let birdResourceLuck = 0;
+      const { birds } = await import("@shared/schema");
+      const accountBirds = await db.select().from(birds).where(eq(birds.accountId, accountId));
+      if (accountBirds.length > 0) {
+        const bestBird = accountBirds.reduce((best, b) => {
+          const luck = (b.stats as any)?.resourceLuck || 0;
+          return luck > ((best.stats as any)?.resourceLuck || 0) ? b : best;
+        }, accountBirds[0]);
+        birdResourceLuck = (bestBird.stats as any)?.resourceLuck || 0;
+      }
+
+      const gathered = gatherResources(zoneId, account.rank || "Novice", playerLuck, birdResourceLuck);
+
+      let totalWeight = 0;
+      let totalGoldValue = 0;
+      for (const g of gathered) {
+        totalWeight += g.weight;
+        totalGoldValue += g.sellPrice;
+      }
+
+      if (totalGoldValue > 0) {
+        await storage.updateAccountGold(accountId, account.gold + totalGoldValue);
+      }
+
+      let monsterEncounter = null;
+      const actionMonster = checkActionSpawn(zoneId, accountId, account.rank || "Novice");
+      if (actionMonster) {
+        await db.insert(monsterSpawnLog).values({
+          accountId,
+          zoneId,
+          monsterName: actionMonster.template.name,
+          monsterElement: actionMonster.template.element,
+          monsterLevel: actionMonster.level,
+          isBoss: actionMonster.template.isBoss,
+          source: "action",
+          weather: getZoneWeather(zoneId).type,
+        });
+        monsterEncounter = formatMonsterResponse(actionMonster);
+      }
+
+      const exhaustion = getZoneExhaustionInfo(zoneId);
+
+      res.json({
+        success: true,
+        gathered,
+        totalWeight,
+        goldEarned: totalGoldValue,
+        birdLuckBonus: birdResourceLuck,
+        monsterEncounter,
+        exhaustion,
+        energyRemaining: currentEnergy - ENERGY_COSTS.gathering,
+      });
+    } catch (error) {
+      console.error("Gather error:", error);
+      res.status(500).json({ error: "Gathering failed" });
+    }
+  });
+
+  // ==================== ZONE DUNGEON ROUTES ====================
+
+  app.get("/api/zone-dungeons", async (req, res) => {
+    try {
+      const dungeons = ZONE_DUNGEON_CONFIGS.map(d => ({
+        zoneId: d.zoneId,
+        name: d.name,
+        theme: d.theme,
+        description: d.description,
+        floors: d.floors,
+        minRank: d.minRank,
+        bossName: d.boss.name,
+        bossElement: d.boss.element,
+      }));
+      res.json({ dungeons });
+    } catch (error) {
+      console.error("Zone dungeons list error:", error);
+      res.status(500).json({ error: "Failed to fetch zone dungeons" });
+    }
+  });
+
+  app.get("/api/zone-dungeons/:zoneId", async (req, res) => {
+    try {
+      const config = getZoneDungeonConfig(req.params.zoneId);
+      if (!config) {
+        return res.status(404).json({ error: "No dungeon exists for this zone" });
+      }
+      res.json({
+        zoneId: config.zoneId,
+        name: config.name,
+        theme: config.theme,
+        description: config.description,
+        floors: config.floors,
+        minRank: config.minRank,
+        monsters: config.monsters.map(m => ({ name: m.name, element: m.element, isBoss: m.isBoss })),
+        boss: { name: config.boss.name, element: config.boss.element },
+        floorRewards: config.floorRewards,
+        completionRewards: { ...config.completionRewards, rareItemId: undefined },
+      });
+    } catch (error) {
+      console.error("Zone dungeon info error:", error);
+      res.status(500).json({ error: "Failed to fetch dungeon info" });
+    }
+  });
+
+  app.get("/api/zone-dungeons/:zoneId/progress/:accountId", async (req, res) => {
+    try {
+      const { zoneId, accountId } = req.params;
+      const config = getZoneDungeonConfig(zoneId);
+      if (!config) {
+        return res.status(404).json({ error: "No dungeon exists for this zone" });
+      }
+
+      const activeRuns = await db.select().from(zoneDungeonRuns)
+        .where(sql`${zoneDungeonRuns.accountId} = ${accountId} AND ${zoneDungeonRuns.zoneId} = ${zoneId} AND ${zoneDungeonRuns.completed} = false`);
+
+      const completedRuns = await db.select().from(zoneDungeonRuns)
+        .where(sql`${zoneDungeonRuns.accountId} = ${accountId} AND ${zoneDungeonRuns.zoneId} = ${zoneId} AND ${zoneDungeonRuns.completed} = true`);
+
+      res.json({
+        activeRun: activeRuns.length > 0 ? activeRuns[0] : null,
+        completionCount: completedRuns.length,
+        totalGoldEarned: completedRuns.reduce((sum, r) => sum + r.totalGoldEarned, 0),
+        totalXpEarned: completedRuns.reduce((sum, r) => sum + r.totalXpEarned, 0),
+        totalMonstersDefeated: completedRuns.reduce((sum, r) => sum + r.monstersDefeated, 0),
+      });
+    } catch (error) {
+      console.error("Zone dungeon progress error:", error);
+      res.status(500).json({ error: "Failed to fetch dungeon progress" });
+    }
+  });
+
+  app.post("/api/zone-dungeons/:zoneId/enter", async (req, res) => {
+    try {
+      const { zoneId } = req.params;
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+
+      const config = getZoneDungeonConfig(zoneId);
+      if (!config) {
+        return res.status(404).json({ error: "No dungeon exists for this zone" });
+      }
+
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      if (account.isDead || account.ghostState) {
+        return res.status(400).json({ error: "Cannot enter dungeons while dead or in ghost state" });
+      }
+
+      const playerRankIdx = playerRanks.indexOf(account.rank as any);
+      const requiredRankIdx = playerRanks.indexOf(config.minRank as any);
+      if (playerRankIdx < requiredRankIdx) {
+        return res.status(400).json({ error: `Requires rank ${config.minRank} or higher to enter ${config.name}` });
+      }
+
+      const existingRuns = await db.select().from(zoneDungeonRuns)
+        .where(sql`${zoneDungeonRuns.accountId} = ${accountId} AND ${zoneDungeonRuns.zoneId} = ${zoneId} AND ${zoneDungeonRuns.completed} = false`);
+
+      if (existingRuns.length > 0) {
+        const run = existingRuns[0];
+        const isBossFloor = run.currentFloor > config.floors;
+        return res.json({
+          success: true,
+          message: `Resuming ${config.name} - Floor ${Math.min(run.currentFloor, config.floors)}${isBossFloor ? ' (BOSS)' : ''}`,
+          run,
+          dungeon: { name: config.name, theme: config.theme, floors: config.floors },
+        });
+      }
+
+      const [newRun] = await db.insert(zoneDungeonRuns).values({
+        accountId,
+        zoneId,
+        currentFloor: 1,
+        completed: false,
+        totalGoldEarned: 0,
+        totalXpEarned: 0,
+        monstersDefeated: 0,
+      }).returning();
+
+      res.json({
+        success: true,
+        message: `Entered ${config.name} - Floor 1`,
+        run: newRun,
+        dungeon: { name: config.name, theme: config.theme, floors: config.floors },
+      });
+    } catch (error) {
+      console.error("Zone dungeon enter error:", error);
+      res.status(500).json({ error: "Failed to enter dungeon" });
+    }
+  });
+
+  app.post("/api/zone-dungeons/:zoneId/fight", async (req, res) => {
+    try {
+      const { zoneId } = req.params;
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+
+      const config = getZoneDungeonConfig(zoneId);
+      if (!config) {
+        return res.status(404).json({ error: "No dungeon exists for this zone" });
+      }
+
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      if (account.isDead || account.ghostState) {
+        return res.status(400).json({ error: "Cannot fight while dead or in ghost state" });
+      }
+
+      const activeRuns = await db.select().from(zoneDungeonRuns)
+        .where(sql`${zoneDungeonRuns.accountId} = ${accountId} AND ${zoneDungeonRuns.zoneId} = ${zoneId} AND ${zoneDungeonRuns.completed} = false`);
+
+      if (activeRuns.length === 0) {
+        return res.status(400).json({ error: "No active dungeon run. Enter the dungeon first." });
+      }
+
+      const run = activeRuns[0];
+      const isBossFloor = run.currentFloor > config.floors;
+
+      const monsterTemplate = isBossFloor
+        ? config.boss
+        : config.monsters[Math.floor(Math.random() * config.monsters.length)];
+
+      const playerRankIdx = playerRanks.indexOf(account.rank as any);
+      const safeRankIdx = playerRankIdx >= 0 ? playerRankIdx : 0;
+      const rankScale = 1 + safeRankIdx * 0.5;
+      const floorScale = 1 + (run.currentFloor - 1) * 0.15;
+
+      const monsterStats = {
+        Str: Math.max(1, Math.floor(monsterTemplate.baseStats.Str * rankScale * floorScale)),
+        Def: Math.max(1, Math.floor(monsterTemplate.baseStats.Def * rankScale * floorScale)),
+        Spd: Math.max(1, Math.floor(monsterTemplate.baseStats.Spd * rankScale * floorScale)),
+        Int: Math.max(1, Math.floor(monsterTemplate.baseStats.Int * rankScale * floorScale)),
+        Luck: Math.max(1, Math.floor(monsterTemplate.baseStats.Luck * rankScale * floorScale)),
+        Pot: 0,
+      };
+      const baseHp = (monsterStats.Str + monsterStats.Def) * 5;
+      const monsterHp = Math.max(10, Math.floor(baseHp * monsterTemplate.hpMultiplier * floorScale));
+      const monsterLevel = Math.max(1, Math.floor((safeRankIdx + 1) * 10 * floorScale * (isBossFloor ? 1.5 : 1)));
+
+      const playerStats = account.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 };
+      const playerMaxHP = calculateMaxHP(playerStats as any, safeRankIdx * 10, account.race, account.rank);
+
+      const playerCombatant: Combatant = {
+        id: accountId,
+        name: account.username,
+        stats: { ...playerStats as any, HP: playerMaxHP, maxHP: playerMaxHP },
+        race: account.race,
+        rank: account.rank,
+        elements: { elements: [], elementalPower: 0 },
+        immunities: [],
+        level: safeRankIdx * 10 + 1,
+        isPlayer: true,
+      };
+
+      const raceElement = account.race ? (raceModifiers[account.race as keyof typeof raceModifiers]?.element || null) : null;
+      if (raceElement) {
+        playerCombatant.elements = { elements: [raceElement], elementalPower: 10 + safeRankIdx * 5 };
+      }
+
+      const monsterCombatant: Combatant = {
+        id: `dungeon_monster_${run.id}_${run.currentFloor}`,
+        name: monsterTemplate.name,
+        stats: { ...monsterStats, HP: monsterHp, maxHP: monsterHp },
+        elements: { elements: [monsterTemplate.element], elementalPower: 5 + safeRankIdx * 3 },
+        immunities: [],
+        level: monsterLevel,
+        isPlayer: false,
+      };
+
+      const combatResult = runAutoCombat(playerCombatant, monsterCombatant);
+
+      const playerWon = combatResult.winner === accountId;
+
+      if (!playerWon) {
+        await db.update(zoneDungeonRuns).set({
+          completed: true,
+          completedAt: new Date(),
+        }).where(eq(zoneDungeonRuns.id, run.id));
+
+        return res.json({
+          success: false,
+          message: `You were defeated by ${monsterTemplate.name} on floor ${Math.min(run.currentFloor, config.floors)}${isBossFloor ? ' (BOSS)' : ''}! Dungeon run ended.`,
+          combat: combatResult,
+          monster: { name: monsterTemplate.name, element: monsterTemplate.element, level: monsterLevel, isBoss: isBossFloor },
+          floor: run.currentFloor,
+          runEnded: true,
+          rewards: { gold: run.totalGoldEarned, xp: run.totalXpEarned, monstersDefeated: run.monstersDefeated },
+        });
+      }
+
+      const rewards = isBossFloor ? config.completionRewards : config.floorRewards;
+      const scaledGold = Math.floor(rewards.gold * (1 + safeRankIdx * 0.1));
+      const scaledXp = Math.floor(rewards.xp * (1 + safeRankIdx * 0.1));
+      const scaledTP = Math.floor(rewards.trainingPoints * (1 + safeRankIdx * 0.05));
+      const scaledShards = rewards.soulShards;
+
+      await db.update(accounts).set({
+        gold: sql`${accounts.gold} + ${scaledGold}`,
+        trainingPoints: sql`${accounts.trainingPoints} + ${scaledTP}`,
+        soulShards: sql`${accounts.soulShards} + ${scaledShards}`,
+      }).where(eq(accounts.id, accountId));
+
+      let rareItemDropped: string | null = null;
+      if (isBossFloor && rewards.rareItemId && Math.random() < rewards.rareItemChance) {
+        rareItemDropped = rewards.rareItemId;
+      }
+
+      if (isBossFloor) {
+        await db.update(zoneDungeonRuns).set({
+          completed: true,
+          completedAt: new Date(),
+          totalGoldEarned: run.totalGoldEarned + scaledGold,
+          totalXpEarned: run.totalXpEarned + scaledXp,
+          monstersDefeated: run.monstersDefeated + 1,
+        }).where(eq(zoneDungeonRuns.id, run.id));
+
+        return res.json({
+          success: true,
+          message: `You defeated ${monsterTemplate.name} and completed ${config.name}!`,
+          combat: combatResult,
+          monster: { name: monsterTemplate.name, element: monsterTemplate.element, level: monsterLevel, isBoss: true },
+          floor: run.currentFloor,
+          dungeonCompleted: true,
+          rewards: {
+            gold: run.totalGoldEarned + scaledGold,
+            xp: run.totalXpEarned + scaledXp,
+            trainingPoints: scaledTP,
+            soulShards: scaledShards,
+            rareItemDropped,
+            monstersDefeated: run.monstersDefeated + 1,
+          },
+        });
+      }
+
+      const nextFloor = run.currentFloor + 1;
+      const isNextBoss = nextFloor > config.floors;
+
+      await db.update(zoneDungeonRuns).set({
+        currentFloor: nextFloor,
+        totalGoldEarned: run.totalGoldEarned + scaledGold,
+        totalXpEarned: run.totalXpEarned + scaledXp,
+        monstersDefeated: run.monstersDefeated + 1,
+      }).where(eq(zoneDungeonRuns.id, run.id));
+
+      res.json({
+        success: true,
+        message: `You defeated ${monsterTemplate.name}! ${isNextBoss ? 'The dungeon boss awaits...' : `Advancing to floor ${nextFloor}`}`,
+        combat: combatResult,
+        monster: { name: monsterTemplate.name, element: monsterTemplate.element, level: monsterLevel, isBoss: false },
+        floor: run.currentFloor,
+        nextFloor,
+        isNextBoss,
+        rewards: {
+          gold: scaledGold,
+          xp: scaledXp,
+          trainingPoints: scaledTP,
+          soulShards: scaledShards,
+        },
+      });
+    } catch (error) {
+      console.error("Zone dungeon fight error:", error);
+      res.status(500).json({ error: "Failed to fight in dungeon" });
+    }
+  });
+
+  app.post("/api/zone-dungeons/:zoneId/abandon", async (req, res) => {
+    try {
+      const { zoneId } = req.params;
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+
+      const activeRuns = await db.select().from(zoneDungeonRuns)
+        .where(sql`${zoneDungeonRuns.accountId} = ${accountId} AND ${zoneDungeonRuns.zoneId} = ${zoneId} AND ${zoneDungeonRuns.completed} = false`);
+
+      if (activeRuns.length === 0) {
+        return res.status(400).json({ error: "No active dungeon run to abandon" });
+      }
+
+      await db.update(zoneDungeonRuns).set({
+        completed: true,
+        completedAt: new Date(),
+      }).where(eq(zoneDungeonRuns.id, activeRuns[0].id));
+
+      res.json({
+        success: true,
+        message: "Dungeon run abandoned. You keep rewards earned so far.",
+        rewards: {
+          gold: activeRuns[0].totalGoldEarned,
+          xp: activeRuns[0].totalXpEarned,
+          monstersDefeated: activeRuns[0].monstersDefeated,
+        },
+      });
+    } catch (error) {
+      console.error("Zone dungeon abandon error:", error);
+      res.status(500).json({ error: "Failed to abandon dungeon" });
+    }
+  });
+
+  // ==================== VALORPEDIA ROUTES ====================
+  app.get("/api/accounts/:id/valorpedia", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.id);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const discoveries = await db.select().from(valorpediaDiscoveries).where(eq(valorpediaDiscoveries.accountId, req.params.id));
+      const claimedMilestones = await db.select().from(valorpediaMilestonesClaimed).where(eq(valorpediaMilestonesClaimed.accountId, req.params.id));
+
+      const discoveredSet = new Set(discoveries.map(d => `${d.category}:${d.entryId}`));
+      const claimedSet = new Set(claimedMilestones.map(m => m.milestoneId));
+
+      let totalEntries = 0;
+      let totalDiscovered = 0;
+      const categories = valorpediaCategories.map(cat => {
+        const entries = VALORPEDIA_ENTRIES[cat];
+        const discovered = entries.filter(e => discoveredSet.has(`${cat}:${e.id}`));
+        totalEntries += entries.length;
+        totalDiscovered += discovered.length;
+        return {
+          category: cat,
+          total: entries.length,
+          discovered: discovered.length,
+          entries: entries.map(e => ({
+            ...e,
+            discovered: discoveredSet.has(`${cat}:${e.id}`),
+            discoveredAt: discoveries.find(d => d.category === cat && d.entryId === e.id)?.discoveredAt || null,
+          })),
+        };
+      });
+
+      const completionPercent = totalEntries > 0 ? Math.floor((totalDiscovered / totalEntries) * 100) : 0;
+
+      const milestones = VALORPEDIA_MILESTONES.map(m => ({
+        ...m,
+        claimed: claimedSet.has(m.id),
+        eligible: completionPercent >= m.requiredPercent,
+      }));
+
+      res.json({
+        categories,
+        totalEntries,
+        totalDiscovered,
+        completionPercent,
+        milestones,
+      });
+    } catch (error) {
+      console.error("Valorpedia fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch Valorpedia data" });
+    }
+  });
+
+  app.post("/api/accounts/:id/valorpedia/discover", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.id);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const { category, entryId } = req.body;
+      if (!valorpediaCategories.includes(category)) {
+        return res.status(400).json({ error: "Invalid category" });
+      }
+
+      const entries = VALORPEDIA_ENTRIES[category as keyof typeof VALORPEDIA_ENTRIES];
+      if (!entries.find(e => e.id === entryId)) {
+        return res.status(400).json({ error: "Invalid entry ID" });
+      }
+
+      const existing = await db.select().from(valorpediaDiscoveries).where(
+        sql`${valorpediaDiscoveries.accountId} = ${req.params.id} AND ${valorpediaDiscoveries.category} = ${category} AND ${valorpediaDiscoveries.entryId} = ${entryId}`
+      );
+
+      if (existing.length > 0) {
+        return res.json({ success: true, alreadyDiscovered: true });
+      }
+
+      await db.insert(valorpediaDiscoveries).values({
+        accountId: req.params.id,
+        category,
+        entryId,
+      });
+
+      res.json({ success: true, alreadyDiscovered: false });
+    } catch (error) {
+      console.error("Valorpedia discover error:", error);
+      res.status(500).json({ error: "Failed to record discovery" });
+    }
+  });
+
+  app.post("/api/accounts/:id/valorpedia/claim-milestone", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.id);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const { milestoneId } = req.body;
+      const milestone = VALORPEDIA_MILESTONES.find(m => m.id === milestoneId);
+      if (!milestone) return res.status(400).json({ error: "Invalid milestone" });
+
+      const alreadyClaimed = await db.select().from(valorpediaMilestonesClaimed).where(
+        sql`${valorpediaMilestonesClaimed.accountId} = ${req.params.id} AND ${valorpediaMilestonesClaimed.milestoneId} = ${milestoneId}`
+      );
+      if (alreadyClaimed.length > 0) {
+        return res.status(400).json({ error: "Milestone already claimed" });
+      }
+
+      const discoveries = await db.select().from(valorpediaDiscoveries).where(eq(valorpediaDiscoveries.accountId, req.params.id));
+      let totalEntries = 0;
+      for (const cat of valorpediaCategories) {
+        totalEntries += VALORPEDIA_ENTRIES[cat].length;
+      }
+      const completionPercent = totalEntries > 0 ? Math.floor((discoveries.length / totalEntries) * 100) : 0;
+
+      if (completionPercent < milestone.requiredPercent) {
+        return res.status(400).json({ error: `Need ${milestone.requiredPercent}% completion (currently ${completionPercent}%)` });
+      }
+
+      await db.insert(valorpediaMilestonesClaimed).values({
+        accountId: req.params.id,
+        milestoneId,
+      });
+
+      let goldReward = 0;
+      let rubiesReward = 0;
+      if (milestone.rewards.gold) {
+        goldReward = milestone.rewards.gold;
+        await db.update(accounts).set({
+          gold: sql`${accounts.gold} + ${goldReward}`,
+        }).where(eq(accounts.id, req.params.id));
+      }
+      if (milestone.rewards.rubies) {
+        rubiesReward = milestone.rewards.rubies;
+        await db.update(accounts).set({
+          rubies: sql`${accounts.rubies} + ${rubiesReward}`,
+        }).where(eq(accounts.id, req.params.id));
+      }
+      if (milestone.rewards.title) {
+        await db.insert(playerTitles).values({
+          accountId: req.params.id,
+          titleId: `valorpedia_${milestoneId}`,
+          category: "event",
+          name: milestone.rewards.title,
+        });
+      }
+
+      res.json({
+        success: true,
+        rewards: { gold: goldReward, rubies: rubiesReward, title: milestone.rewards.title || null },
+      });
+    } catch (error) {
+      console.error("Valorpedia milestone claim error:", error);
+      res.status(500).json({ error: "Failed to claim milestone" });
+    }
+  });
+
   return httpServer;
+}
+
+function formatMonsterResponse(monster: SpawnedMonster) {
+  return {
+    id: monster.id,
+    name: monster.template.name,
+    element: monster.template.element,
+    isBoss: monster.template.isBoss,
+    level: monster.level,
+    hp: monster.hp,
+    maxHp: monster.maxHp,
+    stats: monster.scaledStats,
+    source: monster.source,
+    expiresAt: monster.expiresAt,
+    weatherExclusive: monster.template.weatherExclusive || null,
+  };
 }

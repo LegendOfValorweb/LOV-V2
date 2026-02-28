@@ -296,7 +296,7 @@ export default function ValorShop() {
   const regularBundles = VALOR_BUNDLES.filter(b => !b.featured);
 
   return (
-    <div className="min-h-screen relative">
+    <div className="h-full relative">
       <div 
         className="absolute inset-0 bg-cover bg-center"
         style={{ backgroundImage: "url('/backdrops/shop.png')" }}

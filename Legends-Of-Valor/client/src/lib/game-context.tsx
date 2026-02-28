@@ -213,6 +213,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
           equippedCharacterSkin: "default",
           equippedPetSkin: "default",
           equippedBirdSkin: "default",
+          energy: 50,
+          maxEnergy: 50,
+          lastEnergyUpdate: new Date(),
+          ghostState: false,
+          weaknessDebuffExpires: null,
+          heritageCount: 0,
+          heritageBonusPercent: 0,
         } as Account;
       }
 

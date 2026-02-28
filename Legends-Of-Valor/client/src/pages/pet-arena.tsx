@@ -175,14 +175,14 @@ export default function PetArena() {
 
   if (!account) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="h-full flex items-center justify-center">
         <Button onClick={() => navigate("/")}>Return to Login</Button>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground relative">
+    <div className="h-full bg-background text-foreground relative">
       <div 
         className="absolute inset-0 bg-cover bg-center opacity-30"
         style={{ backgroundImage: "url('/assets/zone-arena.png')" }}

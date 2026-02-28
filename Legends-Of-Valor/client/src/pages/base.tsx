@@ -15,6 +15,7 @@ import { useGame } from "@/lib/game-context";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { playerRanks } from "@shared/schema";
+import { ZoneScene } from "@/components/zone-scene";
 import {
   Dialog,
   DialogContent,
@@ -46,40 +47,45 @@ interface BaseTier {
 const baseTiers: BaseTier[] = [
   {
     tier: 1,
-    name: "Humble Camp",
+    name: "Camp",
     description: "A simple camp with basic amenities.",
     requirements: { gold: 0, rank: "Novice" },
     rooms: ["storage", "rest"],
   },
   {
     tier: 2,
-    name: "Wooden Lodge",
+    name: "Lodge",
     description: "A sturdy wooden structure with more space.",
     requirements: { gold: 500000, rank: "Journeyman" },
-    rooms: ["storage", "rest", "crafting"],
+    rooms: ["storage", "rest", "weapon_locker", "crafting"],
   },
   {
     tier: 3,
-    name: "Stone Keep",
+    name: "Keep",
     description: "A fortified stone building with defenses.",
     requirements: { gold: 5000000, rank: "Expert" },
-    rooms: ["storage", "rest", "crafting", "training", "defenses"],
+    rooms: ["storage", "rest", "weapon_locker", "crafting", "training", "defenses"],
   },
   {
     tier: 4,
-    name: "Grand Manor",
+    name: "Manor",
     description: "A luxurious manor with all amenities.",
-    requirements: { gold: 50000000, rank: "Grand Master" },
-    rooms: ["storage", "rest", "crafting", "training", "vault", "defenses"],
+    requirements: { gold: 50000000, rank: "Grandmaster" },
+    rooms: ["storage", "rest", "weapon_locker", "crafting", "training", "vault", "defenses"],
   },
   {
     tier: 5,
-    name: "Fortress Castle",
+    name: "Castle",
     description: "An impenetrable fortress befitting a legend.",
     requirements: { gold: 500000000, rank: "Legend" },
-    rooms: ["storage", "rest", "crafting", "training", "vault", "defenses"],
+    rooms: ["storage", "rest", "weapon_locker", "crafting", "training", "vault", "defenses"],
   },
 ];
+
+const ROOM_MAX_LEVEL_BY_TIER: Record<number, number> = { 1: 3, 2: 5, 3: 7, 4: 9, 5: 10 };
+const ROOM_UPGRADE_BASE_COST: Record<string, number> = {
+  storage: 5000, weapon_locker: 8000, rest: 3000, crafting: 10000, training: 15000, vault: 25000, defenses: 50000,
+};
 
 const baseRooms: BaseRoom[] = [
   {
@@ -93,14 +99,24 @@ const baseRooms: BaseRoom[] = [
     benefits: ["+100 storage capacity per level", "Auto-sort items at level 5"],
   },
   {
+    id: "weapon_locker",
+    name: "Weapon Locker",
+    description: "Store extra weapons and armor sets.",
+    icon: <Swords className="w-5 h-5" />,
+    level: 1,
+    maxLevel: 10,
+    upgradeCost: 8000,
+    benefits: ["+2 weapon/armor slots per level", "Quick-swap loadouts at level 5"],
+  },
+  {
     id: "rest",
     name: "Rest Area",
-    description: "Recover HP and energy between adventures.",
+    description: "Recover HP and energy faster.",
     icon: <Home className="w-5 h-5" />,
     level: 1,
     maxLevel: 10,
     upgradeCost: 3000,
-    benefits: ["+10% HP recovery per level", "Passive healing at level 5"],
+    benefits: ["+10% HP regen per level", "2x energy regen while at base"],
   },
   {
     id: "crafting",
@@ -115,32 +131,32 @@ const baseRooms: BaseRoom[] = [
   {
     id: "training",
     name: "Training Grounds",
-    description: "Train your stats and practice combat.",
+    description: "Train stats offline. Accumulates XP while away.",
     icon: <Dumbbell className="w-5 h-5" />,
     level: 1,
     maxLevel: 10,
     upgradeCost: 15000,
-    benefits: ["+10% training efficiency per level", "Auto-train at level 10"],
+    benefits: ["Offline stat XP accumulation", "+XP/hour per level"],
   },
   {
     id: "vault",
     name: "Secure Vault",
-    description: "Store gold and valuables with protection.",
+    description: "Store gold safely with daily interest.",
     icon: <Coins className="w-5 h-5" />,
     level: 1,
     maxLevel: 10,
     upgradeCost: 25000,
-    benefits: ["Interest on stored gold", "Protection from PvP losses"],
+    benefits: ["Daily interest on stored gold", "Protected from raids/PvP losses"],
   },
   {
     id: "defenses",
     name: "Defense Tower",
-    description: "Protect your base from raids and attackers.",
+    description: "Arrow Traps, Magic Wards and more.",
     icon: <Shield className="w-5 h-5" />,
     level: 1,
     maxLevel: 10,
     upgradeCost: 50000,
-    benefits: ["Guards and traps", "+10% defense per level"],
+    benefits: ["Arrow Traps deal damage to raiders", "Magic Wards reduce gold lost"],
   },
 ];
 
@@ -178,6 +194,7 @@ export default function Base() {
   const [roomLevels, setRoomLevels] = useState<Record<string, number>>(() => {
     return (account as any)?.baseRoomLevels || {
       storage: 1,
+      weapon_locker: 1,
       rest: 1,
       crafting: 1,
       training: 1,
@@ -185,6 +202,9 @@ export default function Base() {
       defenses: 1,
     };
   });
+  const [selectedTrainingStat, setSelectedTrainingStat] = useState<string>("Str");
+  const [isTraining, setIsTraining] = useState(false);
+  const [vaultAmount, setVaultAmount] = useState<string>("");
 
   const { data: baseSkins = [] } = useQuery<BaseSkin[]>({
     queryKey: ["/api/base-skins"],
@@ -263,36 +283,113 @@ export default function Base() {
     currentTierData.rooms.includes(room.id)
   );
 
+  const { data: trainingStatus, refetch: refetchTraining } = useQuery<any>({
+    queryKey: ["/api/accounts", account?.id, "offline-training-status"],
+    queryFn: async () => {
+      if (!account?.id) return { active: false };
+      const res = await fetch(`/api/accounts/${account.id}/offline-training/status`);
+      return res.json();
+    },
+    enabled: !!account?.id,
+    refetchInterval: 30000,
+  });
+
+  const { data: vaultStatus, refetch: refetchVault } = useQuery<any>({
+    queryKey: ["/api/accounts", account?.id, "vault-status"],
+    queryFn: async () => {
+      if (!account?.id) return null;
+      const res = await fetch(`/api/accounts/${account.id}/vault/status`);
+      return res.json();
+    },
+    enabled: !!account?.id,
+  });
+
   const handleUpgradeRoom = async (roomId: string) => {
     const currentLevel = roomLevels[roomId] || 1;
-    const room = baseRooms.find((r) => r.id === roomId);
-    if (!room || currentLevel >= room.maxLevel || !account) return;
+    const maxLevel = ROOM_MAX_LEVEL_BY_TIER[currentTier] || 3;
+    if (currentLevel >= maxLevel || !account) return;
     
-    const newLevel = currentLevel + 1;
-    const updatedLevels = {
-      ...roomLevels,
-      [roomId]: newLevel,
-    };
-    setRoomLevels(updatedLevels);
-    
-    // Save to database
     try {
       const res = await fetch(`/api/accounts/${account.id}/room-levels`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roomId, newLevel }),
+        body: JSON.stringify({ roomId }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.roomLevels) {
-          setAccount({
-            ...account,
-            baseRoomLevels: data.roomLevels
-          });
-        }
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Upgrade Failed", description: data.error, variant: "destructive" });
+        return;
       }
+      if (data.roomLevels) {
+        setRoomLevels(data.roomLevels);
+        setAccount({ ...account, baseRoomLevels: data.roomLevels, gold: data.account?.gold ?? account.gold });
+      }
+      toast({ title: "Room Upgraded!", description: `Spent ${(data.goldSpent || 0).toLocaleString()} gold.` });
     } catch (error) {
-      console.error("Failed to save room level:", error);
+      toast({ title: "Error", description: "Failed to upgrade room", variant: "destructive" });
+    }
+  };
+
+  const handleStartTraining = async () => {
+    if (!account) return;
+    setIsTraining(true);
+    try {
+      const res = await apiRequest("POST", `/api/accounts/${account.id}/offline-training/start`, { stat: selectedTrainingStat });
+      const data = await res.json();
+      toast({ title: "Training Started!", description: data.message });
+      refetchTraining();
+    } catch (error: any) {
+      toast({ title: "Training Failed", description: error.message || "Could not start training", variant: "destructive" });
+    } finally {
+      setIsTraining(false);
+    }
+  };
+
+  const handleStopTraining = async () => {
+    if (!account) return;
+    setIsTraining(true);
+    try {
+      const res = await apiRequest("POST", `/api/accounts/${account.id}/offline-training/stop`, {});
+      const data = await res.json();
+      toast({ title: "Training Complete!", description: data.message });
+      refetchTraining();
+      refetchAccount();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Could not stop training", variant: "destructive" });
+    } finally {
+      setIsTraining(false);
+    }
+  };
+
+  const handleVaultDeposit = async () => {
+    if (!account) return;
+    const amount = parseInt(vaultAmount);
+    if (!amount || amount <= 0) return;
+    try {
+      const res = await apiRequest("POST", `/api/accounts/${account.id}/vault/deposit`, { amount });
+      const data = await res.json();
+      toast({ title: "Deposited!", description: data.message });
+      if (data.account) setAccount(data.account);
+      setVaultAmount("");
+      refetchVault();
+    } catch (error: any) {
+      toast({ title: "Deposit Failed", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleVaultWithdraw = async () => {
+    if (!account) return;
+    const amount = parseInt(vaultAmount);
+    if (!amount || amount <= 0) return;
+    try {
+      const res = await apiRequest("POST", `/api/accounts/${account.id}/vault/withdraw`, { amount });
+      const data = await res.json();
+      toast({ title: "Withdrawn!", description: data.message });
+      if (data.account) setAccount(data.account);
+      setVaultAmount("");
+      refetchVault();
+    } catch (error: any) {
+      toast({ title: "Withdrawal Failed", description: error.message, variant: "destructive" });
     }
   };
 
@@ -366,25 +463,23 @@ export default function Base() {
     }
   };
 
-  const tierCosts = [0, 500000, 5000000, 50000000, 500000000];
-  const nextTierCost = currentTier < 5 ? tierCosts[currentTier] : 0;
+  const nextTierCost = currentTier < 5 ? [0, 500000, 5000000, 50000000, 500000000][currentTier] : 0;
 
   return (
-    <div className="min-h-screen relative">
-      <div 
-        className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: "url('/backdrops/base.png')" }}
-      />
-      <div className="absolute inset-0 bg-black/50" />
-      
-      <div className="relative z-10 min-h-screen p-4">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <Castle className="w-8 h-8 text-primary" />
-              <h1 className="font-serif text-3xl font-bold text-foreground">Your Base</h1>
+    <ZoneScene
+      zoneName="Home Base"
+      backdrop="/backdrops/base.png"
+      ambientClass="zone-ambient-shop"
+      overlayOpacity={0.35}
+    >
+      <div className="h-full flex flex-col p-3">
+        <div className="flex-shrink-0 mb-3">
+          <div className="flex items-center justify-between">
+            <div className="rpg-panel px-3 py-1.5 flex items-center gap-2">
+              <Castle className="w-5 h-5 text-primary" />
+              <span className="rpg-heading text-sm">{baseTiers[currentTier - 1]?.name || "Your Base"}</span>
           </div>
-          <Button variant="outline" onClick={() => navigate("/world-map")}>
+          <Button variant="outline" size="sm" className="rpg-button-secondary text-xs" onClick={() => navigate("/world-map")}>
             World Map
           </Button>
         </div>
@@ -459,8 +554,10 @@ export default function Base() {
             </Card>
 
             <Tabs defaultValue="rooms">
-              <TabsList className="w-full">
+              <TabsList className="w-full flex-wrap">
                 <TabsTrigger value="rooms" className="flex-1">Rooms</TabsTrigger>
+                <TabsTrigger value="training" className="flex-1">Training</TabsTrigger>
+                <TabsTrigger value="vault" className="flex-1">Vault</TabsTrigger>
                 <TabsTrigger value="defenses" className="flex-1">Defenses</TabsTrigger>
                 <TabsTrigger value="raids" className="flex-1">Raids</TabsTrigger>
                 <TabsTrigger value="events" className="flex-1">Events</TabsTrigger>
@@ -471,7 +568,10 @@ export default function Base() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {availableRooms.map((room) => {
                     const level = roomLevels[room.id] || 1;
-                    const progress = (level / room.maxLevel) * 100;
+                    const maxLevel = ROOM_MAX_LEVEL_BY_TIER[currentTier] || 3;
+                    const progress = (level / maxLevel) * 100;
+                    const baseCost = ROOM_UPGRADE_BASE_COST[room.id] || 5000;
+                    const upgradeCost = baseCost * level;
                     
                     return (
                       <Card key={room.id}>
@@ -482,7 +582,7 @@ export default function Base() {
                               <CardTitle className="text-base">{room.name}</CardTitle>
                               <CardDescription className="text-xs">{room.description}</CardDescription>
                             </div>
-                            <Badge>Lv. {level}</Badge>
+                            <Badge>Lv. {level}/{maxLevel}</Badge>
                           </div>
                         </CardHeader>
                         <CardContent>
@@ -498,11 +598,11 @@ export default function Base() {
                           <Button 
                             size="sm" 
                             className="w-full"
-                            disabled={level >= room.maxLevel}
+                            disabled={level >= maxLevel}
                             onClick={() => handleUpgradeRoom(room.id)}
                           >
                             <Coins className="w-4 h-4 mr-2" />
-                            Upgrade ({(room.upgradeCost * level).toLocaleString()} Gold)
+                            {level >= maxLevel ? "Max Level" : `Upgrade (${upgradeCost.toLocaleString()} Gold)`}
                           </Button>
                         </CardContent>
                       </Card>
@@ -511,6 +611,139 @@ export default function Base() {
                 </div>
               </TabsContent>
               
+              <TabsContent value="training" className="mt-4">
+                <Card>
+                  <CardContent className="p-6">
+                    {currentTier >= 3 ? (
+                      <div className="space-y-6">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-serif text-lg font-semibold flex items-center gap-2">
+                            <Dumbbell className="w-5 h-5 text-orange-500" />
+                            Offline Training
+                          </h3>
+                          <Badge variant="secondary">Lv. {roomLevels.training || 1}</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Train a stat while you're away. XP accumulates automatically for up to 24 hours.
+                          Rate: {trainingStatus?.xpPerHour || 0} XP/hour
+                        </p>
+
+                        {trainingStatus?.active ? (
+                          <div className="p-4 rounded-lg bg-orange-500/10 border border-orange-500/30">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-medium">Training: {trainingStatus.stat}</span>
+                              <Badge className="bg-orange-600">{trainingStatus.elapsedHours}h elapsed</Badge>
+                            </div>
+                            <p className="text-sm text-muted-foreground mb-3">
+                              Accumulated: +{trainingStatus.accumulatedXp} {trainingStatus.stat} XP
+                            </p>
+                            <Button
+                              onClick={handleStopTraining}
+                              disabled={isTraining}
+                              variant="destructive"
+                              className="w-full"
+                            >
+                              {isTraining ? "Collecting..." : "Stop & Collect XP"}
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            <div className="grid grid-cols-5 gap-2">
+                              {["Str", "Def", "Spd", "Int", "Luck"].map((stat) => (
+                                <Button
+                                  key={stat}
+                                  variant={selectedTrainingStat === stat ? "default" : "outline"}
+                                  size="sm"
+                                  onClick={() => setSelectedTrainingStat(stat)}
+                                >
+                                  {stat}
+                                </Button>
+                              ))}
+                            </div>
+                            <Button
+                              onClick={handleStartTraining}
+                              disabled={isTraining}
+                              className="w-full"
+                            >
+                              <Dumbbell className="w-4 h-4 mr-2" />
+                              {isTraining ? "Starting..." : `Start Training ${selectedTrainingStat}`}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-center text-muted-foreground py-6">
+                        <Dumbbell className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                        <p>Training Grounds unlock at Tier 3 (Keep)</p>
+                        <p className="text-sm mt-2">Upgrade your base to train stats while offline.</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="vault" className="mt-4">
+                <Card>
+                  <CardContent className="p-6">
+                    {currentTier >= 4 ? (
+                      <div className="space-y-6">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-serif text-lg font-semibold flex items-center gap-2">
+                            <Coins className="w-5 h-5 text-yellow-500" />
+                            Secure Vault
+                          </h3>
+                          <Badge variant="secondary">Lv. {roomLevels.vault || 1}</Badge>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                            <p className="text-xs text-muted-foreground">Vault Gold</p>
+                            <p className="text-lg font-bold text-yellow-500">{(vaultStatus?.vaultGold || 0).toLocaleString()}</p>
+                          </div>
+                          <div className="p-3 rounded-lg bg-secondary/50">
+                            <p className="text-xs text-muted-foreground">Capacity</p>
+                            <p className="text-lg font-bold">{(vaultStatus?.maxCapacity || 0).toLocaleString()}</p>
+                          </div>
+                        </div>
+
+                        <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                          <p className="text-xs text-muted-foreground">Daily Interest</p>
+                          <p className="text-sm font-medium text-green-500">
+                            +{(vaultStatus?.dailyInterest || 0).toLocaleString()} gold/day ({((vaultStatus?.interestRate || 0) * 100).toFixed(1)}%)
+                          </p>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <input
+                            type="number"
+                            value={vaultAmount}
+                            onChange={(e) => setVaultAmount(e.target.value)}
+                            placeholder="Amount"
+                            className="flex-1 px-3 py-2 rounded-md border bg-background text-sm"
+                          />
+                          <Button size="sm" onClick={handleVaultDeposit} disabled={!vaultAmount}>
+                            Deposit
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={handleVaultWithdraw} disabled={!vaultAmount}>
+                            Withdraw
+                          </Button>
+                        </div>
+
+                        <p className="text-xs text-muted-foreground">
+                          Gold in the vault is protected from raids and PvP losses. Interest is calculated on login.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="text-center text-muted-foreground py-6">
+                        <Coins className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                        <p>Secure Vault unlocks at Tier 4 (Manor)</p>
+                        <p className="text-sm mt-2">Store gold safely and earn daily interest.</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
               <TabsContent value="defenses" className="mt-4">
                 <Card>
                   <CardContent className="p-6">
@@ -969,7 +1202,21 @@ export default function Base() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Rooms Unlocked</span>
-                  <span>{currentTierData.rooms.length} / 6</span>
+                  <span>{currentTierData.rooms.length} / 7</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Room Max Level</span>
+                  <span>{ROOM_MAX_LEVEL_BY_TIER[currentTier] || 3}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Vault Gold</span>
+                  <span className="text-yellow-500">{((account as any).vaultGold || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Training</span>
+                  <span className={trainingStatus?.active ? "text-orange-500" : "text-muted-foreground"}>
+                    {trainingStatus?.active ? `${trainingStatus.stat} (${trainingStatus.elapsedHours}h)` : "Idle"}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Current Skin</span>
@@ -1174,6 +1421,6 @@ export default function Base() {
         </Dialog>
         </div>
       </div>
-    </div>
+    </ZoneScene>
   );
 }

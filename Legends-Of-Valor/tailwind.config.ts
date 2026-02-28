@@ -106,6 +106,9 @@ export default {
         sans: ["var(--font-sans)"],
         serif: ["var(--font-serif)"],
         mono: ["var(--font-mono)"],
+        pixel: ["var(--font-pixel)"],
+        medieval: ["var(--font-medieval)"],
+        decorative: ["var(--font-decorative)"],
       },
       keyframes: {
         "accordion-down": {
@@ -116,10 +119,36 @@ export default {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        "rpg-glow-pulse": {
+          "0%, 100%": { opacity: "0.6" },
+          "50%": { opacity: "1" },
+        },
+        "rpg-float": {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-4px)" },
+        },
+        "rpg-shimmer": {
+          "0%": { backgroundPosition: "-200% center" },
+          "100%": { backgroundPosition: "200% center" },
+        },
+        "rarity-sparkle": {
+          "0%, 100%": { boxShadow: "0 0 4px currentColor" },
+          "50%": { boxShadow: "0 0 12px currentColor, 0 0 24px currentColor" },
+        },
+        "damage-float": {
+          "0%": { opacity: "1", transform: "translateY(0) scale(1)" },
+          "50%": { opacity: "0.8", transform: "translateY(-20px) scale(1.2)" },
+          "100%": { opacity: "0", transform: "translateY(-40px) scale(0.8)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "rpg-glow": "rpg-glow-pulse 2s ease-in-out infinite",
+        "rpg-float": "rpg-float 3s ease-in-out infinite",
+        "rpg-shimmer": "rpg-shimmer 3s linear infinite",
+        "rarity-sparkle": "rarity-sparkle 2s ease-in-out infinite",
+        "damage-float": "damage-float 1s ease-out forwards",
       },
     },
   },
