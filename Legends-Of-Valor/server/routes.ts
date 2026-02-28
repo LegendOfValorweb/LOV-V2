@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { getWorldTimeInfo, getDayNightState } from "./weather-system";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, hellZoneSessions, hellZoneParticipants } from "@shared/schema";
+import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties } from "@shared/schema";
 import { z } from "zod";
 import type { Account, Event, Challenge, PlayerRace, PlayerGender } from "@shared/schema";
 import {
@@ -3345,7 +3345,7 @@ export async function registerRoutes(
   app.post("/api/admin/pets", async (req, res) => {
     try {
       const { petElements } = await import("@shared/schema");
-      const { accountId, name, element, tier = "egg", exp = 0, stats = { Str: 1, Spd: 1, Luck: 1, ElementalPower: 1 } } = req.body;
+      const { accountId, name, element, tier = "egg", exp = 0, stats = { Str: 1, Spd: 1, Luck: 1, ElementalPower: 1 }, abilities = [] } = req.body;
       
       if (!accountId || !name) {
         return res.status(400).json({ error: "Account ID and pet name are required" });
@@ -3365,6 +3365,7 @@ export async function registerRoutes(
         tier,
         exp,
         stats,
+        abilities: Array.isArray(abilities) ? abilities : [],
       });
 
       // Broadcast to the player that they received a new pet
@@ -3384,10 +3385,11 @@ export async function registerRoutes(
 
   app.patch("/api/admin/pets/:id", async (req, res) => {
     try {
-      const { name, element, elements, tier, exp, stats, accountId } = req.body;
+      const { name, element, elements, tier, exp, stats, accountId, abilities } = req.body;
       const updateData: any = {};
       if (name !== undefined) updateData.name = name;
       if (element !== undefined) updateData.element = element;
+      if (abilities !== undefined) updateData.abilities = Array.isArray(abilities) ? abilities : [];
       // Handle elements array update - this is what the NPC battle uses
       if (elements !== undefined) {
         updateData.elements = Array.isArray(elements) ? elements : [elements];
@@ -11112,6 +11114,12 @@ export async function registerRoutes(
     mystic_tower: { difficulty: "hard", enemies: ["Tower Guardian", "Arcane Sentinel", "Floor Boss"] },
   };
 
+  const THUNDERSTORM_BOSSES = [
+    { name: "Storm Colossus", attack: 120, defense: 80, hp: 2000, xpReward: 3000, goldReward: 5000, archetype: "boss", isWeatherBoss: true },
+    { name: "Lightning Wraith", attack: 100, defense: 60, hp: 1500, xpReward: 2500, goldReward: 4000, archetype: "boss", isWeatherBoss: true },
+    { name: "Thunder Drake", attack: 140, defense: 90, hp: 2500, xpReward: 4000, goldReward: 7000, archetype: "boss", isWeatherBoss: true },
+  ];
+
   const WEATHER_SPAWN_MODS: Record<string, Record<string, number>> = {
     thunderstorm: { boss: 3.0, champion: 1.5, elite: 1.2, minion: 0.6 },
     rain:         { elite: 1.8, champion: 1.3, minion: 0.8 },
@@ -13532,6 +13540,40 @@ export async function registerRoutes(
         return res.json({ monsterActive: true, monster: formatMonsterResponse(existing) });
       }
 
+      const currentWeather = getZoneWeather(req.params.zoneId);
+      if (currentWeather.type === "thunderstorm" && Math.random() < 0.25) {
+        const boss = THUNDERSTORM_BOSSES[Math.floor(Math.random() * THUNDERSTORM_BOSSES.length)];
+        await db.insert(monsterSpawnLog).values({
+          accountId,
+          zoneId: req.params.zoneId,
+          monsterName: boss.name,
+          monsterElement: "Lightning",
+          monsterLevel: 50,
+          isBoss: true,
+          source: "weather",
+          weather: "thunderstorm",
+        });
+        return res.json({
+          monsterActive: true,
+          monster: {
+            id: `weather-boss-${Date.now()}`,
+            name: boss.name,
+            element: "Lightning",
+            isBoss: true,
+            isWeatherBoss: true,
+            level: 50,
+            hp: boss.hp,
+            maxHp: boss.hp,
+            stats: { Str: boss.attack, Def: boss.defense, Spd: 80, Int: 60, Luck: 40 },
+            source: "weather",
+            expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+            weatherExclusive: "thunderstorm",
+            goldReward: boss.goldReward,
+            xpReward: boss.xpReward,
+          },
+        });
+      }
+
       const spawned = spawnMonster(req.params.zoneId, accountId, account.rank || "Novice", "timer");
       if (!spawned) return res.status(500).json({ error: "Failed to spawn monster" });
 
@@ -13543,7 +13585,7 @@ export async function registerRoutes(
         monsterLevel: spawned.level,
         isBoss: spawned.template.isBoss,
         source: "timer",
-        weather: getZoneWeather(req.params.zoneId).type,
+        weather: currentWeather.type,
       });
 
       res.json({ monsterActive: true, monster: formatMonsterResponse(spawned) });
@@ -13652,11 +13694,52 @@ export async function registerRoutes(
         completedAt: new Date(),
       }).where(eq(monsterSpawnLog.monsterName, monster.template.name));
 
+      let weaponEffectTriggered: string | null = null;
+      if (playerWon && account.equipped) {
+        const equippedAny = account.equipped as any;
+        const weaponId: string = equippedAny?.weapon || "";
+        const tierName = weaponId.split("-")[0] || "";
+        const TIER_WEAPON_EFFECTS: Record<string, { effect: string; critBonus: number; lifeStealPct: number; doubleStrike: boolean }> = {
+          normal:           { effect: "Stun 5%",      critBonus: 0.05, lifeStealPct: 0,    doubleStrike: false },
+          super_rare:       { effect: "Critical +8%",  critBonus: 0.08, lifeStealPct: 0.05, doubleStrike: false },
+          x_tier:           { effect: "Freeze 2t",     critBonus: 0.10, lifeStealPct: 0.08, doubleStrike: false },
+          umr:              { effect: "Double Strike",  critBonus: 0,    lifeStealPct: 0.12, doubleStrike: true  },
+          ssumr:            { effect: "Burn 4t",        critBonus: 0.15, lifeStealPct: 0,    doubleStrike: false },
+          divine:           { effect: "Life Steal 20%", critBonus: 0.20, lifeStealPct: 0.20, doubleStrike: false },
+          initiate:         { effect: "Stun 5%",        critBonus: 0.05, lifeStealPct: 0,    doubleStrike: false },
+          journeyman:       { effect: "Freeze 1t",      critBonus: 0,    lifeStealPct: 0.05, doubleStrike: false },
+          adept:            { effect: "Burn 3t",         critBonus: 0.08, lifeStealPct: 0,    doubleStrike: false },
+          expert:           { effect: "Life Steal 8%",  critBonus: 0.10, lifeStealPct: 0.08, doubleStrike: false },
+          master:           { effect: "Double Strike",  critBonus: 0,    lifeStealPct: 0.12, doubleStrike: true  },
+          grandmaster:      { effect: "Critical +15%",  critBonus: 0.15, lifeStealPct: 0,    doubleStrike: false },
+          champion:         { effect: "Poison 5t",      critBonus: 0,    lifeStealPct: 0.15, doubleStrike: false },
+          overlord:         { effect: "Critical +18%",  critBonus: 0.18, lifeStealPct: 0.18, doubleStrike: false },
+          sovereign:        { effect: "Double Strike",  critBonus: 0.20, lifeStealPct: 0,    doubleStrike: true  },
+          ascendant:        { effect: "Life Steal 20%", critBonus: 0,    lifeStealPct: 0.20, doubleStrike: false },
+          legend:           { effect: "Critical +12%",  critBonus: 0.12, lifeStealPct: 0,    doubleStrike: false },
+          elite:            { effect: "Double Strike",  critBonus: 0.20, lifeStealPct: 0.20, doubleStrike: true  },
+          mythical_legend:  { effect: "Life Steal 25%", critBonus: 0,    lifeStealPct: 0.25, doubleStrike: false },
+        };
+        const weaponFx = TIER_WEAPON_EFFECTS[tierName];
+        if (weaponFx && Math.random() < 0.35) {
+          weaponEffectTriggered = weaponFx.effect;
+          let bonusGold = 0;
+          if (weaponFx.doubleStrike) bonusGold = rewards.gold;
+          else if (weaponFx.critBonus > 0 && Math.random() < weaponFx.critBonus) bonusGold = Math.floor(rewards.gold * 0.5);
+          if (weaponFx.lifeStealPct > 0) bonusGold += Math.floor(rewards.gold * weaponFx.lifeStealPct * 0.5);
+          if (bonusGold > 0) {
+            rewards.gold += bonusGold;
+            await db.update(accounts).set({ gold: (account.gold || 0) + rewards.gold }).where(eq(accounts.id, accountId));
+          }
+        }
+      }
+
       res.json({
         success: true,
         playerWon,
         combat: result,
         rewards: playerWon ? rewards : null,
+        weaponEffectTriggered,
         monster: {
           name: monster.template.name,
           element: monster.template.element,
@@ -16011,6 +16094,302 @@ export async function registerRoutes(
     } catch (error) {
       res.status(500).json({ error: "Failed to create shard event" });
     }
+  });
+
+  // ─── T004: Zone Conquest ────────────────────────────────────────────────────
+  app.get("/api/zone-conquests", async (_req, res) => {
+    try {
+      const rows = await db.select().from(zoneConquests);
+      const allGuilds = await storage.getAllGuilds ? await storage.getAllGuilds() : [];
+      const result = rows.map(r => ({
+        ...r,
+        guildName: (allGuilds as any[]).find((g: any) => g.id === r.guildId)?.name || null,
+      }));
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch zone conquests" });
+    }
+  });
+
+  app.post("/api/zone-conquests/:zoneId/claim", async (req, res) => {
+    try {
+      const { accountId } = req.body;
+      const account = await storage.getAccount(accountId);
+      if (!account || !account.guildId) return res.status(400).json({ error: "You must be in a guild to claim a zone" });
+
+      const existing = await db.select().from(zoneConquests).where(eq(zoneConquests.zoneId, req.params.zoneId));
+      if (existing.length > 0 && existing[0].guildId) {
+        return res.status(409).json({ error: "Zone is already claimed by another guild" });
+      }
+
+      const guild = await storage.getGuild(account.guildId);
+      if (!guild) return res.status(404).json({ error: "Guild not found" });
+      const bank = guild.bank as any;
+      if ((bank?.gold || 0) < 5000) {
+        return res.status(400).json({ error: "Your guild needs at least 5,000 gold in the bank to claim a zone" });
+      }
+
+      await db.update(guildsTable).set({ bank: { ...bank, gold: (bank.gold || 0) - 5000 } }).where(eq(guildsTable.id, account.guildId));
+
+      if (existing.length > 0) {
+        await db.update(zoneConquests).set({ guildId: account.guildId, conqueredAt: new Date(), defensePoints: 100 }).where(eq(zoneConquests.zoneId, req.params.zoneId));
+      } else {
+        await db.insert(zoneConquests).values({ zoneId: req.params.zoneId, guildId: account.guildId, taxRate: 5, defensePoints: 100 });
+      }
+      res.json({ success: true, message: "Zone claimed!" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to claim zone" });
+    }
+  });
+
+  app.post("/api/zone-conquests/:zoneId/attack", async (req, res) => {
+    try {
+      const { accountId } = req.body;
+      const account = await storage.getAccount(accountId);
+      if (!account || !account.guildId) return res.status(400).json({ error: "You must be in a guild to attack a zone" });
+
+      const rows = await db.select().from(zoneConquests).where(eq(zoneConquests.zoneId, req.params.zoneId));
+      if (rows.length === 0 || !rows[0].guildId) return res.status(400).json({ error: "Zone is not claimed" });
+      if (rows[0].guildId === account.guildId) return res.status(400).json({ error: "Cannot attack your own zone" });
+
+      const newDefense = (rows[0].defensePoints || 100) - 10;
+      if (newDefense <= 0) {
+        await db.update(zoneConquests).set({ guildId: account.guildId, defensePoints: 100, conqueredAt: new Date() }).where(eq(zoneConquests.zoneId, req.params.zoneId));
+        return res.json({ success: true, conquered: true, message: "Zone conquered! Your guild now controls this zone." });
+      } else {
+        await db.update(zoneConquests).set({ defensePoints: newDefense }).where(eq(zoneConquests.zoneId, req.params.zoneId));
+        return res.json({ success: true, conquered: false, message: `Zone attacked! Defense reduced to ${newDefense}/100.` });
+      }
+    } catch (error) {
+      res.status(500).json({ error: "Failed to attack zone" });
+    }
+  });
+
+  app.get("/api/admin/zone-conquests", async (_req, res) => {
+    try {
+      const rows = await db.select().from(zoneConquests);
+      const allGuilds = await storage.getAllGuilds ? await storage.getAllGuilds() : [];
+      const result = rows.map(r => ({
+        ...r,
+        guildName: (allGuilds as any[]).find((g: any) => g.id === r.guildId)?.name || null,
+      }));
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch zone conquests" });
+    }
+  });
+
+  app.delete("/api/admin/zone-conquests/:zoneId", async (req, res) => {
+    try {
+      await db.update(zoneConquests).set({ guildId: null, defensePoints: 100 }).where(eq(zoneConquests.zoneId, req.params.zoneId));
+      res.json({ success: true, message: "Zone conquest reset" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to reset zone conquest" });
+    }
+  });
+
+  // ─── T005: Black Market ──────────────────────────────────────────────────────
+  const BLACK_MARKET_POOL = [
+    { id: "bm-void-blade",   name: "Void Reaper's Edge",   type: "weapon",    tier: "master",      stats: { Str: 2400, Luck: 1600 }, special: "Double Strike",   rubyPrice: 150 },
+    { id: "bm-chaos-staff",  name: "Staff of Chaos",       type: "weapon",    tier: "grandmaster", stats: { Int: 4400 },             special: "Critical +20%",   rubyPrice: 200 },
+    { id: "bm-shadow-plate", name: "Shadowlord's Plate",   type: "armor",     tier: "champion",    stats: { Str: 3400, Spd: 3400, Int: 2600, Luck: 2600 }, special: "Unbreakable", rubyPrice: 180 },
+    { id: "bm-soul-ring",    name: "Ring of Stolen Souls", type: "accessory", tier: "overlord",    stats: { Luck: 6400, Str: 3600 }, special: "Life Steal 25%",  rubyPrice: 120 },
+    { id: "bm-death-bow",    name: "Deathshot Bow",        type: "weapon",    tier: "ascendant",   stats: { Spd: 9600, Luck: 6200 }, special: "Poison 5t",       rubyPrice: 250 },
+    { id: "bm-blood-axe",    name: "Bloodthirsty Axe",     type: "weapon",    tier: "sovereign",   stats: { Str: 8400, Spd: 4600 }, special: "Life Steal 20%",  rubyPrice: 220 },
+    { id: "bm-hex-robe",     name: "Hexweave Robe",        type: "armor",     tier: "expert",      stats: { Int: 1800, Spd: 1400 }, special: "Freeze 3t",       rubyPrice: 90  },
+    { id: "bm-doom-pendant", name: "Doom Pendant",         type: "accessory", tier: "legend",      stats: { Int: 5300, Luck: 3600 }, special: "Stun 15%",       rubyPrice: 160 },
+  ];
+
+  app.get("/api/black-market", (_req, res) => {
+    try {
+      const seed = Math.floor(Date.now() / (6 * 3600 * 1000));
+      const rng = (n: number) => { let x = Math.sin(seed + n) * 10000; return x - Math.floor(x); };
+      const shuffled = [...BLACK_MARKET_POOL].sort((_, __) => rng(_.rubyPrice) - 0.5);
+      const items = shuffled.slice(0, 5).map(item => ({ ...item, refreshesAt: (Math.floor(Date.now() / (6 * 3600 * 1000)) + 1) * 6 * 3600 * 1000 }));
+      res.json({ items, refreshesAt: items[0]?.refreshesAt });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch black market" });
+    }
+  });
+
+  app.post("/api/black-market/purchase", async (req, res) => {
+    try {
+      const { accountId, itemId } = req.body;
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const seed = Math.floor(Date.now() / (6 * 3600 * 1000));
+      const rng = (n: number) => { let x = Math.sin(seed + n) * 10000; return x - Math.floor(x); };
+      const shuffled = [...BLACK_MARKET_POOL].sort((_, __) => rng(_.rubyPrice) - 0.5);
+      const currentItems = shuffled.slice(0, 5);
+      const item = currentItems.find(i => i.id === itemId);
+      if (!item) return res.status(404).json({ error: "Item not found in current rotation" });
+
+      const rubies = (account as any).rubies || 0;
+      if (rubies < item.rubyPrice) return res.status(400).json({ error: "Not enough Rubies" });
+
+      const isCounterfeit = rng(item.rubyPrice * 7) < 0.10;
+      const inventoryItem = isCounterfeit
+        ? { ...item, name: `[FAKE] ${item.name}`, stats: { Str: 0, Spd: 0, Int: 0, Luck: 0 }, special: "Counterfeit" }
+        : item;
+
+      await db.update(accounts).set({ rubies: rubies - item.rubyPrice } as any).where(eq(accounts.id, accountId));
+      await storage.addInventoryItem(accountId, { name: inventoryItem.name, type: inventoryItem.type, tier: inventoryItem.tier, stats: inventoryItem.stats, special: inventoryItem.special || "", id: `${inventoryItem.id}-${Date.now()}` });
+
+      res.json({ success: true, counterfeit: isCounterfeit, item: inventoryItem });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to purchase item" });
+    }
+  });
+
+  app.get("/api/admin/black-market", (_req, res) => {
+    try {
+      const seed = Math.floor(Date.now() / (6 * 3600 * 1000));
+      const rng = (n: number) => { let x = Math.sin(seed + n) * 10000; return x - Math.floor(x); };
+      const shuffled = [...BLACK_MARKET_POOL].sort((_, __) => rng(_.rubyPrice) - 0.5);
+      const items = shuffled.slice(0, 5).map(item => ({
+        ...item,
+        refreshesAt: (Math.floor(Date.now() / (6 * 3600 * 1000)) + 1) * 6 * 3600 * 1000,
+        counterFeitChance: "10%",
+      }));
+      res.json({ items, pool: BLACK_MARKET_POOL, refreshesAt: items[0]?.refreshesAt });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch admin black market" });
+    }
+  });
+
+  // ─── T006: Player-Run Bounties ───────────────────────────────────────────────
+  app.get("/api/bounties", async (_req, res) => {
+    try {
+      const now = new Date();
+      await db.update(bounties).set({ status: "expired" }).where(sql`${bounties.expiresAt} < ${now} AND ${bounties.status} = 'active'`);
+      const rows = await db.select().from(bounties).where(eq(bounties.status, "active"));
+      const allAccounts = await storage.getAllAccounts();
+      const result = rows.map(b => ({
+        ...b,
+        placedByName: allAccounts.find(a => a.id === b.placedBy)?.username || "Unknown",
+        targetName: allAccounts.find(a => a.id === b.targetId)?.username || "Unknown",
+        claimedByName: b.claimedBy ? (allAccounts.find(a => a.id === b.claimedBy)?.username || "Unknown") : null,
+      })).sort((a, b) => (b.goldReward || 0) - (a.goldReward || 0));
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch bounties" });
+    }
+  });
+
+  app.post("/api/bounties", async (req, res) => {
+    try {
+      const { accountId, targetUsername, goldReward, reason } = req.body;
+      if (!accountId || !targetUsername || !goldReward) return res.status(400).json({ error: "Missing required fields" });
+      if (goldReward < 500) return res.status(400).json({ error: "Minimum bounty is 500 gold" });
+
+      const placer = await storage.getAccount(accountId);
+      if (!placer) return res.status(404).json({ error: "Account not found" });
+      if ((placer.gold || 0) < goldReward) return res.status(400).json({ error: "Not enough gold" });
+
+      const allAccounts = await storage.getAllAccounts();
+      const target = allAccounts.find(a => a.username === targetUsername);
+      if (!target) return res.status(404).json({ error: "Target player not found" });
+      if (target.id === accountId) return res.status(400).json({ error: "Cannot place bounty on yourself" });
+
+      await db.update(accounts).set({ gold: (placer.gold || 0) - goldReward }).where(eq(accounts.id, accountId));
+      const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000);
+      const [bounty] = await db.insert(bounties).values({ placedBy: accountId, targetId: target.id, goldReward, reason: reason || null, expiresAt, status: "active" }).returning();
+      res.json({ success: true, bounty });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to place bounty" });
+    }
+  });
+
+  app.post("/api/bounties/:id/claim", async (req, res) => {
+    try {
+      const { claimerId } = req.body;
+      const bountyRows = await db.select().from(bounties).where(eq(bounties.id, req.params.id));
+      if (bountyRows.length === 0) return res.status(404).json({ error: "Bounty not found" });
+      const bounty = bountyRows[0];
+      if (bounty.status !== "active") return res.status(400).json({ error: "Bounty is not active" });
+
+      const since = new Date(Date.now() - 24 * 3600 * 1000);
+      const recentWin = await db.select().from(challengesTable).where(
+        sql`${challengesTable.challengerId} = ${claimerId} AND ${challengesTable.challengedId} = ${bounty.targetId} AND ${challengesTable.status} = 'completed' AND ${challengesTable.winner} = ${claimerId} AND ${challengesTable.updatedAt} > ${since}`
+      );
+      if (recentWin.length === 0) return res.status(400).json({ error: "You must defeat the target in PvP within the last 24 hours to claim this bounty" });
+
+      const claimer = await storage.getAccount(claimerId);
+      if (!claimer) return res.status(404).json({ error: "Claimer not found" });
+      await db.update(bounties).set({ status: "claimed", claimedBy: claimerId, claimedAt: new Date() }).where(eq(bounties.id, req.params.id));
+      await db.update(accounts).set({ gold: (claimer.gold || 0) + bounty.goldReward }).where(eq(accounts.id, claimerId));
+      res.json({ success: true, goldReward: bounty.goldReward, message: "Bounty claimed!" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to claim bounty" });
+    }
+  });
+
+  app.delete("/api/bounties/:id", async (req, res) => {
+    try {
+      const { accountId } = req.body;
+      const bountyRows = await db.select().from(bounties).where(eq(bounties.id, req.params.id));
+      if (bountyRows.length === 0) return res.status(404).json({ error: "Bounty not found" });
+      const bounty = bountyRows[0];
+      if (bounty.placedBy !== accountId) return res.status(403).json({ error: "Only the placer can cancel this bounty" });
+      if (bounty.status !== "active") return res.status(400).json({ error: "Bounty is not active" });
+
+      const placer = await storage.getAccount(accountId);
+      if (placer) {
+        const refund = Math.floor(bounty.goldReward * 0.5);
+        await db.update(accounts).set({ gold: (placer.gold || 0) + refund }).where(eq(accounts.id, accountId));
+      }
+      await db.update(bounties).set({ status: "cancelled" }).where(eq(bounties.id, req.params.id));
+      res.json({ success: true, message: "Bounty cancelled. 50% gold refunded." });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to cancel bounty" });
+    }
+  });
+
+  app.get("/api/admin/bounties", async (_req, res) => {
+    try {
+      const rows = await db.select().from(bounties);
+      const allAccounts = await storage.getAllAccounts();
+      const result = rows.map(b => ({
+        ...b,
+        placedByName: allAccounts.find(a => a.id === b.placedBy)?.username || "Unknown",
+        targetName: allAccounts.find(a => a.id === b.targetId)?.username || "Unknown",
+        claimedByName: b.claimedBy ? (allAccounts.find(a => a.id === b.claimedBy)?.username || "Unknown") : null,
+      }));
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch bounties" });
+    }
+  });
+
+  app.delete("/api/admin/bounties/:id", async (req, res) => {
+    try {
+      await db.update(bounties).set({ status: "cancelled" }).where(eq(bounties.id, req.params.id));
+      res.json({ success: true, message: "Bounty cancelled by admin" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to cancel bounty" });
+    }
+  });
+
+  app.get("/api/admin/weather-bosses", (_req, res) => {
+    res.json({ bosses: THUNDERSTORM_BOSSES, triggerCondition: "thunderstorm weather, 25% chance per spawn" });
+  });
+
+  app.get("/api/admin/shop-items-overview", (_req, res) => {
+    const { ALL_ITEMS } = require("../client/src/lib/items-data");
+    const tiers = [...new Set(ALL_ITEMS.map((i: any) => i.tier))];
+    const overview = tiers.map((tier: any) => {
+      const items = ALL_ITEMS.filter((i: any) => i.tier === tier);
+      return {
+        tier,
+        count: items.length,
+        weapons: items.filter((i: any) => i.type === "weapon").length,
+        armors: items.filter((i: any) => i.type === "armor").length,
+        accessories: items.filter((i: any) => i.type === "accessory").length,
+        withSpecials: items.filter((i: any) => i.special).length,
+      };
+    });
+    res.json(overview);
   });
 
   return httpServer;

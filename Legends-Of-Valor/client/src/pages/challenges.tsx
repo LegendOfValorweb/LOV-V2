@@ -1,13 +1,14 @@
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import type { Challenge, Account } from "@shared/schema";
 import { useGame } from "@/lib/game-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Swords, Package, ShoppingBag, LogOut, Calendar, Check, X, Clock, Trophy, User, ArrowLeft, Heart, Target, ScrollText, ArrowLeftRight, Map } from "lucide-react";
+import { Swords, Package, ShoppingBag, LogOut, Calendar, Check, X, Clock, Trophy, User, ArrowLeft, Heart, Target, ScrollText, ArrowLeftRight, Map, Skull } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Dialog,
@@ -52,6 +53,62 @@ export default function Challenges() {
   const otherPlayers = useMemo(() => {
     return allPlayers.filter(p => p.id !== account?.id);
   }, [allPlayers, account?.id]);
+
+  const [bountyTarget, setBountyTarget] = useState("");
+  const [bountyGold, setBountyGold] = useState(500);
+  const [bountyReason, setBountyReason] = useState("");
+
+  const { data: bounties = [], isLoading: bountiesLoading } = useQuery<any[]>({
+    queryKey: ["/api/bounties"],
+    queryFn: async () => {
+      const res = await fetch("/api/bounties");
+      if (!res.ok) throw new Error("Failed to fetch bounties");
+      return res.json();
+    },
+  });
+
+  const placeBountyMutation = useMutation({
+    mutationFn: async (data: { accountId: string; targetUsername: string; goldReward: number; reason: string }) => {
+      const res = await apiRequest("POST", "/api/bounties", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Bounty placed!", description: `A bounty of ${bountyGold} gold has been placed.` });
+      setBountyTarget(""); setBountyGold(500); setBountyReason("");
+      queryClient.invalidateQueries({ queryKey: ["/api/bounties"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to place bounty", description: err?.message || "Server error", variant: "destructive" });
+    },
+  });
+
+  const claimBountyMutation = useMutation({
+    mutationFn: async (bountyId: string) => {
+      const res = await apiRequest("POST", `/api/bounties/${bountyId}/claim`, { claimerId: account?.id });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Bounty claimed!", description: `You received ${data.goldReward?.toLocaleString()} gold!` });
+      queryClient.invalidateQueries({ queryKey: ["/api/bounties"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Cannot claim bounty", description: err?.message || "Defeat the target in PvP within 24h to claim", variant: "destructive" });
+    },
+  });
+
+  const cancelBountyMutation = useMutation({
+    mutationFn: async (bountyId: string) => {
+      const res = await apiRequest("DELETE", `/api/bounties/${bountyId}`, { accountId: account?.id });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Bounty cancelled", description: "50% of gold refunded." });
+      queryClient.invalidateQueries({ queryKey: ["/api/bounties"] });
+    },
+    onError: () => {
+      toast({ title: "Failed to cancel bounty", variant: "destructive" });
+    },
+  });
 
   const pendingReceived = challenges.filter(
     c => c.challengedId === account?.id && c.status === "pending"
@@ -523,6 +580,119 @@ export default function Challenges() {
             )}
           </>
         )}
+
+        <section className="mt-8">
+          <h2 className="font-serif text-lg font-bold text-foreground mb-4 flex items-center gap-2">
+            <Skull className="w-5 h-5 text-red-400" />
+            Player Bounties
+          </h2>
+
+          <Card className="mb-6 border-amber-500/30">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Place a Bounty</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Target Username</label>
+                  <Input
+                    placeholder="Player name..."
+                    value={bountyTarget}
+                    onChange={e => setBountyTarget(e.target.value)}
+                    data-testid="input-bounty-target"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Gold Reward (min 500)</label>
+                  <Input
+                    type="number"
+                    min={500}
+                    value={bountyGold}
+                    onChange={e => setBountyGold(parseInt(e.target.value) || 500)}
+                    data-testid="input-bounty-gold"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Reason (optional)</label>
+                  <Input
+                    placeholder="Why..."
+                    value={bountyReason}
+                    onChange={e => setBountyReason(e.target.value)}
+                    data-testid="input-bounty-reason"
+                  />
+                </div>
+              </div>
+              <Button
+                onClick={() => {
+                  if (!account) return;
+                  placeBountyMutation.mutate({ accountId: account.id, targetUsername: bountyTarget, goldReward: bountyGold, reason: bountyReason });
+                }}
+                disabled={!bountyTarget || bountyGold < 500 || placeBountyMutation.isPending}
+                data-testid="button-place-bounty"
+              >
+                <Skull className="w-4 h-4 mr-2" />
+                Place Bounty
+              </Button>
+            </CardContent>
+          </Card>
+
+          {bountiesLoading ? (
+            <p className="text-muted-foreground">Loading bounties...</p>
+          ) : bounties.length === 0 ? (
+            <p className="text-muted-foreground text-center py-6">No active bounties. Be the first to place one!</p>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {bounties.map((b: any) => {
+                const isOwn = b.placedBy === account?.id;
+                const timeLeft = Math.max(0, new Date(b.expiresAt).getTime() - Date.now());
+                const daysLeft = Math.floor(timeLeft / 86400000);
+                return (
+                  <Card key={b.id} className="border-red-500/30">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center justify-between">
+                        <span>🎯 {b.targetName}</span>
+                        <Badge variant="destructive">{b.goldReward.toLocaleString()} gold</Badge>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-xs space-y-2">
+                      <p className="text-muted-foreground">Placed by: {b.placedByName}</p>
+                      {b.reason && <p className="italic text-muted-foreground">"{b.reason}"</p>}
+                      <p className="text-amber-400 flex items-center gap-1">
+                        <Clock className="w-3 h-3" /> {daysLeft}d remaining
+                      </p>
+                      <div className="flex gap-2">
+                        {!isOwn && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="flex-1 text-amber-400 border-amber-500/50"
+                            onClick={() => claimBountyMutation.mutate(b.id)}
+                            disabled={claimBountyMutation.isPending}
+                            data-testid={`button-claim-bounty-${b.id}`}
+                          >
+                            Claim
+                          </Button>
+                        )}
+                        {isOwn && (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="flex-1"
+                            onClick={() => cancelBountyMutation.mutate(b.id)}
+                            disabled={cancelBountyMutation.isPending}
+                            data-testid={`button-cancel-bounty-${b.id}`}
+                          >
+                            Cancel (50% refund)
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </section>
       </main>
     </div>
   );

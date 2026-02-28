@@ -707,6 +707,7 @@ export const pets = pgTable("pets", {
   skin: text("skin").default("default"),
   isFainted: boolean("is_fainted").notNull().default(false),
   mutationTrait: text("mutation_trait"),
+  abilities: jsonb("abilities").$type<string[]>().default([]),
   tempElement: text("temp_element"),
   tempElementExpires: timestamp("temp_element_expires"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -2313,3 +2314,29 @@ export const soulLinksRelations = relations(soulLinks, ({ one }) => ({
 export const insertSoulLinkSchema = createInsertSchema(soulLinks).omit({ id: true, createdAt: true });
 export type InsertSoulLink = z.infer<typeof insertSoulLinkSchema>;
 export type SoulLink = typeof soulLinks.$inferSelect;
+
+export const zoneConquests = pgTable("zone_conquests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  zoneId: varchar("zone_id").notNull().unique(),
+  guildId: varchar("guild_id").references(() => guilds.id, { onDelete: "set null" }),
+  conqueredAt: timestamp("conquered_at").defaultNow(),
+  taxRate: integer("tax_rate").notNull().default(5),
+  defensePoints: integer("defense_points").notNull().default(100),
+});
+
+export type ZoneConquest = typeof zoneConquests.$inferSelect;
+
+export const bounties = pgTable("bounties", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  placedBy: varchar("placed_by").references(() => accounts.id).notNull(),
+  targetId: varchar("target_id").references(() => accounts.id).notNull(),
+  goldReward: integer("gold_reward").notNull(),
+  reason: text("reason"),
+  claimedBy: varchar("claimed_by").references(() => accounts.id),
+  claimedAt: timestamp("claimed_at"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  status: varchar("status").notNull().default("active"),
+});
+
+export type Bounty = typeof bounties.$inferSelect;

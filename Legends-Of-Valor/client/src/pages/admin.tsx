@@ -678,6 +678,12 @@ export default function Admin() {
   const [selectedPetElement, setSelectedPetElement] = useState<PetElement | "all">("all");
   const [createPetDialog, setCreatePetDialog] = useState(false);
   const [editPetDialog, setEditPetDialog] = useState<PetWithOwner | null>(null);
+  const PET_ABILITIES = [
+    "Elemental Attack", "Passive Stat Boost", "HP Regen", "Life Drain",
+    "Elemental Shield", "Stun Bite", "Poison Touch", "Speed Aura",
+    "Double Strike", "Revival Passive",
+  ];
+
   const [newPet, setNewPet] = useState({
     accountId: "",
     name: "",
@@ -686,6 +692,7 @@ export default function Admin() {
     tier: "egg" as PetTier,
     exp: 0,
     stats: { Str: 1, Spd: 1, Luck: 1, ElementalPower: 1 },
+    abilities: [] as string[],
   });
   const [editPetValues, setEditPetValues] = useState({
     name: "",
@@ -694,6 +701,7 @@ export default function Admin() {
     tier: "egg" as PetTier,
     exp: 0,
     stats: { Str: 1, Spd: 1, Luck: 1, ElementalPower: 1 },
+    abilities: [] as string[],
   });
 
   const [createEventDialog, setCreateEventDialog] = useState(false);
@@ -1142,6 +1150,7 @@ export default function Admin() {
         tier: "egg",
         exp: 0,
         stats: { Str: 1, Spd: 1, Luck: 1, ElementalPower: 1 },
+      abilities: [],
       });
     } catch (error) {
       toast({
@@ -1161,6 +1170,7 @@ export default function Admin() {
       tier: pet.tier as PetTier,
       exp: pet.exp,
       stats: pet.stats as { Str: number; Spd: number; Luck: number; ElementalPower: number },
+      abilities: ((pet as any).abilities as string[]) || [],
     });
   };
 
@@ -1684,6 +1694,22 @@ export default function Admin() {
               {aiRequests.length > 0 && (
                 <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">{aiRequests.length}</Badge>
               )}
+            </TabsTrigger>
+            <TabsTrigger value="zone_conquest" className="gap-2">
+              <Crown className="w-4 h-4" />
+              Zone Conquest
+            </TabsTrigger>
+            <TabsTrigger value="black_market" className="gap-2">
+              <Skull className="w-4 h-4" />
+              Black Market
+            </TabsTrigger>
+            <TabsTrigger value="bounties" className="gap-2">
+              <Target className="w-4 h-4" />
+              Bounties
+            </TabsTrigger>
+            <TabsTrigger value="weather_bosses" className="gap-2">
+              <Zap className="w-4 h-4" />
+              Weather Bosses
             </TabsTrigger>
           </TabsList>
 
@@ -3588,6 +3614,22 @@ export default function Admin() {
             </div>
           </TabsContent>
 
+          <TabsContent value="zone_conquest">
+            <ZoneConquestAdminPanel />
+          </TabsContent>
+
+          <TabsContent value="black_market">
+            <BlackMarketAdminPanel />
+          </TabsContent>
+
+          <TabsContent value="bounties">
+            <BountiesAdminPanel />
+          </TabsContent>
+
+          <TabsContent value="weather_bosses">
+            <WeatherBossesAdminPanel />
+          </TabsContent>
+
         </Tabs>
       </main>
 
@@ -3824,6 +3866,27 @@ export default function Admin() {
                 ))}
               </div>
             </div>
+
+            <div className="space-y-2">
+              <Label>Abilities (optional)</Label>
+              <div className="grid grid-cols-2 gap-1 border rounded-md p-2">
+                {PET_ABILITIES.map((ability) => (
+                  <Button
+                    key={ability}
+                    type="button"
+                    size="sm"
+                    variant={newPet.abilities.includes(ability) ? "default" : "outline"}
+                    className="text-xs h-7 justify-start"
+                    onClick={() => {
+                      const has = newPet.abilities.includes(ability);
+                      setNewPet({ ...newPet, abilities: has ? newPet.abilities.filter(a => a !== ability) : [...newPet.abilities, ability] });
+                    }}
+                  >
+                    {newPet.abilities.includes(ability) ? "✓ " : ""}{ability}
+                  </Button>
+                ))}
+              </div>
+            </div>
           </div>
 
           <DialogFooter className="gap-2">
@@ -3922,6 +3985,27 @@ export default function Admin() {
                       data-testid={`input-edit-pet-${stat}`}
                     />
                   </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Abilities</Label>
+              <div className="grid grid-cols-2 gap-1 border rounded-md p-2">
+                {PET_ABILITIES.map((ability) => (
+                  <Button
+                    key={ability}
+                    type="button"
+                    size="sm"
+                    variant={editPetValues.abilities.includes(ability) ? "default" : "outline"}
+                    className="text-xs h-7 justify-start"
+                    onClick={() => {
+                      const has = editPetValues.abilities.includes(ability);
+                      setEditPetValues({ ...editPetValues, abilities: has ? editPetValues.abilities.filter(a => a !== ability) : [...editPetValues.abilities, ability] });
+                    }}
+                  >
+                    {editPetValues.abilities.includes(ability) ? "✓ " : ""}{ability}
+                  </Button>
                 ))}
               </div>
             </div>
@@ -4433,6 +4517,205 @@ export default function Admin() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function ZoneConquestAdminPanel() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: conquests = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/admin/zone-conquests"] });
+
+  const resetMutation = useMutation({
+    mutationFn: async (zoneId: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/zone-conquests/${zoneId}`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Zone reset", description: "Zone conquest cleared" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/zone-conquests"] });
+    },
+  });
+
+  return (
+    <div className="space-y-4">
+      <h2 className="font-serif text-lg font-semibold flex items-center gap-2">
+        <Crown className="w-5 h-5 text-yellow-400" />
+        Zone Conquest Management
+      </h2>
+      <p className="text-sm text-muted-foreground">Guilds can claim zones by spending 5,000 guild gold. Defense points start at 100 and drop 10 per attack.</p>
+      {isLoading ? (
+        <p className="text-muted-foreground">Loading...</p>
+      ) : conquests.length === 0 ? (
+        <p className="text-muted-foreground">No zones are currently conquered.</p>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {conquests.map((c: any) => (
+            <Card key={c.zoneId}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center justify-between">
+                  <span>🗺️ {c.zoneId}</span>
+                  <Badge variant="outline">⚔ {c.defensePoints}/100 HP</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <p className="text-sm">Guild: <span className="font-medium text-amber-400">{c.guildName || "Unclaimed"}</span></p>
+                <p className="text-xs text-muted-foreground">Tax Rate: {c.taxRate}%</p>
+                {c.conqueredAt && <p className="text-xs text-muted-foreground">Conquered: {new Date(c.conqueredAt).toLocaleDateString()}</p>}
+                <Button size="sm" variant="destructive" className="w-full" onClick={() => resetMutation.mutate(c.zoneId)}>
+                  Reset Zone
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BlackMarketAdminPanel() {
+  const { data, isLoading } = useQuery<any>({ queryKey: ["/api/admin/black-market"] });
+
+  return (
+    <div className="space-y-4">
+      <h2 className="font-serif text-lg font-semibold flex items-center gap-2">
+        <Skull className="w-5 h-5 text-red-400" />
+        Black Market Overview
+      </h2>
+      <p className="text-sm text-muted-foreground">Rotates every 6 hours. 10% chance any item is counterfeit (revealed only after purchase).</p>
+      {isLoading ? (
+        <p className="text-muted-foreground">Loading...</p>
+      ) : (
+        <>
+          <div className="text-xs text-muted-foreground">
+            Next refresh: {data?.refreshesAt ? new Date(data.refreshesAt).toLocaleTimeString() : "N/A"}
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {(data?.items || []).map((item: any) => (
+              <Card key={item.id} className="border-red-500/30">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center justify-between">
+                    <span>💀 {item.name}</span>
+                    <Badge variant="destructive">{item.rubyPrice} 💎</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="text-xs space-y-1">
+                  <p>Type: {item.type} | Tier: {item.tier}</p>
+                  {item.special && <p className="text-amber-400">✦ {item.special}</p>}
+                  <p className="text-muted-foreground">Counterfeit Chance: {item.counterFeitChance}</p>
+                  <p className="text-muted-foreground">Stats: {Object.entries(item.stats || {}).map(([k, v]) => `${k}: ${v}`).join(", ")}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <div>
+            <h3 className="font-serif text-sm font-semibold mb-2">Full Pool ({data?.pool?.length || 0} items)</h3>
+            <div className="grid gap-2 md:grid-cols-3 lg:grid-cols-4">
+              {(data?.pool || []).map((item: any) => (
+                <div key={item.id} className="border border-border rounded p-2 text-xs">
+                  <p className="font-medium">{item.name}</p>
+                  <p className="text-muted-foreground">{item.rubyPrice} Rubies · {item.tier}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function BountiesAdminPanel() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: bountiesList = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/admin/bounties"] });
+
+  const cancelMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/bounties/${id}`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Bounty cancelled" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bounties"] });
+    },
+  });
+
+  const statusColor: Record<string, string> = { active: "default", claimed: "secondary", expired: "outline", cancelled: "destructive" };
+
+  return (
+    <div className="space-y-4">
+      <h2 className="font-serif text-lg font-semibold flex items-center gap-2">
+        <Target className="w-5 h-5 text-red-400" />
+        Player Bounty Management
+      </h2>
+      {isLoading ? (
+        <p className="text-muted-foreground">Loading...</p>
+      ) : bountiesList.length === 0 ? (
+        <p className="text-muted-foreground">No bounties placed yet.</p>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {bountiesList.map((b: any) => (
+            <Card key={b.id}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center justify-between">
+                  <span>🎯 {b.targetName}</span>
+                  <Badge variant={(statusColor[b.status] || "default") as any}>{b.status}</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-xs space-y-1">
+                <p>Reward: <span className="text-amber-400 font-bold">{b.goldReward.toLocaleString()} gold</span></p>
+                <p>Placed by: {b.placedByName}</p>
+                {b.reason && <p className="text-muted-foreground italic">"{b.reason}"</p>}
+                {b.claimedByName && <p>Claimed by: <span className="text-green-400">{b.claimedByName}</span></p>}
+                <p>Expires: {new Date(b.expiresAt).toLocaleDateString()}</p>
+                {b.status === "active" && (
+                  <Button size="sm" variant="destructive" className="w-full mt-2" onClick={() => cancelMutation.mutate(b.id)}>
+                    Cancel Bounty
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WeatherBossesAdminPanel() {
+  const { data, isLoading } = useQuery<any>({ queryKey: ["/api/admin/weather-bosses"] });
+
+  return (
+    <div className="space-y-4">
+      <h2 className="font-serif text-lg font-semibold flex items-center gap-2">
+        <Zap className="w-5 h-5 text-yellow-400" />
+        Weather Boss Configuration
+      </h2>
+      <p className="text-sm text-muted-foreground">{data?.triggerCondition || "Thunderstorm weather, 25% chance per spawn"}</p>
+      {isLoading ? (
+        <p className="text-muted-foreground">Loading...</p>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {(data?.bosses || []).map((boss: any) => (
+            <Card key={boss.name} className="border-yellow-500/40">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-yellow-400">
+                  ⚡ {boss.name}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-xs space-y-1">
+                <p>HP: <span className="font-bold">{boss.hp.toLocaleString()}</span></p>
+                <p>ATK: {boss.attack} | DEF: {boss.defense}</p>
+                <p>XP Reward: {boss.xpReward.toLocaleString()}</p>
+                <p>Gold Reward: {boss.goldReward.toLocaleString()}</p>
+                <Badge variant="secondary">{boss.archetype}</Badge>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
