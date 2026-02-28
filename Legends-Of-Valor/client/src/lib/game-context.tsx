@@ -132,6 +132,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
       if (response.ok) {
         const acc = await response.json();
+        // JWT handling: token is in cookie, but we can store some info in localStorage if needed
+        // The server uses HTTP-only cookies for the JWT, so we don't manually store the token string.
         setAccount(acc);
         localStorage.setItem(SESSION_KEY, JSON.stringify({ username: acc.username }));
         localStorage.setItem(ACCOUNT_STORAGE_PREFIX + acc.username, JSON.stringify(acc));

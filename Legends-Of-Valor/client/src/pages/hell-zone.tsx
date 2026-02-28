@@ -129,6 +129,68 @@ export default function HellZone() {
   const [attackResult, setAttackResult] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("challenges");
 
+  const { data: hellZoneState, refetch: refetchHellZone } = useQuery({
+    queryKey: ["hell-zone-state"],
+    queryFn: async () => {
+      const res = await fetch("/api/hell-zone/state");
+      return res.json();
+    },
+    refetchInterval: 3000,
+  });
+
+  const joinHellZoneMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/hell-zone/join", { accountId: account?.id });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Joined!", description: "You are now in The Collapse" });
+      refetchHellZone();
+    },
+    onError: (err: any) => {
+      toast({ title: "Join Failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const hellZoneActionMutation = useMutation({
+    mutationFn: async ({ targetId, action }: { targetId: string, action: string }) => {
+      const res = await apiRequest("POST", "/api/hell-zone/action", { 
+        accountId: account?.id, 
+        targetId,
+        action 
+      });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.targetEliminated) {
+        toast({ title: "Elimination!", description: "You eliminated a target!" });
+      }
+      refetchHellZone();
+    },
+  });
+
+  const adminStartHellZoneMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/hell-zone/start", { adminId: account?.id });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Hell Zone Started", description: "The Collapse has begun!" });
+      refetchHellZone();
+    },
+  });
+
+  const adminEndHellZoneMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/hell-zone/end", { adminId: account?.id });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Hell Zone Ended" });
+      refetchHellZone();
+    },
+  });
+
   const { data: brStatus, refetch: refetchBR } = useQuery<BRStatus>({
     queryKey: ["battle-royale-status"],
     queryFn: async () => {

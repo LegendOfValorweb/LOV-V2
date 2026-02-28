@@ -340,7 +340,10 @@ export const accounts = pgTable("accounts", {
   equippedRacePassive: text("equipped_race_passive"),
   customSkillNames: jsonb("custom_skill_names").notNull().default({}).$type<Record<string, string>>(),
   mercenarySlots: integer("mercenary_slots").notNull().default(1),
+  mercenaryIncomeCollected: bigint("mercenary_income_collected", { mode: "number" }).notNull().default(0),
   unityCoins: bigint("unity_coins", { mode: "number" }).notNull().default(0),
+  // T024: Unity Group Quests - Contribution Tracking
+  unityQuestContributions: jsonb("unity_quest_contributions").notNull().default({}).$type<Record<string, number>>(),
   // T039: Shard System - per-race tracking for Convergence War
   humanShards: integer("human_shards").notNull().default(0),
   elfShards: integer("elf_shards").notNull().default(0),
@@ -381,9 +384,21 @@ export const shards = pgTable("shards", {
   isPhysical: boolean("is_physical").notNull().default(true),
   collectedAt: timestamp("collected_at").notNull().defaultNow(),
   zone: text("zone").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
 });
 
-export const shardsRelations = relations(shards, ({ one }) => ({
+export const shardEvents = pgTable("shard_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  shardId: varchar("shard_id").notNull().references(() => shards.id, { onDelete: "cascade" }),
+  eventType: text("event_type").notNull(), // e.g., "spawn", "collect", "transfer", "guild_store"
+  triggeredBy: varchar("triggered_by").references(() => accounts.id),
+  zone: text("zone"),
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+});
+
+export const shardsRelations = relations(shards, ({ one, many }) => ({
   owner: one(accounts, {
     fields: [shards.ownerId],
     references: [accounts.id],
@@ -392,10 +407,24 @@ export const shardsRelations = relations(shards, ({ one }) => ({
     fields: [shards.guildId],
     references: [guilds.id],
   }),
+  events: many(shardEvents),
+}));
+
+export const shardEventsRelations = relations(shardEvents, ({ one }) => ({
+  shard: one(shards, {
+    fields: [shardEvents.shardId],
+    references: [shards.id],
+  }),
+  user: one(accounts, {
+    fields: [shardEvents.triggeredBy],
+    references: [accounts.id],
+  }),
 }));
 
 export const insertShardSchema = createInsertSchema(shards).omit({ id: true, collectedAt: true });
 export type Shard = typeof shards.$inferSelect;
+export const insertShardEventSchema = createInsertSchema(shardEvents).omit({ id: true, timestamp: true });
+export type ShardEvent = typeof shardEvents.$inferSelect;
 
 
 export const guilds = pgTable("guilds", {
@@ -518,16 +547,41 @@ export const inventoryItems = pgTable("inventory_items", {
   gems: jsonb("gems").notNull().default([]).$type<{id: string; stats: Partial<Stats>}[]>(),
 });
 
+export const leaderboardEntries = pgTable("leaderboard_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: text("type").notNull().$type<"pvp" | "guild" | "tower" | "gathering" | "seasonal">(),
+  accountId: varchar("account_id").references(() => accounts.id, { onDelete: "cascade" }),
+  guildId: varchar("guild_id").references(() => guilds.id, { onDelete: "cascade" }),
+  score: bigint("score", { mode: "number" }).notNull().default(0),
+  rank: integer("rank"),
+  season: integer("season").notNull().default(1),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const leaderboardEntriesRelations = relations(leaderboardEntries, ({ one }) => ({
+  account: one(accounts, {
+    fields: [leaderboardEntries.accountId],
+    references: [accounts.id],
+  }),
+  guild: one(guilds, {
+    fields: [leaderboardEntries.guildId],
+    references: [guilds.id],
+  }),
+}));
+
+export const insertLeaderboardEntrySchema = createInsertSchema(leaderboardEntries).omit({ id: true, updatedAt: true });
+export type LeaderboardEntry = typeof leaderboardEntries.$inferSelect;
+
 export const tournamentBetting = pgTable("tournament_betting", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tournamentId: text("tournament_id").notNull(),
   matchId: integer("match_id").notNull(), // Index in the brackets match array
   accountId: varchar("account_id").notNull().references(() => accounts.id),
-  betAmount: integer("bet_amount").notNull(),
-  predictedWinner: text("predicted_winner").notNull(), // Username or ID of the player predicted to win
-  odds: text("odds").notNull(), // Store as string to handle precision if needed, e.g. "1.5"
-  status: text("status").notNull().default("pending").$type<"pending" | "won" | "lost" | "cancelled">(),
-  payout: integer("payout").default(0),
+  targetPlayerId: text("target_player_id").notNull(), // The player being bet on
+  amount: integer("amount").notNull(),
+  odds: text("odds").notNull().default("1.0"),
+  status: text("status").notNull().default("pending").$type<"pending" | "won" | "lost" | "paid">(),
+  payout: integer("payout").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -538,9 +592,8 @@ export const tournamentBettingRelations = relations(tournamentBetting, ({ one })
   }),
 }));
 
-export const insertTournamentBettingSchema = createInsertSchema(tournamentBetting).omit({ id: true, createdAt: true });
-export type InsertTournamentBetting = z.infer<typeof insertTournamentBettingSchema>;
-export type TournamentBetting = typeof tournamentBetting.$inferSelect;
+export const insertTournamentBetSchema = createInsertSchema(tournamentBetting).omit({ id: true, createdAt: true });
+export type TournamentBet = typeof tournamentBetting.$inferSelect;
 
 export const accountsRelations = relations(accounts, ({ many }) => ({
   inventory: many(inventoryItems),
@@ -962,6 +1015,51 @@ export type QuestRewards = {
   petExp?: number;
 };
 
+export const hellZoneSessions = pgTable("hell_zone_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  isActive: boolean("is_active").notNull().default(false),
+  round: integer("round").notNull().default(1),
+  safeZoneSize: integer("safe_zone_size").notNull().default(100),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  winnerId: varchar("winner_id").references(() => accounts.id),
+});
+
+export const hellZoneParticipants = pgTable("hell_zone_participants", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull().references(() => hellZoneSessions.id, { onDelete: "cascade" }),
+  accountId: varchar("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
+  hp: integer("hp").notNull(),
+  maxHp: integer("max_hp").notNull(),
+  kills: integer("kills").notNull().default(0),
+  isEliminated: boolean("is_eliminated").notNull().default(false),
+  lastActionAt: timestamp("last_action_at").notNull().defaultNow(),
+  joinedAt: timestamp("joined_at").notNull().defaultNow(),
+});
+
+export const hellZoneSessionsRelations = relations(hellZoneSessions, ({ one, many }) => ({
+  winner: one(accounts, {
+    fields: [hellZoneSessions.winnerId],
+    references: [accounts.id],
+  }),
+  participants: many(hellZoneParticipants),
+}));
+
+export const hellZoneParticipantsRelations = relations(hellZoneParticipants, ({ one }) => ({
+  session: one(hellZoneSessions, {
+    fields: [hellZoneParticipants.sessionId],
+    references: [hellZoneSessions.id],
+  }),
+  account: one(accounts, {
+    fields: [hellZoneParticipants.accountId],
+    references: [accounts.id],
+  }),
+}));
+
+export const insertHellZoneSessionSchema = createInsertSchema(hellZoneSessions).omit({ id: true, startedAt: true });
+export type HellZoneSession = typeof hellZoneSessions.$inferSelect;
+export const insertHellZoneParticipantSchema = createInsertSchema(hellZoneParticipants).omit({ id: true, joinedAt: true, lastActionAt: true });
+export type HellZoneParticipant = typeof hellZoneParticipants.$inferSelect;
+
 export const questAssignments = pgTable("quest_assignments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   questId: varchar("quest_id").notNull().references(() => quests.id, { onDelete: "cascade" }),
@@ -1325,6 +1423,9 @@ export type AuctionType = typeof auctionTypes[number];
 export const auctionItemTypes = ["item", "skill"] as const;
 export type AuctionItemType = typeof auctionItemTypes[number];
 
+export const auctionStatuses = ["active", "completed", "cancelled"] as const;
+export type AuctionStatus = typeof auctionStatuses[number];
+
 export const auctions = pgTable("auctions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   sellerId: varchar("seller_id").references(() => accounts.id), // null if admin/system
@@ -1335,7 +1436,8 @@ export const auctions = pgTable("auctions", {
   minIncrement: integer("min_increment").notNull().default(1), // percentage (1-5%)
   currentBid: integer("current_bid").notNull().default(0),
   highestBidderId: varchar("highest_bidder_id").references(() => accounts.id),
-  status: text("status").notNull().default("active"), // active, completed, cancelled
+  status: text("status").notNull().$type<AuctionStatus>().default("active"), // active, completed, cancelled
+  taxPaid: integer("tax_paid").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   endAt: timestamp("end_at").notNull(),
 });

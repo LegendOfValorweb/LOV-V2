@@ -41,6 +41,19 @@ export async function authMiddleware(req: AuthRequest, res: Response, next: Next
     return res.status(401).json({ error: "Unauthorized", message: "Account not found" });
   }
 
+  // Combat-logout timer: check if player was in combat recently
+  if (account.lastCombatTime) {
+    const lastCombat = new Date(account.lastCombatTime).getTime();
+    const now = Date.now();
+    const COMBAT_LOGOUT_WAIT = 30 * 1000; // 30 seconds
+    if (now - lastCombat < COMBAT_LOGOUT_WAIT) {
+      return res.status(403).json({ 
+        error: "In Combat", 
+        message: `You must wait ${Math.ceil((COMBAT_LOGOUT_WAIT - (now - lastCombat)) / 1000)}s after combat to logout or switch sessions.` 
+      });
+    }
+  }
+
   // Duplicate login protection: check if session matches
   if (account.currentSessionId && account.currentSessionId !== decoded.sessionId) {
     res.clearCookie(COOKIE_NAME);

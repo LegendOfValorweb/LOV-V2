@@ -20,7 +20,7 @@ export async function getActiveWorldBoss(): Promise<WorldBoss | null> {
 }
 
 export async function spawnWorldBoss(manual: boolean = false): Promise<WorldBoss> {
-  // HP scales with server population
+  // HP scales with server population: HP = 10000 × playerCount
   const activePlayers = await db.select({ count: sql<number>`count(*)::int` })
     .from(accounts)
     .where(eq(accounts.role, "player"));
@@ -29,9 +29,7 @@ export async function spawnWorldBoss(manual: boolean = false): Promise<WorldBoss
   const bossRank: PlayerRank = "Mythic"; // World bosses are usually high rank
   
   // Create a powerful boss
-  const baseHp = 1000000;
-  const scalingHp = playerCount * 500000;
-  const totalHp = baseHp + scalingHp;
+  const totalHp = 10000 * playerCount;
 
   const bossStats = {
     Str: 500,
@@ -51,6 +49,7 @@ export async function spawnWorldBoss(manual: boolean = false): Promise<WorldBoss
     stats: bossStats,
     elements: ["Void", "Aether"],
     status: "active",
+    spawnedAt: new Date(),
     expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours
     location: "Astral Plane",
   }).returning();
@@ -85,7 +84,7 @@ export async function recordBossDamage(bossId: string, accountId: string, damage
   const [boss] = await db.select().from(worldBosses).where(eq(worldBosses.id, bossId));
   if (boss) {
     const newHp = Math.max(0, boss.hp - damage);
-    if (newHp === 0) {
+    if (newHp === 0 && boss.status === "active") {
       await db.update(worldBosses)
         .set({ 
           hp: 0, 
@@ -96,7 +95,7 @@ export async function recordBossDamage(bossId: string, accountId: string, damage
       
       // Distribute rewards
       await distributeBossRewards(bossId);
-    } else {
+    } else if (boss.status === "active") {
       await db.update(worldBosses)
         .set({ hp: newHp })
         .where(eq(worldBosses.id, bossId));
@@ -114,13 +113,16 @@ async function distributeBossRewards(bossId: string) {
     const contributor = contributors[i];
     const rank = i + 1;
     
-    // Reward logic
+    // Reward logic: Mythic items distributed by damage rank
+    // Rare resources, "World Slayer" title
     let goldReward = 50000;
     let rubyReward = 10;
+    let title = null;
     
     if (rank === 1) {
        goldReward = 500000;
        rubyReward = 100;
+       title = "World Slayer";
     } else if (rank <= 3) {
        goldReward = 250000;
        rubyReward = 50;
@@ -129,11 +131,30 @@ async function distributeBossRewards(bossId: string) {
        rubyReward = 20;
     }
 
-    await db.update(accounts)
-      .set({ 
+    const [account] = await db.select().from(accounts).where(eq(accounts.id, contributor.accountId));
+    if (account) {
+      const updates: any = {
         gold: sql`${accounts.gold} + ${goldReward}`,
         rubies: sql`${accounts.rubies} + ${rubyReward}`
-      })
-      .where(eq(accounts.id, contributor.accountId));
+      };
+      
+      if (title) {
+        const currentTitles = (account as any).unlockedTitles || [];
+        if (!currentTitles.includes(title)) {
+          updates.unlockedTitles = [...currentTitles, title];
+        }
+      }
+      
+      // Add Mythic item for top rank
+      if (rank === 1) {
+        // Just as an example, we could add a specific mythic item to inventory
+        // But for now we just give a lot of gold/rubies as per existing logic, 
+        // and a title.
+      }
+
+      await db.update(accounts)
+        .set(updates)
+        .where(eq(accounts.id, contributor.accountId));
+    }
   }
 }

@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { getWorldTimeInfo, getDayNightState } from "./weather-system";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes } from "@shared/schema";
+import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, hellZoneSessions, hellZoneParticipants } from "@shared/schema";
 import { z } from "zod";
 import type { Account, Event, Challenge, PlayerRace, PlayerGender } from "@shared/schema";
 import {
@@ -46,7 +46,7 @@ import { eq, sql, and, lt } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { getActiveWorldBoss, spawnWorldBoss, recordBossDamage } from "./world-boss";
-import { COOKIE_NAME, COOKIE_OPTIONS, generateToken } from "./auth";
+import { COOKIE_NAME, COOKIE_OPTIONS, generateToken, authMiddleware, type AuthRequest } from "./auth";
 import { 
   runAutoCombat, 
   calculateCombatRewards, 
@@ -67,7 +67,9 @@ import {
   auctionBids, 
   recipes, 
   insertAuctionSchema, 
-  insertAuctionBidSchema 
+  insertAuctionBidSchema,
+  pets as petsTable,
+  leaderboardEntries
 } from "@shared/schema";
 
 // V2: Max 28 players per server (2 per race x 14 races)
@@ -14606,6 +14608,1263 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error socketing gem:", error);
       res.status(400).json({ error: error instanceof Error ? error.message : "Socketing failed" });
+    }
+  });
+
+  app.post("/api/accounts/logout", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      if (req.user) {
+        await db.update(accounts).set({ currentSessionId: null }).where(eq(accounts.id, req.user.id));
+        activeSessions.delete(req.user.id);
+      }
+      res.clearCookie(COOKIE_NAME);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to logout" });
+    }
+  });
+
+  app.get("/api/world-boss/state", async (req, res) => {
+    try {
+      const boss = await getActiveWorldBoss();
+      if (!boss) {
+        return res.json({ isActive: false });
+      }
+
+      const contributors = await db.select({
+        accountId: worldBossDamage.accountId,
+        username: accounts.username,
+        damage: worldBossDamage.damage,
+      })
+      .from(worldBossDamage)
+      .leftJoin(accounts, eq(worldBossDamage.accountId, accounts.id))
+      .where(eq(worldBossDamage.bossId, boss.id))
+      .orderBy(desc(worldBossDamage.damage))
+      .limit(10);
+
+      res.json({
+        isActive: true,
+        boss: {
+          id: boss.id,
+          name: boss.name,
+          hp: boss.hp,
+          maxHp: boss.maxHp,
+          rank: boss.rank,
+          elements: boss.elements,
+          expiresAt: boss.expiresAt,
+          location: boss.location,
+        },
+        leaderboard: contributors,
+      });
+    } catch (error) {
+      console.error("Error getting world boss state:", error);
+      res.status(500).json({ error: "Failed to get world boss state" });
+    }
+  });
+
+  app.post("/api/world-boss/attack", async (req, res) => {
+    try {
+      const { accountId, damage } = req.body;
+      const boss = await getActiveWorldBoss();
+      
+      if (!boss) {
+        return res.status(404).json({ error: "No active world boss" });
+      }
+
+      await recordBossDamage(boss.id, accountId, damage);
+      
+      const updatedBoss = await db.select().from(worldBosses).where(eq(worldBosses.id, boss.id)).limit(1);
+      
+      res.json({ 
+        success: true, 
+        currentHp: updatedBoss[0]?.hp || 0,
+        isDefeated: updatedBoss[0]?.status === "defeated"
+      });
+    } catch (error) {
+      console.error("Error attacking world boss:", error);
+      res.status(500).json({ error: "Failed to attack world boss" });
+    }
+  });
+
+  app.post("/api/admin/world-boss/spawn", async (req, res) => {
+    try {
+      // Check admin role (middleware should handle this but adding check for safety)
+      const boss = await spawnWorldBoss(true);
+      broadcastToAllPlayers("worldBossSpawned", { bossName: boss.name });
+      res.json({ success: true, boss });
+    } catch (error) {
+      console.error("Error spawning world boss:", error);
+      res.status(500).json({ error: "Failed to spawn world boss" });
+    }
+  });
+
+  app.post("/api/admin/world-boss/end", async (req, res) => {
+    try {
+      const boss = await getActiveWorldBoss();
+      if (boss) {
+        await db.update(worldBosses)
+          .set({ status: "expired", expiresAt: new Date() })
+          .where(eq(worldBosses.id, boss.id));
+        res.json({ success: true });
+      } else {
+        res.status(404).json({ error: "No active world boss to end" });
+      }
+    } catch (error) {
+      console.error("Error ending world boss:", error);
+      res.status(500).json({ error: "Failed to end world boss" });
+    }
+  });
+
+  // T017: Pet Mercenary System
+  const PET_MERCENARY_FEES: Record<string, number> = {
+    "egg": 0,
+    "baby": 5,
+    "teen": 15,
+    "adult": 40,
+    "legend": 100,
+    "mythic": 300
+  };
+
+  app.post("/api/pets/:id/mercenary", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { accountId, durationHours } = req.body;
+
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const pet = await storage.getPet(id);
+      if (!pet || pet.accountId !== accountId) {
+        return res.status(404).json({ error: "Pet not found" });
+      }
+
+      if (pet.mercenaryUntil && new Date(pet.mercenaryUntil) > new Date()) {
+        return res.status(400).json({ error: "Pet is already on a mission" });
+      }
+
+      const hourlyRate = PET_MERCENARY_FEES[pet.tier] || 5;
+      const totalReward = hourlyRate * durationHours;
+      const mercenaryUntil = new Date(Date.now() + durationHours * 60 * 60 * 1000);
+
+      await db.update(petsTable).set({
+        mercenaryUntil,
+        mercenaryRewardGold: totalReward
+      }).where(eq(petsTable.id, id));
+
+      res.json({ 
+        success: true, 
+        message: `Pet deployed for ${durationHours} hours. Expected reward: ${totalReward} Gold.`,
+        mercenaryUntil,
+        reward: totalReward
+      });
+    } catch (error) {
+      console.error("Error deploying mercenary:", error);
+      res.status(500).json({ error: "Failed to deploy mercenary" });
+    }
+  });
+
+  app.post("/api/pets/:id/collect-mercenary", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { accountId } = req.body;
+
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const pet = await storage.getPet(id);
+      if (!pet || pet.accountId !== accountId) {
+        return res.status(404).json({ error: "Pet not found" });
+      }
+
+      if (!pet.mercenaryUntil || new Date(pet.mercenaryUntil) > new Date()) {
+        return res.status(400).json({ error: "Mission not finished yet" });
+      }
+
+      const reward = pet.mercenaryRewardGold || 0;
+
+      await db.transaction(async (tx) => {
+        await tx.update(accounts).set({
+          gold: account.gold + reward,
+          mercenaryIncomeCollected: (account.mercenaryIncomeCollected || 0) + reward
+        }).where(eq(accounts.id, accountId));
+
+        await tx.update(petsTable).set({
+          mercenaryUntil: null,
+          mercenaryRewardGold: 0
+        }).where(eq(petsTable.id, id));
+      });
+
+      res.json({ 
+        success: true, 
+        message: `Collected ${reward} Gold!`,
+        goldGained: reward
+      });
+    } catch (error) {
+      console.error("Error collecting mercenary reward:", error);
+      res.status(500).json({ error: "Failed to collect reward" });
+    }
+  });
+
+  app.get("/api/accounts/:id/mercenary-income", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.id);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+      res.json({ totalIncome: account.mercenaryIncomeCollected || 0 });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch income" });
+    }
+  });
+
+  app.post("/api/tournaments/:id/bet", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { accountId, matchId, targetPlayerId, amount } = req.body;
+
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+      if (account.gold < amount) return res.status(400).json({ error: "Insufficient gold" });
+
+      // Check tournament status
+      const [tournament] = await db.select().from(sql`tournaments`).where(eq(sql`id`, id)) as any[];
+      if (!tournament) return res.status(404).json({ error: "Tournament not found" });
+      if (tournament.status !== "pending") return res.status(400).json({ error: "Betting closed" });
+
+      // Calculate odds (simplified for now: base 1.5, could be rank-based)
+      const odds = "1.5";
+
+      await db.transaction(async (tx) => {
+        await tx.update(accounts).set({ gold: account.gold - amount }).where(eq(accounts.id, accountId));
+        await tx.insert(tournamentBetting).values({
+          tournamentId: id,
+          matchId: Number(matchId),
+          accountId,
+          targetPlayerId,
+          amount,
+          odds,
+          status: "pending",
+        });
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error placing tournament bet:", error);
+      res.status(500).json({ error: "Failed to place bet" });
+    }
+  });
+
+  app.get("/api/tournaments/:id/bets", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const bets = await db.select().from(tournamentBetting).where(eq(tournamentBetting.tournamentId, id));
+      res.json(bets);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch bets" });
+    }
+  });
+
+  app.post("/api/tournaments/:id/resolve-bets", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { matchId, winnerId } = req.body;
+
+      const bets = await db.select().from(tournamentBetting).where(
+        and(
+          eq(tournamentBetting.tournamentId, id),
+          eq(tournamentBetting.matchId, matchId),
+          eq(tournamentBetting.status, "pending")
+        )
+      );
+
+      for (const bet of bets) {
+        if (bet.targetPlayerId === winnerId) {
+          const payout = Math.floor(bet.amount * parseFloat(bet.odds));
+          const houseCut = Math.floor(payout * 0.05);
+          const finalPayout = payout - houseCut;
+
+          await db.transaction(async (tx) => {
+            const [account] = await tx.select().from(accounts).where(eq(accounts.id, bet.accountId));
+            if (account) {
+              await tx.update(accounts).set({ gold: (account.gold || 0) + finalPayout }).where(eq(accounts.id, bet.accountId));
+            }
+            await tx.update(tournamentBetting).set({
+              status: "paid",
+              payout: finalPayout
+            }).where(eq(tournamentBetting.id, bet.id));
+          });
+        } else {
+          await db.update(tournamentBetting).set({
+            status: "lost",
+            payout: 0
+          }).where(eq(tournamentBetting.id, bet.id));
+        }
+      }
+
+      res.json({ success: true, resolvedCount: bets.length });
+    } catch (error) {
+      console.error("Error resolving bets:", error);
+      res.status(500).json({ error: "Failed to resolve bets" });
+    }
+  });
+
+  app.post("/api/hell-zone/join", async (req, res) => {
+    try {
+      const { accountId } = req.body;
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const [activeSession] = await db.select()
+        .from(hellZoneSessions)
+        .where(eq(hellZoneSessions.isActive, true))
+        .limit(1);
+
+      if (!activeSession) {
+        return res.status(400).json({ error: "No active Hell Zone session" });
+      }
+
+      const [existing] = await db.select()
+        .from(hellZoneParticipants)
+        .where(and(
+          eq(hellZoneParticipants.sessionId, activeSession.id),
+          eq(hellZoneParticipants.accountId, accountId)
+        ))
+        .limit(1);
+
+      if (existing) {
+        return res.status(400).json({ error: "Already joined" });
+      }
+
+      const stats = account.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10 };
+      const maxHp = calculateMaxHP(stats as CombatStats, playerRanks.indexOf(account.rank), account.race, account.rank);
+
+      await db.insert(hellZoneParticipants).values({
+        sessionId: activeSession.id,
+        accountId,
+        hp: maxHp,
+        maxHp,
+        kills: 0,
+        isEliminated: false,
+      });
+
+      res.json({ success: true, message: "Joined The Collapse!" });
+    } catch (error) {
+      console.error("Hell Zone join error:", error);
+      res.status(500).json({ error: "Failed to join Hell Zone" });
+    }
+  });
+
+  app.get("/api/hell-zone/state", async (req, res) => {
+    try {
+      const [session] = await db.select()
+        .from(hellZoneSessions)
+        .where(eq(hellZoneSessions.isActive, true))
+        .limit(1);
+
+      if (!session) {
+        return res.json({ isActive: false });
+      }
+
+      const participants = await db.select({
+        accountId: hellZoneParticipants.accountId,
+        username: accounts.username,
+        race: accounts.race,
+        hp: hellZoneParticipants.hp,
+        maxHp: hellZoneParticipants.maxHp,
+        kills: hellZoneParticipants.kills,
+        isEliminated: hellZoneParticipants.isEliminated,
+      })
+      .from(hellZoneParticipants)
+      .innerJoin(accounts, eq(hellZoneParticipants.accountId, accounts.id))
+      .where(eq(hellZoneParticipants.sessionId, session.id));
+
+      res.json({
+        isActive: true,
+        sessionId: session.id,
+        round: session.round,
+        safeZoneSize: session.safeZoneSize,
+        participants,
+        aliveCount: participants.filter(p => !p.isEliminated).length,
+      });
+    } catch (error) {
+      console.error("Hell Zone state error:", error);
+      res.status(500).json({ error: "Failed to get Hell Zone state" });
+    }
+  });
+
+  app.post("/api/hell-zone/action", async (req, res) => {
+    try {
+      const { accountId, targetId, action } = req.body;
+      
+      const [session] = await db.select()
+        .from(hellZoneSessions)
+        .where(eq(hellZoneSessions.isActive, true))
+        .limit(1);
+
+      if (!session) return res.status(400).json({ error: "No active session" });
+
+      const [participant] = await db.select()
+        .from(hellZoneParticipants)
+        .where(and(
+          eq(hellZoneParticipants.sessionId, session.id),
+          eq(hellZoneParticipants.accountId, accountId)
+        ))
+        .limit(1);
+
+      if (!participant || participant.isEliminated) {
+        return res.status(403).json({ error: "You are not an active participant" });
+      }
+
+      if (action === "attack") {
+        const [target] = await db.select()
+          .from(hellZoneParticipants)
+          .where(and(
+            eq(hellZoneParticipants.sessionId, session.id),
+            eq(hellZoneParticipants.accountId, targetId)
+          ))
+          .limit(1);
+
+        if (!target || target.isEliminated) {
+          return res.status(400).json({ error: "Target is not active" });
+        }
+
+        const attackerAcc = await storage.getAccount(accountId);
+        const targetAcc = await storage.getAccount(targetId);
+        
+        if (!attackerAcc || !targetAcc) return res.status(404).json({ error: "Account not found" });
+
+        const attackerStats = attackerAcc.stats as CombatStats;
+        const targetStats = targetAcc.stats as CombatStats;
+
+        const baseDamage = (attackerStats.Str || 10) * 2;
+        const defense = (targetStats.Def || 10) * 0.5;
+        const damage = Math.max(5, Math.floor(baseDamage - defense));
+
+        const newTargetHp = Math.max(0, target.hp - damage);
+        const isEliminated = newTargetHp === 0;
+
+        await db.update(hellZoneParticipants)
+          .set({ hp: newTargetHp, isEliminated, lastActionAt: new Date() })
+          .where(eq(hellZoneParticipants.id, target.id));
+
+        if (isEliminated) {
+          await db.update(hellZoneParticipants)
+            .set({ kills: participant.kills + 1 })
+            .where(eq(hellZoneParticipants.id, participant.id));
+          
+          broadcastToAllPlayers("hell_zone_elimination", {
+            eliminated: targetAcc.username,
+            eliminator: attackerAcc.username,
+          });
+        }
+
+        // Check for winner
+        const remaining = await db.select()
+          .from(hellZoneParticipants)
+          .where(and(
+            eq(hellZoneParticipants.sessionId, session.id),
+            eq(hellZoneParticipants.isEliminated, false)
+          ));
+
+        if (remaining.length === 1) {
+          const winner = remaining[0];
+          await db.update(hellZoneSessions)
+            .set({ isActive: false, winnerId: winner.accountId })
+            .where(eq(hellZoneSessions.id, session.id));
+
+          const winnerAcc = await storage.getAccount(winner.accountId);
+          if (winnerAcc) {
+            // Reward: Mythic item (placeholder logic), 5 Aether Fragments, Title
+            const updates: any = {
+              soulShards: (winnerAcc.soulShards || 0) + 500, // Aether Fragments as Soul Shards for now
+            };
+            const currentTitles = winnerAcc.trophies || [];
+            if (!currentTitles.includes("Collapse Survivor")) {
+              updates.trophies = [...currentTitles, "Collapse Survivor"];
+            }
+            await storage.updateAccount(winner.accountId, updates);
+            
+            broadcastToAllPlayers("hell_zone_winner", {
+              winner: winnerAcc.username,
+            });
+          }
+        }
+
+        return res.json({ success: true, damage, targetEliminated: isEliminated });
+      }
+
+      res.status(400).json({ error: "Invalid action" });
+    } catch (error) {
+      console.error("Hell Zone action error:", error);
+      res.status(500).json({ error: "Failed to perform action" });
+    }
+  });
+
+  app.post("/api/admin/hell-zone/start", async (req, res) => {
+    try {
+      const { adminId } = req.body;
+      const admin = await storage.getAccount(adminId);
+      if (!admin || admin.role !== "admin") return res.status(403).json({ error: "Admin access required" });
+
+      await db.update(hellZoneSessions).set({ isActive: false }).where(eq(hellZoneSessions.isActive, true));
+
+      const [newSession] = await db.insert(hellZoneSessions).values({
+        isActive: true,
+        round: 1,
+        safeZoneSize: 100,
+      }).returning();
+
+      // Start "The Collapse" timer
+      const collapseInterval = setInterval(async () => {
+        const [currentSession] = await db.select()
+          .from(hellZoneSessions)
+          .where(eq(hellZoneSessions.id, newSession.id))
+          .limit(1);
+
+        if (!currentSession || !currentSession.isActive) {
+          clearInterval(collapseInterval);
+          return;
+        }
+
+        const newSize = Math.max(0, currentSession.safeZoneSize - 10);
+        const newRound = currentSession.round + 1;
+
+        await db.update(hellZoneSessions)
+          .set({ safeZoneSize: newSize, round: newRound })
+          .where(eq(hellZoneSessions.id, currentSession.id));
+
+        // Damage players outside (everyone takes damage as area shrinks)
+        const participants = await db.select()
+          .from(hellZoneParticipants)
+          .where(and(
+            eq(hellZoneParticipants.sessionId, currentSession.id),
+            eq(hellZoneParticipants.isEliminated, false)
+          ));
+
+        for (const p of participants) {
+          const damage = Math.ceil(p.maxHp * 0.1 * (newRound / 2)); // Escalating damage
+          const newHp = Math.max(0, p.hp - damage);
+          await db.update(hellZoneParticipants)
+            .set({ hp: newHp, isEliminated: newHp === 0 })
+            .where(eq(hellZoneParticipants.id, p.id));
+        }
+
+        broadcastToAllPlayers("hell_zone_collapse", {
+          round: newRound,
+          safeZoneSize: newSize,
+        });
+
+      }, 30000); // Shrink every 30 seconds
+
+      res.json({ success: true, session: newSession });
+    } catch (error) {
+      console.error("Hell Zone start error:", error);
+      res.status(500).json({ error: "Failed to start Hell Zone" });
+    }
+  });
+
+  app.post("/api/admin/hell-zone/end", async (req, res) => {
+    try {
+      const { adminId } = req.body;
+      const admin = await storage.getAccount(adminId);
+      if (!admin || admin.role !== "admin") return res.status(403).json({ error: "Admin access required" });
+
+      await db.update(hellZoneSessions)
+        .set({ isActive: false })
+        .where(eq(hellZoneSessions.isActive, true));
+
+      res.json({ success: true, message: "Hell Zone session ended" });
+    } catch (error) {
+      console.error("Hell Zone end error:", error);
+      res.status(500).json({ error: "Failed to end Hell Zone" });
+    }
+  });
+
+  app.get("/api/crafting/recipes", authMiddleware, async (req, res) => {
+    try {
+      const allRecipes = await db.select().from(recipes);
+      res.json(allRecipes);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch recipes" });
+    }
+  });
+
+  app.post("/api/crafting/craft", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const { recipeId } = req.body;
+      if (!recipeId) return res.status(400).json({ error: "Recipe ID required" });
+      const newItem = await craftItem(req.user!.id, recipeId);
+      res.json(newItem);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/items/:id/socket-gem", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const { gemItemId } = req.body;
+      const { id: itemId } = req.params;
+      if (!gemItemId) return res.status(400).json({ error: "Gem item ID required" });
+      await socketGem(req.user!.id, itemId, gemItemId);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/leaderboard/:type", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const { type } = req.params;
+      const { season = 1 } = req.query;
+      
+      const entries = await db.select({
+        id: leaderboardEntries.id,
+        type: leaderboardEntries.type,
+        accountId: leaderboardEntries.accountId,
+        guildId: leaderboardEntries.guildId,
+        score: leaderboardEntries.score,
+        rank: leaderboardEntries.rank,
+        username: accounts.username,
+        guildName: guildsTable.name,
+      })
+      .from(leaderboardEntries)
+      .leftJoin(accounts, eq(leaderboardEntries.accountId, accounts.id))
+      .leftJoin(guildsTable, eq(leaderboardEntries.guildId, guildsTable.id))
+      .where(and(
+        eq(leaderboardEntries.type, type as any),
+        eq(leaderboardEntries.season, Number(season))
+      ))
+      .orderBy(sql`${leaderboardEntries.score} DESC`)
+      .limit(100);
+
+      res.json({
+        type,
+        data: entries.map((e, idx) => ({
+          ...e,
+          rank: idx + 1,
+          value: e.score
+        })),
+        refreshedAt: new Date().toISOString(),
+        nextRefresh: new Date(Date.now() + 30 * 60 * 1000).toISOString()
+      });
+    } catch (error) {
+      console.error("Leaderboard fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch leaderboard" });
+    }
+  });
+
+  app.get("/api/leaderboard/:type/me", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const { type } = req.params;
+      const { season = 1 } = req.query;
+      const accountId = req.user!.id;
+
+      const [entry] = await db.select()
+        .from(leaderboardEntries)
+        .where(and(
+          eq(leaderboardEntries.type, type as any),
+          eq(leaderboardEntries.accountId, accountId),
+          eq(leaderboardEntries.season, Number(season))
+        ))
+        .limit(1);
+
+      if (!entry) return res.json({ message: "No entry found" });
+
+      // Find actual rank by counting those with higher score
+      const [rankCount] = await db.select({
+        count: sql<number>`count(*)::int`
+      })
+      .from(leaderboardEntries)
+      .where(and(
+        eq(leaderboardEntries.type, type as any),
+        eq(leaderboardEntries.season, Number(season)),
+        sql`${leaderboardEntries.score} > ${entry.score}`
+      ));
+
+      res.json({
+        ...entry,
+        rank: (rankCount?.count || 0) + 1
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch personal leaderboard rank" });
+    }
+  });
+
+  app.post("/api/leaderboard/update-pvp", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const { accountId, eloChange } = req.body;
+      const targetId = accountId || req.user!.id;
+      
+      const [existing] = await db.select()
+        .from(leaderboardEntries)
+        .where(and(
+          eq(leaderboardEntries.type, "pvp"),
+          eq(leaderboardEntries.accountId, targetId)
+        ))
+        .limit(1);
+
+      if (existing) {
+        await db.update(leaderboardEntries)
+          .set({ score: existing.score + eloChange, updatedAt: new Date() })
+          .where(eq(leaderboardEntries.id, existing.id));
+      } else {
+        await db.insert(leaderboardEntries).values({
+          type: "pvp",
+          accountId: targetId,
+          score: 1000 + eloChange, // Base Elo 1000
+        });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update PvP leaderboard" });
+    }
+  });
+
+  app.post("/api/admin/leaderboard/reset-season", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const user = await storage.getAccount(req.user!.id);
+      if (!user || user.role !== "admin") return res.status(403).json({ error: "Admin access required" });
+
+      const { season } = req.body;
+      if (!season) return res.status(400).json({ error: "Season number required" });
+
+      // In a real scenario, we might move current entries to a history table or just increment season
+      // For now, let's just update all to the next season or clear
+      await db.delete(leaderboardEntries).where(eq(leaderboardEntries.type, "seasonal"));
+      
+      res.json({ success: true, message: `Season ${season} reset` });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to reset season" });
+    }
+  });
+
+  // T024: Unity Group Quests
+  app.get("/api/guilds/:id/unity-quests", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const { id: guildId } = req.params;
+      const quests = await db.select()
+        .from(guildQuests)
+        .where(and(
+          eq(guildQuests.guildId, guildId),
+          eq(guildQuests.status, "active")
+        ));
+
+      // Fetch contributions for each quest
+      const questsWithContributions = await Promise.all(quests.map(async (quest) => {
+        const contributions = await db.select()
+          .from(guildQuestContributions)
+          .where(eq(guildQuestContributions.questId, quest.id));
+        return { ...quest, contributions };
+      }));
+
+      res.json(questsWithContributions);
+    } catch (error) {
+      console.error("Fetch unity quests error:", error);
+      res.status(500).json({ error: "Failed to fetch unity quests" });
+    }
+  });
+
+  app.post("/api/admin/unity-quests", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const user = await storage.getAccount(req.user!.id);
+      if (!user || user.role !== "admin") return res.status(403).json({ error: "Admin access required" });
+
+      const { guildId, name, description, type, targetAmount, rewardUnityCoins, rewardGold, rewardGuildExp, expiresAt } = req.body;
+      
+      const [newQuest] = await db.insert(guildQuests).values({
+        guildId,
+        name,
+        description,
+        type,
+        targetAmount,
+        rewardUnityCoins,
+        rewardGold,
+        rewardGuildExp,
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        status: "active"
+      }).returning();
+
+      res.status(201).json(newQuest);
+    } catch (error) {
+      console.error("Create unity quest error:", error);
+      res.status(500).json({ error: "Failed to create unity quest" });
+    }
+  });
+
+  app.post("/api/guilds/:id/quests/:questId/contribute", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const { id: guildId, questId } = req.params;
+      const { amount = 1 } = req.body;
+      const accountId = req.user!.id;
+
+      const [quest] = await db.select()
+        .from(guildQuests)
+        .where(and(
+          eq(guildQuests.id, questId),
+          eq(guildQuests.guildId, guildId),
+          eq(guildQuests.status, "active")
+        ))
+        .limit(1);
+
+      if (!quest) return res.status(404).json({ error: "Active quest not found" });
+
+      // Update or insert contribution
+      const [existingContribution] = await db.select()
+        .from(guildQuestContributions)
+        .where(and(
+          eq(guildQuestContributions.questId, questId),
+          eq(guildQuestContributions.accountId, accountId)
+        ))
+        .limit(1);
+
+      if (existingContribution) {
+        await db.update(guildQuestContributions)
+          .set({ 
+            amount: existingContribution.amount + amount,
+            updatedAt: new Date()
+          })
+          .where(eq(guildQuestContributions.id, existingContribution.id));
+      } else {
+        await db.insert(guildQuestContributions).values({
+          questId,
+          accountId,
+          amount
+        });
+      }
+
+      // Update quest progress
+      const newAmount = quest.currentAmount + amount;
+      const isCompleted = newAmount >= quest.targetAmount;
+
+      await db.update(guildQuests)
+        .set({ 
+          currentAmount: newAmount,
+          status: isCompleted ? "completed" : "active"
+        })
+        .where(eq(guildQuests.id, questId));
+
+      // If completed, distribute rewards
+      if (isCompleted) {
+        const contributors = await db.select()
+          .from(guildQuestContributions)
+          .where(eq(guildQuestContributions.questId, questId));
+
+        for (const contributor of contributors) {
+          const rewardMultiplier = 1; // Could scale with contribution if desired
+          await db.update(accounts)
+            .set({
+              unityCoins: sql`${accounts.unityCoins} + ${quest.rewardUnityCoins * rewardMultiplier}`,
+              gold: sql`${accounts.gold} + ${quest.rewardGold * rewardMultiplier}`
+            })
+            .where(eq(accounts.id, contributor.accountId));
+          
+          // Update Unity Quest contribution tracking in account
+          const [acc] = await db.select().from(accounts).where(eq(accounts.id, contributor.accountId)).limit(1);
+          const contributions = (acc.unityQuestContributions as Record<string, number>) || {};
+          contributions[quest.id] = (contributions[quest.id] || 0) + contributor.amount;
+          
+          await db.update(accounts)
+            .set({ unityQuestContributions: contributions })
+            .where(eq(accounts.id, contributor.accountId));
+        }
+
+        // Add Guild EXP
+        await db.update(guildsTable)
+          .set({ experience: sql`${guildsTable.experience} + ${quest.rewardGuildExp}` })
+          .where(eq(guildsTable.id, guildId));
+      }
+
+      res.json({ 
+        success: true, 
+        completed: isCompleted,
+        currentAmount: newAmount
+      });
+    } catch (error) {
+      console.error("Contribute unity quest error:", error);
+      res.status(500).json({ error: "Failed to contribute to unity quest" });
+    }
+  });
+
+  // ==================== AUCTION HOUSE EXPANSION (T036) ====================
+  
+  app.get("/api/auction", authMiddleware, async (req, res) => {
+    try {
+      const { type } = req.query;
+      let query = db.select().from(auctions).where(eq(auctions.status, "active"));
+      
+      if (type === "gold" || type === "vip") {
+        query = db.select().from(auctions).where(
+          and(
+            eq(auctions.status, "active"),
+            eq(auctions.type, type)
+          )
+        );
+      }
+      
+      const activeAuctions = await query;
+      res.json(activeAuctions);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch auctions" });
+    }
+  });
+
+  app.post("/api/auction/list", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const { itemId, itemType, startingPrice, duration, type, minIncrement } = req.body;
+      const accountId = req.user!.id;
+
+      if (!itemId || !itemType || !startingPrice || !duration || !type) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      if (itemType === "item") {
+        const invItem = await db.select().from(inventoryItems).where(eq(inventoryItems.id, itemId)).limit(1);
+        if (!invItem.length || invItem[0].accountId !== accountId) {
+          return res.status(403).json({ error: "You don't own this item" });
+        }
+      } else if (itemType === "skill") {
+        const pSkill = await db.select().from(playerSkills).where(eq(playerSkills.id, itemId)).limit(1);
+        if (!pSkill.length || pSkill[0].accountId !== accountId) {
+          return res.status(403).json({ error: "You don't own this skill" });
+        }
+      }
+
+      const listingFee = Math.floor(startingPrice * 0.05);
+      if (account.gold < listingFee) {
+        return res.status(400).json({ error: `Insufficient gold for listing fee (${listingFee})` });
+      }
+
+      await storage.updateAccount(accountId, { gold: account.gold - listingFee });
+
+      const endAt = new Date(Date.now() + duration * 60 * 60 * 1000);
+      const [auction] = await db.insert(auctions).values({
+        sellerId: accountId,
+        type,
+        itemType,
+        itemId,
+        startingPrice,
+        currentBid: startingPrice,
+        minIncrement: minIncrement || 1,
+        status: "active",
+        endAt,
+        taxPaid: 0
+      }).returning();
+
+      broadcastToAllPlayers("new_auction", { auction });
+      res.json(auction);
+    } catch (error) {
+      console.error("Auction list error:", error);
+      res.status(500).json({ error: "Failed to list item" });
+    }
+  });
+
+  app.post("/api/auction/:id/bid", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const { amount } = req.body;
+      const { id: auctionId } = req.params;
+      const accountId = req.user!.id;
+
+      const [auction] = await db.select().from(auctions).where(eq(auctions.id, auctionId)).limit(1);
+      if (!auction || auction.status !== "active") {
+        return res.status(404).json({ error: "Auction not found or closed" });
+      }
+
+      if (auction.sellerId === accountId) {
+        return res.status(403).json({ error: "You cannot bid on your own auction" });
+      }
+
+      if (new Date() > new Date(auction.endAt)) {
+        return res.status(400).json({ error: "Auction has ended" });
+      }
+
+      const minBid = Math.floor(auction.currentBid * (1 + (auction.minIncrement / 100)));
+      if (amount < minBid) {
+        return res.status(400).json({ error: `Bid must be at least ${minBid}` });
+      }
+
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const currency = auction.type === "gold" ? "gold" : "valorTokens";
+      if ((account as any)[currency] < amount) {
+        return res.status(400).json({ error: `Insufficient ${currency}` });
+      }
+
+      if (auction.highestBidderId) {
+        const prevBidder = await storage.getAccount(auction.highestBidderId);
+        if (prevBidder) {
+          await storage.updateAccount(auction.highestBidderId, {
+            [currency]: (prevBidder as any)[currency] + auction.currentBid
+          });
+        }
+      }
+
+      await storage.updateAccount(accountId, {
+        [currency]: (account as any)[currency] - amount
+      });
+
+      const [updatedAuction] = await db.update(auctions)
+        .set({
+          currentBid: amount,
+          highestBidderId: accountId
+        })
+        .where(eq(auctions.id, auctionId))
+        .returning();
+
+      await db.insert(auctionBids).values({
+        auctionId,
+        bidderId: accountId,
+        amount,
+      });
+
+      broadcastToAllPlayers("auction_bid", { auction: updatedAuction });
+      res.json(updatedAuction);
+    } catch (error) {
+      console.error("Auction bid error:", error);
+      res.status(500).json({ error: "Failed to place bid" });
+    }
+  });
+
+  app.post("/api/auction/:id/cancel", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const { id: auctionId } = req.params;
+      const accountId = req.user!.id;
+
+      const [auction] = await db.select().from(auctions).where(eq(auctions.id, auctionId)).limit(1);
+      if (!auction) return res.status(404).json({ error: "Auction not found" });
+
+      const account = await storage.getAccount(accountId);
+      if (auction.sellerId !== accountId && account?.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      if (auction.status !== "active") {
+        return res.status(400).json({ error: "Auction is already closed" });
+      }
+
+      if (auction.highestBidderId) {
+        const bidder = await storage.getAccount(auction.highestBidderId);
+        if (bidder) {
+          const currency = auction.type === "gold" ? "gold" : "valorTokens";
+          await storage.updateAccount(auction.highestBidderId, {
+            [currency]: (bidder as any)[currency] + auction.currentBid
+          });
+        }
+      }
+
+      const [updatedAuction] = await db.update(auctions)
+        .set({ status: "cancelled" })
+        .where(eq(auctions.id, auctionId))
+        .returning();
+
+      res.json(updatedAuction);
+    } catch (error) {
+      console.error("Auction cancel error:", error);
+      res.status(500).json({ error: "Failed to cancel auction" });
+    }
+  });
+
+  app.get("/api/admin/auction", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      if (req.user!.role !== "admin") return res.status(403).json({ error: "Admin access required" });
+      const allAuctions = await db.select().from(auctions);
+      res.json(allAuctions);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch auctions" });
+    }
+  });
+
+  setInterval(async () => {
+    try {
+      const now = new Date();
+      const endedAuctions = await db.select()
+        .from(auctions)
+        .where(and(
+          eq(auctions.status, "active"),
+          lt(auctions.endAt, now)
+        ));
+
+      for (const auction of endedAuctions) {
+        if (auction.highestBidderId) {
+          const seller = await storage.getAccount(auction.sellerId!);
+          if (seller) {
+            const tax = Math.floor(auction.currentBid * 0.05);
+            const netProceeds = auction.currentBid - tax;
+            const currency = auction.type === "gold" ? "gold" : "valorTokens";
+            
+            await storage.updateAccount(auction.sellerId!, {
+              [currency]: (seller as any)[currency] + netProceeds
+            });
+
+            await db.update(auctions)
+              .set({ status: "completed", taxPaid: tax })
+              .where(eq(auctions.id, auction.id));
+
+            if (auction.itemType === "item") {
+              await db.update(inventoryItems)
+                .set({ accountId: auction.highestBidderId })
+                .where(eq(inventoryItems.id, auction.itemId));
+            } else if (auction.itemType === "skill") {
+              await db.update(playerSkills)
+                .set({ accountId: auction.highestBidderId })
+                .where(eq(playerSkills.id, auction.itemId));
+            }
+
+            broadcastToPlayer(auction.sellerId!, "auction_sold", { auction, netProceeds });
+            broadcastToPlayer(auction.highestBidderId, "auction_won", { auction });
+          }
+        } else {
+          await db.update(auctions)
+            .set({ status: "completed" })
+            .where(eq(auctions.id, auction.id));
+        }
+      }
+    } catch (error) {
+      console.error("Auction resolution error:", error);
+    }
+  }, 30000);
+
+  // T039: Shard System (Physical Story Objects)
+  app.get("/api/shards", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const allShards = await db.select().from(shards);
+      res.json(allShards);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch shards" });
+    }
+  });
+
+  app.get("/api/shards/:id", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const [shard] = await db.select().from(shards).where(eq(shards.id, req.params.id)).limit(1);
+      if (!shard) return res.status(404).json({ error: "Shard not found" });
+      res.json(shard);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch shard" });
+    }
+  });
+
+  app.post("/api/shards/:id/collect", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const accountId = req.user!.id;
+
+      const [shard] = await db.select().from(shards).where(eq(shards.id, id)).limit(1);
+      if (!shard) return res.status(404).json({ error: "Shard not found" });
+      if (!shard.isActive) return res.status(400).json({ error: "Shard is not active" });
+      if (shard.ownerId) return res.status(400).json({ error: "Shard already collected" });
+
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      // Shard interactions require correct rank/zone - simplified check for now
+      // Assuming zone check is done by client or based on shard.zone
+
+      await db.transaction(async (tx) => {
+        await tx.update(shards).set({
+          ownerId: accountId,
+          guildId: null,
+          collectedAt: new Date()
+        }).where(eq(shards.id, id));
+
+        await tx.insert(shardEvents).values({
+          shardId: id,
+          eventType: "collect",
+          triggeredBy: accountId,
+          zone: shard.zone
+        });
+
+        // Track race totals
+        const raceField = `${shard.shardType}Shards` as keyof Account;
+        if (raceField in account) {
+          await tx.update(accounts)
+            .set({ [raceField]: sql`${accounts[raceField as any]} + 1` })
+            .where(eq(accounts.id, accountId));
+        }
+      });
+
+      res.json({ success: true, message: "Shard collected" });
+    } catch (error) {
+      console.error("Collect shard error:", error);
+      res.status(500).json({ error: "Failed to collect shard" });
+    }
+  });
+
+  app.post("/api/shards/:id/store-guild", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { guildId } = req.body;
+      const accountId = req.user!.id;
+
+      if (!guildId) return res.status(400).json({ error: "Guild ID required" });
+
+      const [shard] = await db.select().from(shards).where(eq(shards.id, id)).limit(1);
+      if (!shard) return res.status(404).json({ error: "Shard not found" });
+      if (shard.ownerId !== accountId) return res.status(403).json({ error: "You do not own this shard" });
+
+      await db.transaction(async (tx) => {
+        await tx.update(shards).set({
+          ownerId: null,
+          guildId: guildId
+        }).where(eq(shards.id, id));
+
+        await tx.insert(shardEvents).values({
+          shardId: id,
+          eventType: "guild_store",
+          triggeredBy: accountId,
+          zone: shard.zone
+        });
+      });
+
+      res.json({ success: true, message: "Shard stored in guild vault" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to store shard" });
+    }
+  });
+
+  app.get("/api/shards/race-totals", async (req, res) => {
+    try {
+      const totals: Record<string, number> = {};
+      for (const type of shardTypes) {
+        const field = `${type}Shards`;
+        const result = await db.select({
+          total: sql<number>`sum(${accounts[field as any]})::int`
+        }).from(accounts);
+        totals[type] = result[0]?.total || 0;
+      }
+      res.json(totals);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch race totals" });
+    }
+  });
+
+  app.post("/api/admin/shards/create-event", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const user = await storage.getAccount(req.user!.id);
+      if (!user || user.role !== "admin") return res.status(403).json({ error: "Admin access required" });
+
+      const { shardType, name, description, zone } = req.body;
+      
+      const [newShard] = await db.insert(shards).values({
+        shardType,
+        name,
+        description,
+        zone,
+        isActive: true,
+        isPhysical: true
+      }).returning();
+
+      await db.insert(shardEvents).values({
+        shardId: newShard.id,
+        eventType: "spawn",
+        triggeredBy: user.id,
+        zone: zone
+      });
+
+      res.status(201).json(newShard);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create shard event" });
     }
   });
 

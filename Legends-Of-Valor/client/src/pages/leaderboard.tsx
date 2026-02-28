@@ -49,16 +49,11 @@ type LeaderboardResponse = {
 };
 
 const leaderboardTypes = [
-  { id: "wins", label: "Wins", icon: Trophy, color: "text-yellow-500" },
-  { id: "losses", label: "Losses", icon: TrendingDown, color: "text-red-500" },
-  { id: "npc_progress", label: "NPC Tower", icon: Target, color: "text-purple-500" },
-  { id: "rank", label: "Rank", icon: Crown, color: "text-blue-500" },
-  { id: "guild_dungeon", label: "Guild Dungeon", icon: Castle, color: "text-emerald-500" },
-  { id: "guild_wins", label: "Guild Wins", icon: Swords, color: "text-orange-500" },
-  { id: "pet_arena", label: "Pet Arena", icon: Sparkles, color: "text-pink-500" },
-  { id: "resource_gathering", label: "Gathering", icon: TrendingUp, color: "text-green-500" },
+  { id: "pvp", label: "PvP Elo", icon: Swords, color: "text-red-500" },
+  { id: "guild", label: "Guild XP", icon: Users, color: "text-emerald-500" },
+  { id: "tower", label: "Highest Floor", icon: Target, color: "text-purple-500" },
+  { id: "gathering", label: "Gathering", icon: TrendingUp, color: "text-green-500" },
   { id: "seasonal", label: "Seasonal", icon: Calendar, color: "text-blue-400" },
-  { id: "base_raids", label: "Base Raids", icon: Castle, color: "text-red-600" },
 ];
 
 const rankColors: Record<string, string> = {
@@ -75,10 +70,10 @@ const rankColors: Record<string, string> = {
 export default function Leaderboard() {
   const [, navigate] = useLocation();
   const { account, logout } = useGame();
-  const [activeTab, setActiveTab] = useState("wins");
+  const [activeTab, setActiveTab] = useState("pvp");
 
   const { data: leaderboard, isLoading, refetch } = useQuery<LeaderboardResponse>({
-    queryKey: ["/api/leaderboards", activeTab],
+    queryKey: [`/api/leaderboard/${activeTab}`],
     enabled: !!account,
     refetchInterval: 30 * 60 * 1000, // Auto-refresh every 30 minutes
   });
@@ -94,7 +89,7 @@ export default function Leaderboard() {
   };
 
   const renderLeaderboardEntry = (entry: LeaderboardEntry, type: string, key: string) => {
-    const isGuildLeaderboard = type === "guild_dungeon" || type === "guild_wins";
+    const isGuildLeaderboard = type === "guild";
     const isCurrentPlayer = !isGuildLeaderboard && entry.accountId === account.id;
     const displayName = truncateName(isGuildLeaderboard ? entry.guildName : entry.username);
     
@@ -132,18 +127,10 @@ export default function Leaderboard() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {type === "npc_progress" ? (
+          {type === "tower" ? (
             <Badge variant="outline" className="font-mono">
-              Floor {entry.npcFloor}:{entry.npcLevel}
+              Floor {entry.value}
             </Badge>
-          ) : type === "guild_dungeon" ? (
-            <Badge variant="outline" className="font-mono text-emerald-500 border-emerald-500/50">
-              Floor {entry.dungeonFloor} - Lvl {entry.dungeonLevel}
-            </Badge>
-          ) : type === "rank" ? (
-            <span className={`font-semibold ${rankColors[entry.value as string] || ""}`}>
-              {entry.value}
-            </span>
           ) : (
             <span className="font-mono font-bold">{entry.value.toLocaleString()}</span>
           )}
@@ -270,7 +257,7 @@ export default function Leaderboard() {
           </CardHeader>
           <CardContent>
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-5 md:grid-cols-10 mb-6">
+              <TabsList className="grid w-full grid-cols-5 mb-6">
                 {leaderboardTypes.map((type) => (
                   <TabsTrigger 
                     key={type.id} 
@@ -295,7 +282,7 @@ export default function Leaderboard() {
                   ) : leaderboard?.data?.length ? (
                     <div className="space-y-2">
                       {leaderboard.data.map((entry) => {
-                        const entryKey = (type.id === "guild_dungeon" || type.id === "guild_wins") 
+                        const entryKey = (type.id === "guild") 
                           ? entry.guildId || `guild-${entry.rank}` 
                           : entry.accountId || `player-${entry.rank}`;
                         return renderLeaderboardEntry(entry, type.id, entryKey);

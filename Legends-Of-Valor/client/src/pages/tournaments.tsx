@@ -87,11 +87,12 @@ export default function Tournaments() {
   };
 
   const betMutation = useMutation({
-    mutationFn: async ({ tournamentId, matchIndex, betAmount, predictedWinner }: { tournamentId: string, matchIndex: number, betAmount: number, predictedWinner: string }) => {
-      const res = await apiRequest("POST", `/api/tournaments/${tournamentId}/matches/${matchIndex}/bet`, {
+    mutationFn: async ({ tournamentId, matchIndex, betAmount, targetPlayerId }: { tournamentId: string, matchIndex: number, betAmount: number, targetPlayerId: string }) => {
+      const res = await apiRequest("POST", `/api/tournaments/${tournamentId}/bet`, {
         accountId: account?.id,
-        betAmount,
-        predictedWinner,
+        matchId: matchIndex,
+        amount: betAmount,
+        targetPlayerId,
       });
       return res.json();
     },
@@ -148,7 +149,7 @@ export default function Tournaments() {
                           size="xs"
                           variant="outline"
                           className="text-[10px] h-6 border-amber-600/30 hover:bg-amber-900/20"
-                          onClick={() => betMutation.mutate({ tournamentId: tournament.id, matchIndex: idx, betAmount: 1000, predictedWinner: match.player1 })}
+                          onClick={() => betMutation.mutate({ tournamentId: tournament.id, matchIndex: idx, betAmount: 1000, targetPlayerId: match.player1 })}
                           disabled={betMutation.isPending}
                         >
                           Bet 1k on {match.player1?.substring(0, 5)}
@@ -157,7 +158,7 @@ export default function Tournaments() {
                           size="xs"
                           variant="outline"
                           className="text-[10px] h-6 border-amber-600/30 hover:bg-amber-900/20"
-                          onClick={() => betMutation.mutate({ tournamentId: tournament.id, matchIndex: idx, betAmount: 1000, predictedWinner: match.player2 })}
+                          onClick={() => betMutation.mutate({ tournamentId: tournament.id, matchIndex: idx, betAmount: 1000, targetPlayerId: match.player2 })}
                           disabled={betMutation.isPending}
                         >
                           Bet 1k on {match.player2?.substring(0, 5)}

@@ -54,16 +54,25 @@ export async function craftItem(accountId: string, recipeId: string) {
   const itemData = ALL_ITEMS.find(i => i.id === recipe.resultItemId);
   if (!itemData) throw new Error("Result item data not found");
 
+  // Crafted items strongest in tier: +10% stat bonus
+  const boostedStats = { ...(itemData.stats as any) };
+  for (const stat in boostedStats) {
+    boostedStats[stat] = Math.floor(boostedStats[stat] * 1.1);
+  }
+
   // Crafted items can have sockets (e.g., 1-3 for high tier)
   let sockets = 0;
-  if (["legend", "mythic", "mythical_legend", "divine", "ssumr"].includes(itemData.tier)) {
-    sockets = Math.floor(Math.random() * 3) + 1;
+  if (["legend", "mythic", "mythical_legend", "divine", "ssumr", "umr", "x_tier"].includes(itemData.tier)) {
+    const roll = Math.random();
+    if (roll < 0.1) sockets = 3;
+    else if (roll < 0.3) sockets = 2;
+    else sockets = 1;
   }
 
   const [newItem] = await db.insert(inventoryItems).values({
     accountId,
     itemId: itemData.id,
-    stats: itemData.stats,
+    stats: boostedStats,
     sockets,
     gems: [],
   }).returning();
@@ -120,7 +129,24 @@ export async function initializeRecipes() {
       goldCost: 100000,
       description: "A powerful sword forged from common materials and pure valor."
     },
-    // Add more recipes as needed
+    {
+      name: "Apprentice Iron Blade",
+      resultItemId: "normal-1",
+      tier: "normal",
+      requiredRank: "Apprentice",
+      ingredients: [{ itemId: "normal-0", quantity: 2 }],
+      goldCost: 500,
+      description: "A sturdy iron blade for aspiring warriors."
+    },
+    {
+      name: "Master's Worldbreaker",
+      resultItemId: "master-0",
+      tier: "master",
+      requiredRank: "Master",
+      ingredients: [{ itemId: "expert-0", quantity: 3 }, { itemId: "adept-0", quantity: 5 }],
+      goldCost: 50000,
+      description: "A weapon capable of shattering worlds."
+    }
   ];
 
   for (const r of initialRecipes) {

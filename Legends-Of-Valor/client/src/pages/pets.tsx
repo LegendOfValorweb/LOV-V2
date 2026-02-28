@@ -1375,13 +1375,7 @@ export default function Pets() {
                   <span className="text-sm text-blue-200">Estimated Reward:</span>
                   <span className="font-mono font-bold text-yellow-500 flex items-center gap-1">
                     <Coins className="w-4 h-4" />
-                    {Math.floor(mercenaryDuration * 100 * (
-                      mercenaryDialog.tier === 'egg' ? 0.1 :
-                      mercenaryDialog.tier === 'baby' ? 0.5 :
-                      mercenaryDialog.tier === 'teen' ? 1 :
-                      mercenaryDialog.tier === 'adult' ? 2 :
-                      mercenaryDialog.tier === 'legend' ? 5 : 15
-                    ) * (1 + ((mercenaryDialog.stats as any).Str + (mercenaryDialog.stats as any).Spd + (mercenaryDialog.stats as any).Luck + (mercenaryDialog.stats as any).ElementalPower) / 100)).toLocaleString()} Gold
+                    {(mercenaryDuration * (PET_MERCENARY_FEES[mercenaryDialog.tier] || 5)).toLocaleString()} Gold
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-xs text-blue-100/50">
@@ -1392,7 +1386,7 @@ export default function Pets() {
 
               <div className="text-xs text-blue-200/60 flex items-start gap-2 italic">
                 <Sparkles className="w-3 h-3 mt-0.5 shrink-0" />
-                <span>Income scales with pet tier and stats. Mythic pets earn significantly more!</span>
+                <span>Income scales with pet tier. Fee: Normal=5g/hr, Super Rare=15, X=40, UMR=100, SSUMR=300</span>
               </div>
             </div>
           )}
@@ -1412,3 +1406,12 @@ export default function Pets() {
     </ZoneScene>
   );
 }
+
+const PET_MERCENARY_FEES: Record<string, number> = {
+  "egg": 0,
+  "baby": 5,
+  "teen": 15,
+  "adult": 40,
+  "legend": 100,
+  "mythic": 300
+};
