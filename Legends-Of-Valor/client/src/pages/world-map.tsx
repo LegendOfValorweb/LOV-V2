@@ -38,26 +38,33 @@ const rankOrder = [
   "Sovereign", "Ascendant", "Legend", "Mythic", "Mythical Legend"
 ];
 
-// Adjusted coordinates to match world_map.png terrain landmarks
+// RE-ALIGNED COORDINATES FOR world_map.png
+// Based on the specific terrain of world_map.png:
+// Top Center: Mystic Tower (tall tower)
+// Top Right: Mountain Caverns (snowy peaks)
+// Bottom Right: Ruby Mines (volcano/lava)
+// Left: Crystal Lake (water), Enchanted Forest (trees)
+// Center: Capital City (castle/city), Your Base (nearby)
+// Bottom Center: Battle Arena (colosseum)
 const zones: Zone[] = [
-  { id: "your-base", name: "Your Base", description: "Your personal fortress.", landmark: "castle", difficulty: "starter", pvpEnabled: false, activities: ["Storage", "Crafting"], coordinates: { x: 48, y: 45 }, route: "/base" },
-  { id: "capital-city", name: "Capital City", description: "The central hub.", landmark: "city", difficulty: "starter", pvpEnabled: false, activities: ["Shop", "Trade"], coordinates: { x: 42, y: 38 }, route: "/shop" },
-  { id: "mystic-tower", name: "Mystic Tower", description: "Spire of trials.", landmark: "tower", difficulty: "hard", pvpEnabled: false, activities: ["Battles"], coordinates: { x: 38, y: 22 }, route: "/npc-battle" },
-  { id: "mountain-caverns", name: "Mountain Caverns", description: "Deep mining caves.", landmark: "cave", difficulty: "easy", pvpEnabled: true, rankRequired: "Apprentice", activities: ["Mining"], coordinates: { x: 62, y: 25 }, route: "/mining" },
-  { id: "ancient-ruins", name: "Ancient Ruins", description: "Crumbling temples.", landmark: "ruins", difficulty: "medium", pvpEnabled: true, activities: ["Exploration"], coordinates: { x: 22, y: 32 }, route: "/quests" },
-  { id: "research-lab", name: "Research Lab", description: "Arcane studies.", landmark: "lab", difficulty: "medium", pvpEnabled: false, activities: ["Skills"], coordinates: { x: 35, y: 55 }, route: "/skills" },
-  { id: "pet-training", name: "Pet Training Grounds", description: "Train companions.", landmark: "arena", difficulty: "starter", pvpEnabled: false, activities: ["Pet Training"], coordinates: { x: 72, y: 48 }, route: "/pets" },
-  { id: "pet-shop", name: "Egg Emporium", description: "Buy rare eggs.", landmark: "shop", difficulty: "medium", pvpEnabled: false, rankRequired: "Journeyman", activities: ["Buy Eggs"], coordinates: { x: 82, y: 35 }, route: "/pet-shop" },
-  { id: "ruby-mines", name: "Ruby Mines", description: "Volcanic mines.", landmark: "mine", difficulty: "medium", pvpEnabled: true, rankRequired: "Expert", activities: ["Mining"], coordinates: { x: 88, y: 65 }, route: "/ruby-mines" },
-  { id: "enchanted-forest", name: "Enchanted Forest", description: "Mystical woods.", landmark: "forest", difficulty: "easy", pvpEnabled: false, activities: ["Gathering"], coordinates: { x: 30, y: 45 }, route: "/birds" },
-  { id: "battle-arena", name: "Battle Arena", description: "PvP colosseum.", landmark: "colosseum", difficulty: "hard", pvpEnabled: true, activities: ["PvP"], coordinates: { x: 55, y: 75 }, route: "/leaderboard" },
-  { id: "tournament-grounds", name: "Tournament Grounds", description: "Grand championships.", landmark: "banner", difficulty: "hard", pvpEnabled: true, activities: ["Tourney"], coordinates: { x: 75, y: 28 }, route: "/tournaments" },
-  { id: "pet-arena", name: "Pet Arena", description: "Pet PvP.", landmark: "petarena", difficulty: "medium", pvpEnabled: true, activities: ["Pet PvP"], coordinates: { x: 65, y: 58 }, route: "/pet-arena" },
-  { id: "crystal-lake", name: "Crystal Lake", description: "Fishing waters.", landmark: "lake", difficulty: "starter", pvpEnabled: false, activities: ["Fishing"], coordinates: { x: 15, y: 65 }, route: "/fishing" },
-  { id: "guild-hall", name: "Guild Hall", description: "Join forces.", landmark: "guildhall", difficulty: "starter", pvpEnabled: false, activities: ["Guild"], coordinates: { x: 78, y: 72 }, route: "/guild" },
-  { id: "hell-zone", name: "Hell Zone", description: "Permadeath risk.", landmark: "hellgate", difficulty: "hell", pvpEnabled: true, rankRequired: "Grand Master", activities: ["High-Risk"], coordinates: { x: 50, y: 12 }, route: "/hell-zone" },
-  { id: "valor-shop", name: "$Valor Shop", description: "Premium shop.", landmark: "valorshop", difficulty: "starter", pvpEnabled: false, activities: ["Premium"], coordinates: { x: 85, y: 15 }, route: "/valor-shop" },
-  { id: "cosmetics-shop", name: "Cosmetics Shop", description: "Unique skins.", landmark: "cosmetics", difficulty: "starter", pvpEnabled: false, activities: ["Skins"], coordinates: { x: 18, y: 18 }, route: "/cosmetics-shop" },
+  { id: "your-base", name: "Your Base", description: "Your personal fortress.", landmark: "castle", difficulty: "starter", pvpEnabled: false, activities: ["Storage", "Crafting"], coordinates: { x: 52, y: 48 }, route: "/base" },
+  { id: "capital-city", name: "Capital City", description: "The central hub.", landmark: "city", difficulty: "starter", pvpEnabled: false, activities: ["Shop", "Trade"], coordinates: { x: 48, y: 52 }, route: "/shop" },
+  { id: "mystic-tower", name: "Mystic Tower", description: "Spire of trials.", landmark: "tower", difficulty: "hard", pvpEnabled: false, activities: ["Battles"], coordinates: { x: 40, y: 12 }, route: "/npc-battle" },
+  { id: "mountain-caverns", name: "Mountain Caverns", description: "Deep mining caves.", landmark: "cave", difficulty: "easy", pvpEnabled: true, rankRequired: "Apprentice", activities: ["Mining"], coordinates: { x: 68, y: 22 }, route: "/mining" },
+  { id: "ancient-ruins", name: "Ancient Ruins", description: "Crumbling temples.", landmark: "ruins", difficulty: "medium", pvpEnabled: true, activities: ["Exploration"], coordinates: { x: 22, y: 45 }, route: "/quests" },
+  { id: "research-lab", name: "Research Lab", description: "Arcane studies.", landmark: "lab", difficulty: "medium", pvpEnabled: false, activities: ["Skills"], coordinates: { x: 38, y: 55 }, route: "/skills" },
+  { id: "pet-training", name: "Pet Training Grounds", description: "Train companions.", landmark: "arena", difficulty: "starter", pvpEnabled: false, activities: ["Pet Training"], coordinates: { x: 84, y: 55 }, route: "/pets" },
+  { id: "pet-shop", name: "Egg Emporium", description: "Buy rare eggs.", landmark: "shop", difficulty: "medium", pvpEnabled: false, rankRequired: "Journeyman", activities: ["Buy Eggs"], coordinates: { x: 78, y: 44 }, route: "/pet-shop" },
+  { id: "ruby-mines", name: "Ruby Mines", description: "Volcanic mines.", landmark: "mine", difficulty: "medium", pvpEnabled: true, rankRequired: "Expert", activities: ["Mining"], coordinates: { x: 88, y: 68 }, route: "/ruby-mines" },
+  { id: "enchanted-forest", name: "Enchanted Forest", description: "Mystical woods.", landmark: "forest", difficulty: "easy", pvpEnabled: false, activities: ["Gathering"], coordinates: { x: 32, y: 46 }, route: "/birds" },
+  { id: "battle-arena", name: "Battle Arena", description: "PvP colosseum.", landmark: "colosseum", difficulty: "hard", pvpEnabled: true, activities: ["PvP"], coordinates: { x: 42, y: 65 }, route: "/leaderboard" },
+  { id: "tournament-grounds", name: "Tournament Grounds", description: "Grand championships.", landmark: "banner", difficulty: "hard", pvpEnabled: true, activities: ["Tourney"], coordinates: { x: 75, y: 32 }, route: "/tournaments" },
+  { id: "pet-arena", name: "Pet Arena", description: "Pet PvP.", landmark: "petarena", difficulty: "medium", pvpEnabled: true, activities: ["Pet PvP"], coordinates: { x: 70, y: 58 }, route: "/pet-arena" },
+  { id: "crystal-lake", name: "Crystal Lake", description: "Fishing waters.", landmark: "lake", difficulty: "starter", pvpEnabled: false, activities: ["Fishing"], coordinates: { x: 18, y: 58 }, route: "/fishing" },
+  { id: "guild-hall", name: "Guild Hall", description: "Join forces.", landmark: "guildhall", difficulty: "starter", pvpEnabled: false, activities: ["Guild"], coordinates: { x: 80, y: 62 }, route: "/guild" },
+  { id: "hell-zone", name: "Hell Zone", description: "Permadeath risk.", landmark: "hellgate", difficulty: "hell", pvpEnabled: true, rankRequired: "Grand Master", activities: ["High-Risk"], coordinates: { x: 50, y: 8 }, route: "/hell-zone" },
+  { id: "valor-shop", name: "$Valor Shop", description: "Premium shop.", landmark: "valorshop", difficulty: "starter", pvpEnabled: false, activities: ["Premium"], coordinates: { x: 86, y: 15 }, route: "/valor-shop" },
+  { id: "cosmetics-shop", name: "Cosmetics Shop", description: "Unique skins.", landmark: "cosmetics", difficulty: "starter", pvpEnabled: false, activities: ["Skins"], coordinates: { x: 14, y: 14 }, route: "/cosmetics-shop" },
 ];
 
 function LandmarkIcon({ landmark, className = "" }: { landmark: string; className?: string }) {
@@ -153,7 +160,6 @@ export default function WorldMap() {
           <svg className="absolute inset-0 w-full h-full pointer-events-none z-[5]" viewBox="0 0 100 100" preserveAspectRatio="none">
             {zones.map((zone) => {
               if (!isZoneUnlocked(zone, account.rank || "Novice")) return null;
-              // Simple path lines to adjacent zones could be added here
               return null;
             })}
           </svg>
