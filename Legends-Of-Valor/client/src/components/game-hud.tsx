@@ -64,6 +64,8 @@ function formatNumber(n: number): string {
 export function GameHUD() {
   const [location, navigate] = useLocation();
   const { account } = useGame();
+  
+  if (location === "/" || !account) return null;
   const [energyData, setEnergyData] = useState<{ energy: number; maxEnergy: number } | null>(null);
   const [activePet, setActivePet] = useState<PetData | null>(null);
   const [activeBird, setActiveBird] = useState<BirdData | null>(null);
