@@ -710,9 +710,18 @@ export default function NpcBattle() {
                   ⚠️ You Died!
                 </div>
                 <div className="text-sm space-y-1">
-                  <p>Lost: <span className="font-mono text-yellow-500">{Math.floor((account?.gold || 0) * 0.05).toLocaleString()} gold</span></p>
-                  <p>Equipment damage: <span className="text-red-400">Durability lost on weakest item</span></p>
-                  <p className="mt-2 text-muted-foreground italic">You are now a Ghost. Return to your base to respawn.</p>
+                  {battleResult?.deathPenalty ? (
+                    <>
+                      <p>Lost: <span className="font-mono text-yellow-500">{battleResult.deathPenalty.goldLost.toLocaleString()} gold</span></p>
+                      <p>Equipment damage: <span className="text-red-400">−{battleResult.deathPenalty.durabilityDamage} durability on all equipped items</span></p>
+                    </>
+                  ) : (
+                    <>
+                      <p>Lost: <span className="font-mono text-yellow-500">~{Math.floor((account?.gold || 0) * 0.05).toLocaleString()} gold</span></p>
+                      <p>Equipment damage: <span className="text-red-400">Durability lost on equipped items</span></p>
+                    </>
+                  )}
+                  <p className="mt-2 text-muted-foreground italic">👻 You are now a Ghost. Return to your base to respawn.</p>
                 </div>
               </div>
             )}

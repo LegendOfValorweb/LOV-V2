@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Crown, LogOut, Gift, Sword, Shield, Gem, Coins, Users, Edit, Trophy, Zap, Brain, Target, Clover, Trash2, Calendar, Plus, AlertTriangle, Swords, Check, Cat, Castle, Gavel, Clock, Play, Pause, Sparkles } from "lucide-react";
+import { Search, Crown, LogOut, Gift, Sword, Shield, Gem, Coins, Users, Edit, Trophy, Zap, Brain, Target, Clover, Trash2, Calendar, Plus, AlertTriangle, Swords, Check, Cat, Castle, Gavel, Clock, Play, Pause, Sparkles, Activity, Radio, Globe, Server, Ban, BarChart2, RefreshCw, Skull, Flame, Bot, Settings, Megaphone, Star, ChevronRight, Eye, X } from "lucide-react";
 import { ALL_SKILLS, getSkillById, type SkillDefinition } from "@shared/skills-data";
 import type { SkillAuction } from "@shared/schema";
 import { TierFilter } from "@/components/tier-filter";
@@ -769,6 +769,192 @@ export default function Admin() {
   const [grantValorAmount, setGrantValorAmount] = useState(1000);
   const [grantValorLoading, setGrantValorLoading] = useState(false);
 
+  const [broadcastMessage, setBroadcastMessage] = useState("");
+  const [broadcastType, setBroadcastType] = useState<"announcement" | "maintenance" | "event">("announcement");
+  const [hellZoneDuration, setHellZoneDuration] = useState(30);
+
+  const [grantTargetUsername, setGrantTargetUsername] = useState("");
+  const [grantGold, setGrantGold] = useState(0);
+  const [grantRubies, setGrantRubies] = useState(0);
+  const [grantSoulShards, setGrantSoulShards] = useState(0);
+  const [grantTP, setGrantTP] = useState(0);
+  const [grantBeakCoins, setGrantBeakCoins] = useState(0);
+  const [grantValorTokens, setGrantValorTokens] = useState(0);
+
+  const [setRankUsername, setSetRankUsername] = useState("");
+  const [setRankValue, setSetRankValue] = useState<PlayerRank>("Novice");
+  const [setStatsUsername, setSetStatsUsername] = useState("");
+  const [setStatsStr, setSetStatsStr] = useState(0);
+  const [setStatsDef, setSetStatsDef] = useState(0);
+  const [setStatsSpd, setSetStatsSpd] = useState(0);
+  const [setStatsInt, setSetStatsInt] = useState(0);
+  const [setStatsVit, setSetStatsVit] = useState(0);
+  const [setStatsLuk, setSetStatsLuk] = useState(0);
+  const [storyUsername, setStoryUsername] = useState("");
+  const [storyAct, setStoryAct] = useState(1);
+  const [storyChapter, setStoryChapter] = useState(1);
+  const [banReason, setBanReason] = useState("");
+  const [banTargetId, setBanTargetId] = useState("");
+
+  const { data: dashboardStats, refetch: refetchDashboard } = useQuery({
+    queryKey: ["/api/admin/dashboard"],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/dashboard?adminId=${account?.id}`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!account?.id,
+    refetchInterval: 30000,
+  });
+
+  const { data: anticheatAlerts = [], refetch: refetchAlerts } = useQuery<any[]>({
+    queryKey: ["/api/admin/anticheat/alerts"],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/anticheat/alerts?adminId=${account?.id}`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!account?.id,
+    refetchInterval: 15000,
+  });
+
+  const { data: anticheatLogs = [], refetch: refetchAcLogs } = useQuery<any[]>({
+    queryKey: ["/api/admin/anticheat/logs"],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/anticheat/logs?adminId=${account?.id}`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!account?.id,
+  });
+
+  const { data: aiRequests = [], refetch: refetchAiRequests } = useQuery<any[]>({
+    queryKey: ["/api/admin/ai-requests"],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/ai-requests?adminId=${account?.id}`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!account?.id,
+    refetchInterval: 20000,
+  });
+
+  const { data: worldBossData, refetch: refetchWorldBoss } = useQuery<any>({
+    queryKey: ["/api/world-boss"],
+    refetchInterval: 10000,
+  });
+
+  const broadcastMutation = useMutation({
+    mutationFn: async ({ message, type }: { message: string; type: string }) => {
+      const res = await apiRequest("POST", "/api/admin/broadcast", { adminId: account?.id, message, type });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({ title: "Broadcast sent", description: `Delivered to ${data.recipientCount} online players` });
+      setBroadcastMessage("");
+    },
+    onError: () => toast({ title: "Error", description: "Failed to send broadcast", variant: "destructive" }),
+  });
+
+  const spawnWorldBossMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/world-boss/spawn", { adminId: account?.id });
+      return res.json();
+    },
+    onSuccess: () => { toast({ title: "World Boss spawned!" }); refetchWorldBoss(); },
+    onError: () => toast({ title: "Error", description: "Failed to spawn world boss", variant: "destructive" }),
+  });
+
+  const endWorldBossMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/world-boss/end", { adminId: account?.id });
+      return res.json();
+    },
+    onSuccess: () => { toast({ title: "World boss ended" }); refetchWorldBoss(); },
+    onError: () => toast({ title: "Error", description: "Failed to end world boss", variant: "destructive" }),
+  });
+
+  const startHellZoneMutation = useMutation({
+    mutationFn: async (duration: number) => {
+      const res = await apiRequest("POST", "/api/admin/hell-zone/start", { adminId: account?.id, duration });
+      return res.json();
+    },
+    onSuccess: () => toast({ title: "Hell Zone started!", description: "Players can now join" }),
+    onError: () => toast({ title: "Error", description: "Failed to start Hell Zone", variant: "destructive" }),
+  });
+
+  const endHellZoneMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/hell-zone/end", { adminId: account?.id });
+      return res.json();
+    },
+    onSuccess: () => toast({ title: "Hell Zone ended" }),
+    onError: () => toast({ title: "Error", description: "Failed to end Hell Zone", variant: "destructive" }),
+  });
+
+  const grantResourcesMutation = useMutation({
+    mutationFn: async (body: any) => {
+      const res = await apiRequest("POST", "/api/admin/grant-resources", body);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Resources granted successfully!" });
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+      setGrantTargetUsername(""); setGrantGold(0); setGrantRubies(0); setGrantSoulShards(0); setGrantTP(0); setGrantBeakCoins(0); setGrantValorTokens(0);
+    },
+    onError: () => toast({ title: "Error", description: "Failed to grant resources", variant: "destructive" }),
+  });
+
+  const setRankMutation = useMutation({
+    mutationFn: async ({ accountId, rank }: { accountId: string; rank: string }) => {
+      const res = await apiRequest("POST", "/api/admin/set-rank", { adminId: account?.id, accountId, rank });
+      return res.json();
+    },
+    onSuccess: () => { toast({ title: "Rank updated!" }); queryClient.invalidateQueries({ queryKey: ["/api/accounts"] }); setSetRankUsername(""); },
+    onError: () => toast({ title: "Error", description: "Failed to set rank", variant: "destructive" }),
+  });
+
+  const setStatsMutation = useMutation({
+    mutationFn: async ({ accountId, stats }: { accountId: string; stats: any }) => {
+      const res = await apiRequest("POST", "/api/admin/set-stats", { adminId: account?.id, accountId, stats });
+      return res.json();
+    },
+    onSuccess: () => { toast({ title: "Stats updated!" }); queryClient.invalidateQueries({ queryKey: ["/api/accounts"] }); setSetStatsUsername(""); },
+    onError: () => toast({ title: "Error", description: "Failed to set stats", variant: "destructive" }),
+  });
+
+  const setStoryMutation = useMutation({
+    mutationFn: async ({ accountId, act, chapter }: { accountId: string; act: number; chapter: number }) => {
+      const res = await apiRequest("POST", "/api/admin/set-story-progress", { adminId: account?.id, accountId, act, chapter });
+      return res.json();
+    },
+    onSuccess: () => { toast({ title: "Story progress set!" }); setStoryUsername(""); },
+    onError: () => toast({ title: "Error", description: "Failed to set story progress", variant: "destructive" }),
+  });
+
+  const banPlayerMutation = useMutation({
+    mutationFn: async ({ accountId, reason }: { accountId: string; reason: string }) => {
+      const res = await apiRequest("POST", "/api/admin/anticheat/ban", { adminId: account?.id, accountId, reason });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Player banned" });
+      refetchAlerts();
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+      setBanReason(""); setBanTargetId("");
+    },
+    onError: () => toast({ title: "Error", description: "Failed to ban player", variant: "destructive" }),
+  });
+
+  const resolveAiRequestMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: "approved" | "rejected" | "answered" }) => {
+      const res = await apiRequest("POST", `/api/admin/ai-requests/${id}/resolve`, { status, resolvedBy: account?.id });
+      return res.json();
+    },
+    onSuccess: () => { toast({ title: "AI request resolved" }); refetchAiRequests(); },
+    onError: () => toast({ title: "Error", description: "Failed to resolve request", variant: "destructive" }),
+  });
+
   const filteredGuilds = useMemo(() => {
     return guilds.filter(g => 
       g.name.toLowerCase().includes(guildSearchQuery.toLowerCase()) ||
@@ -1347,7 +1533,6 @@ export default function Admin() {
   };
 
   if (!account || account.role !== "admin") {
-    navigate("/");
     return null;
   }
 
@@ -1450,6 +1635,32 @@ export default function Admin() {
             <TabsTrigger value="valor" className="gap-2">
               <Sparkles className="w-4 h-4" />
               $Valor
+            </TabsTrigger>
+            <TabsTrigger value="dashboard" className="gap-2">
+              <Activity className="w-4 h-4" />
+              Dashboard
+            </TabsTrigger>
+            <TabsTrigger value="world_events" className="gap-2">
+              <Globe className="w-4 h-4" />
+              World Events
+            </TabsTrigger>
+            <TabsTrigger value="player_tools" className="gap-2">
+              <Settings className="w-4 h-4" />
+              Player Tools
+            </TabsTrigger>
+            <TabsTrigger value="anticheat" className="gap-2">
+              <Ban className="w-4 h-4" />
+              Anti-Cheat
+              {anticheatAlerts.length > 0 && (
+                <Badge variant="destructive" className="ml-1 h-5 px-1.5 text-xs">{anticheatAlerts.length}</Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="ai_requests" className="gap-2">
+              <Bot className="w-4 h-4" />
+              AI Requests
+              {aiRequests.length > 0 && (
+                <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">{aiRequests.length}</Badge>
+              )}
             </TabsTrigger>
           </TabsList>
 
@@ -2629,6 +2840,608 @@ export default function Admin() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="dashboard">
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="font-serif text-lg font-semibold">Server Dashboard</h2>
+                <Button variant="outline" size="sm" onClick={() => refetchDashboard()}>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Card className="border-blue-500/30 bg-blue-950/10">
+                  <CardContent className="pt-4">
+                    <div className="flex items-center gap-2 mb-1"><Users className="w-4 h-4 text-blue-400" /><span className="text-xs text-muted-foreground">Total Players</span></div>
+                    <div className="text-2xl font-bold text-blue-400">{dashboardStats?.stats?.totalPlayers ?? 0}</div>
+                  </CardContent>
+                </Card>
+                <Card className="border-green-500/30 bg-green-950/10">
+                  <CardContent className="pt-4">
+                    <div className="flex items-center gap-2 mb-1"><Activity className="w-4 h-4 text-green-400" /><span className="text-xs text-muted-foreground">Online Now</span></div>
+                    <div className="text-2xl font-bold text-green-400">{dashboardStats?.stats?.onlinePlayers ?? 0}</div>
+                  </CardContent>
+                </Card>
+                <Card className="border-yellow-500/30 bg-yellow-950/10">
+                  <CardContent className="pt-4">
+                    <div className="flex items-center gap-2 mb-1"><Castle className="w-4 h-4 text-yellow-400" /><span className="text-xs text-muted-foreground">Total Guilds</span></div>
+                    <div className="text-2xl font-bold text-yellow-400">{dashboardStats?.stats?.totalGuilds ?? 0}</div>
+                  </CardContent>
+                </Card>
+                <Card className="border-red-500/30 bg-red-950/10">
+                  <CardContent className="pt-4">
+                    <div className="flex items-center gap-2 mb-1"><AlertTriangle className="w-4 h-4 text-red-400" /><span className="text-xs text-muted-foreground">Suspicious</span></div>
+                    <div className="text-2xl font-bold text-red-400">{dashboardStats?.stats?.suspiciousAccounts ?? 0}</div>
+                  </CardContent>
+                </Card>
+              </div>
+              <div className="grid md:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader><CardTitle className="text-sm flex items-center gap-2"><BarChart2 className="w-4 h-4" />Rank Distribution</CardTitle></CardHeader>
+                  <CardContent className="space-y-2">
+                    {dashboardStats?.rankDistribution ? Object.entries(dashboardStats.rankDistribution).map(([rank, count]: [string, any]) => (
+                      <div key={rank} className="flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground w-28 shrink-0 capitalize">{rank}</span>
+                        <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden">
+                          <div className="bg-primary h-full" style={{ width: `${Math.min(100, (count / Math.max(1, dashboardStats.stats.totalPlayers)) * 100)}%` }} />
+                        </div>
+                        <span className="text-xs font-mono w-6 text-right">{count}</span>
+                      </div>
+                    )) : <div className="text-muted-foreground text-sm">No data yet</div>}
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader><CardTitle className="text-sm flex items-center gap-2"><Star className="w-4 h-4" />Race Distribution</CardTitle></CardHeader>
+                  <CardContent className="grid grid-cols-2 gap-2">
+                    {dashboardStats?.raceDistribution ? Object.entries(dashboardStats.raceDistribution).map(([race, count]: [string, any]) => (
+                      <div key={race} className="flex items-center justify-between p-2 rounded bg-muted/50">
+                        <span className="text-xs capitalize">{race}</span>
+                        <Badge variant="outline" className="text-xs">{count}</Badge>
+                      </div>
+                    )) : <div className="text-muted-foreground text-sm col-span-2">No data yet</div>}
+                  </CardContent>
+                </Card>
+              </div>
+              <Card>
+                <CardHeader><CardTitle className="text-sm flex items-center gap-2"><Activity className="w-4 h-4" />Recent Activity</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {dashboardStats?.recentActivity?.length ? dashboardStats.recentActivity.map((a: any, i: number) => (
+                      <div key={i} className="flex items-start gap-2 text-xs py-1 border-b border-border/50 last:border-0">
+                        <span className="text-muted-foreground shrink-0">{new Date(a.createdAt || Date.now()).toLocaleTimeString()}</span>
+                        <Badge variant="outline" className="text-[10px] shrink-0">{a.type}</Badge>
+                        <span className="text-foreground">{a.message}</span>
+                      </div>
+                    )) : <div className="text-muted-foreground text-sm">No recent activity</div>}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader><CardTitle className="text-sm flex items-center gap-2"><Server className="w-4 h-4" />Server Info</CardTitle></CardHeader>
+                <CardContent className="grid grid-cols-2 gap-4 text-sm">
+                  <div><span className="text-muted-foreground">Uptime:</span> <span className="font-mono ml-2">{dashboardStats?.stats?.serverUptime ? Math.floor(dashboardStats.stats.serverUptime / 60) + 'm' : 'N/A'}</span></div>
+                  <div><span className="text-muted-foreground">Hell Zone:</span> <span className="font-mono ml-2">{dashboardStats?.stats?.hellZoneParticipants ?? 0} participants</span></div>
+                  <div><span className="text-muted-foreground">Activity Logs:</span> <span className="font-mono ml-2">{dashboardStats?.stats?.totalActivityLogs ?? 0}</span></div>
+                  <div><span className="text-muted-foreground">World Boss:</span> <span className={`font-mono ml-2 ${worldBossData?.status === 'active' ? 'text-red-400' : 'text-green-400'}`}>{worldBossData?.status === 'active' ? 'Active' : 'Inactive'}</span></div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="world_events">
+            <div className="space-y-6">
+              <h2 className="font-serif text-lg font-semibold">World Events Control</h2>
+              <div className="grid md:grid-cols-2 gap-6">
+                <Card className="border-red-500/30">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-red-400">
+                      <Skull className="w-5 h-5" />
+                      World Boss
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {worldBossData?.status === 'active' ? (
+                      <div className="p-3 rounded bg-red-950/30 border border-red-500/30">
+                        <div className="font-semibold text-red-400 mb-1">⚔️ {worldBossData.name} — ACTIVE</div>
+                        <div className="text-sm text-muted-foreground">HP: {(worldBossData.currentHp || 0).toLocaleString()} / {(worldBossData.maxHp || 0).toLocaleString()}</div>
+                        <div className="w-full bg-muted rounded-full h-2 mt-2 overflow-hidden">
+                          <div className="bg-red-500 h-full transition-all" style={{ width: `${Math.max(0, (worldBossData.currentHp / worldBossData.maxHp) * 100)}%` }} />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded bg-muted/30 border border-border text-muted-foreground text-sm">No active world boss</div>
+                    )}
+                    <div className="flex gap-2">
+                      <Button
+                        className="flex-1 bg-red-600 hover:bg-red-700"
+                        onClick={() => spawnWorldBossMutation.mutate()}
+                        disabled={spawnWorldBossMutation.isPending || worldBossData?.status === 'active'}
+                      >
+                        <Skull className="w-4 h-4 mr-2" />
+                        {spawnWorldBossMutation.isPending ? "Spawning..." : "Spawn World Boss"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => endWorldBossMutation.mutate()}
+                        disabled={endWorldBossMutation.isPending || worldBossData?.status !== 'active'}
+                      >
+                        <X className="w-4 h-4 mr-2" />
+                        End Boss
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="border-orange-500/30">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-orange-400">
+                      <Flame className="w-5 h-5" />
+                      Hell Zone
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Session Duration (minutes)</Label>
+                      <Select value={String(hellZoneDuration)} onValueChange={(v) => setHellZoneDuration(Number(v))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="15">15 minutes</SelectItem>
+                          <SelectItem value="30">30 minutes</SelectItem>
+                          <SelectItem value="60">1 hour</SelectItem>
+                          <SelectItem value="120">2 hours</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        className="flex-1 bg-orange-600 hover:bg-orange-700"
+                        onClick={() => startHellZoneMutation.mutate(hellZoneDuration)}
+                        disabled={startHellZoneMutation.isPending}
+                      >
+                        <Flame className="w-4 h-4 mr-2" />
+                        {startHellZoneMutation.isPending ? "Starting..." : "Start Hell Zone"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => endHellZoneMutation.mutate()}
+                        disabled={endHellZoneMutation.isPending}
+                      >
+                        <X className="w-4 h-4 mr-2" />
+                        End
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Hell Zone is a battle royale where players compete until one remains. Zone shrinks every 30s.</p>
+                  </CardContent>
+                </Card>
+              </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Megaphone className="w-5 h-5 text-blue-400" />
+                    Server Broadcast
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid md:grid-cols-3 gap-4">
+                    <div className="md:col-span-2 space-y-2">
+                      <Label>Message</Label>
+                      <Input
+                        placeholder="Type your server-wide broadcast message..."
+                        value={broadcastMessage}
+                        onChange={(e) => setBroadcastMessage(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Type</Label>
+                      <Select value={broadcastType} onValueChange={(v: any) => setBroadcastType(v)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="announcement">📢 Announcement</SelectItem>
+                          <SelectItem value="maintenance">🔧 Maintenance</SelectItem>
+                          <SelectItem value="event">🎉 Event</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() => broadcastMutation.mutate({ message: broadcastMessage, type: broadcastType })}
+                    disabled={broadcastMutation.isPending || !broadcastMessage.trim()}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    <Radio className="w-4 h-4 mr-2" />
+                    {broadcastMutation.isPending ? "Sending..." : "Send Broadcast"}
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="player_tools">
+            <div className="space-y-6">
+              <h2 className="font-serif text-lg font-semibold">Player Management Tools</h2>
+              <div className="grid md:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader><CardTitle className="flex items-center gap-2 text-yellow-400"><Coins className="w-5 h-5" />Grant Resources</CardTitle></CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Target Player Username</Label>
+                      <Input
+                        list="player-list-grant"
+                        placeholder="Enter username..."
+                        value={grantTargetUsername}
+                        onChange={(e) => setGrantTargetUsername(e.target.value)}
+                      />
+                      <datalist id="player-list-grant">
+                        {players.map((p) => <option key={p.id} value={p.username} />)}
+                      </datalist>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      {([
+                        { label: "Gold", val: grantGold, set: setGrantGold, color: "text-yellow-400" },
+                        { label: "Rubies", val: grantRubies, set: setGrantRubies, color: "text-red-400" },
+                        { label: "Soul Shards", val: grantSoulShards, set: setGrantSoulShards, color: "text-purple-400" },
+                        { label: "Training Points", val: grantTP, set: setGrantTP, color: "text-blue-400" },
+                        { label: "Beak Coins", val: grantBeakCoins, set: setGrantBeakCoins, color: "text-orange-400" },
+                        { label: "Valor Tokens", val: grantValorTokens, set: setGrantValorTokens, color: "text-green-400" },
+                      ] as any[]).map(({ label, val, set, color }) => (
+                        <div key={label} className="space-y-1">
+                          <Label className={`text-xs ${color}`}>{label}</Label>
+                          <Input type="number" min={0} value={val} onChange={(e) => set(Number(e.target.value))} />
+                        </div>
+                      ))}
+                    </div>
+                    <Button
+                      className="w-full bg-yellow-600 hover:bg-yellow-700"
+                      disabled={grantResourcesMutation.isPending || !grantTargetUsername}
+                      onClick={() => {
+                        const target = players.find(p => p.username.toLowerCase() === grantTargetUsername.toLowerCase());
+                        if (!target) { toast({ title: "Player not found", variant: "destructive" }); return; }
+                        grantResourcesMutation.mutate({
+                          adminId: account?.id,
+                          accountId: target.id,
+                          ...(grantGold > 0 && { gold: grantGold }),
+                          ...(grantRubies > 0 && { rubies: grantRubies }),
+                          ...(grantSoulShards > 0 && { soulShards: grantSoulShards }),
+                          ...(grantTP > 0 && { trainingPoints: grantTP }),
+                          ...(grantBeakCoins > 0 && { beakCoins: grantBeakCoins }),
+                          ...(grantValorTokens > 0 && { valorTokens: grantValorTokens }),
+                        });
+                      }}
+                    >
+                      <Gift className="w-4 h-4 mr-2" />
+                      {grantResourcesMutation.isPending ? "Granting..." : "Grant Resources"}
+                    </Button>
+                  </CardContent>
+                </Card>
+                <div className="space-y-4">
+                  <Card>
+                    <CardHeader><CardTitle className="flex items-center gap-2 text-primary text-sm"><Crown className="w-4 h-4" />Set Player Rank</CardTitle></CardHeader>
+                    <CardContent className="space-y-3">
+                      <Input
+                        list="player-list-rank"
+                        placeholder="Player username..."
+                        value={setRankUsername}
+                        onChange={(e) => setSetRankUsername(e.target.value)}
+                      />
+                      <datalist id="player-list-rank">
+                        {players.map((p) => <option key={p.id} value={p.username} />)}
+                      </datalist>
+                      <Select value={setRankValue} onValueChange={(v: PlayerRank) => setSetRankValue(v)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {playerRanks.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        className="w-full"
+                        disabled={setRankMutation.isPending || !setRankUsername}
+                        onClick={() => {
+                          const target = players.find(p => p.username.toLowerCase() === setRankUsername.toLowerCase());
+                          if (!target) { toast({ title: "Player not found", variant: "destructive" }); return; }
+                          setRankMutation.mutate({ accountId: target.id, rank: setRankValue });
+                        }}
+                      >
+                        {setRankMutation.isPending ? "Updating..." : "Set Rank"}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader><CardTitle className="flex items-center gap-2 text-primary text-sm"><Brain className="w-4 h-4" />Set Story Progress</CardTitle></CardHeader>
+                    <CardContent className="space-y-3">
+                      <Input
+                        list="player-list-story"
+                        placeholder="Player username..."
+                        value={storyUsername}
+                        onChange={(e) => setStoryUsername(e.target.value)}
+                      />
+                      <datalist id="player-list-story">
+                        {players.map((p) => <option key={p.id} value={p.username} />)}
+                      </datalist>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Act (1–4)</Label>
+                          <Input type="number" min={1} max={4} value={storyAct} onChange={(e) => setStoryAct(Number(e.target.value))} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Chapter (1–15)</Label>
+                          <Input type="number" min={1} max={15} value={storyChapter} onChange={(e) => setStoryChapter(Number(e.target.value))} />
+                        </div>
+                      </div>
+                      <Button
+                        className="w-full"
+                        disabled={setStoryMutation.isPending || !storyUsername}
+                        onClick={() => {
+                          const target = players.find(p => p.username.toLowerCase() === storyUsername.toLowerCase());
+                          if (!target) { toast({ title: "Player not found", variant: "destructive" }); return; }
+                          setStoryMutation.mutate({ accountId: target.id, act: storyAct, chapter: storyChapter });
+                        }}
+                      >
+                        {setStoryMutation.isPending ? "Setting..." : "Set Story Progress"}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+              <Card>
+                <CardHeader><CardTitle className="flex items-center gap-2 text-blue-400 text-sm"><Zap className="w-4 h-4" />Set Player Base Stats</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  <Input
+                    list="player-list-stats"
+                    placeholder="Player username..."
+                    value={setStatsUsername}
+                    onChange={(e) => setSetStatsUsername(e.target.value)}
+                  />
+                  <datalist id="player-list-stats">
+                    {players.map((p) => <option key={p.id} value={p.username} />)}
+                  </datalist>
+                  <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+                    {([
+                      { label: "STR", val: setStatsStr, set: setSetStatsStr },
+                      { label: "DEF", val: setStatsDef, set: setSetStatsDef },
+                      { label: "SPD", val: setStatsSpd, set: setSetStatsSpd },
+                      { label: "INT", val: setStatsInt, set: setSetStatsInt },
+                      { label: "VIT", val: setStatsVit, set: setSetStatsVit },
+                      { label: "LUK", val: setStatsLuk, set: setSetStatsLuk },
+                    ] as any[]).map(({ label, val, set }) => (
+                      <div key={label} className="space-y-1">
+                        <Label className="text-xs">{label}</Label>
+                        <Input type="number" min={0} value={val} onChange={(e) => set(Number(e.target.value))} />
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    className="bg-blue-600 hover:bg-blue-700"
+                    disabled={setStatsMutation.isPending || !setStatsUsername}
+                    onClick={() => {
+                      const target = players.find(p => p.username.toLowerCase() === setStatsUsername.toLowerCase());
+                      if (!target) { toast({ title: "Player not found", variant: "destructive" }); return; }
+                      const stats: any = {};
+                      if (setStatsStr > 0) stats.Str = setStatsStr;
+                      if (setStatsDef > 0) stats.Def = setStatsDef;
+                      if (setStatsSpd > 0) stats.Spd = setStatsSpd;
+                      if (setStatsInt > 0) stats.Int = setStatsInt;
+                      if (setStatsVit > 0) stats.Vit = setStatsVit;
+                      if (setStatsLuk > 0) stats.Luk = setStatsLuk;
+                      setStatsMutation.mutate({ accountId: target.id, stats });
+                    }}
+                  >
+                    {setStatsMutation.isPending ? "Updating..." : "Apply Stats"}
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="anticheat">
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="font-serif text-lg font-semibold">Anti-Cheat System</h2>
+                <Button variant="outline" size="sm" onClick={() => { refetchAlerts(); refetchAcLogs(); }}>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
+              <Card className="border-red-500/30">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-red-400">
+                    <AlertTriangle className="w-5 h-5" />
+                    Suspicious Activity Alerts
+                    {anticheatAlerts.length > 0 && <Badge variant="destructive">{anticheatAlerts.length}</Badge>}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {anticheatAlerts.length === 0 ? (
+                    <div className="text-center py-6 text-muted-foreground text-sm">No suspicious activity detected</div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Player</TableHead>
+                          <TableHead>Alert Count</TableHead>
+                          <TableHead>Reason</TableHead>
+                          <TableHead>Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {anticheatAlerts.map((alert: any) => {
+                          const player = players.find(p => p.id === alert.accountId);
+                          return (
+                            <TableRow key={alert.accountId}>
+                              <TableCell className="font-medium">{player?.username || alert.accountId.slice(0, 8)}</TableCell>
+                              <TableCell>
+                                <Badge variant={alert.count > 5 ? "destructive" : "secondary"}>{alert.count} alerts</Badge>
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">{alert.reason || "Suspicious patterns detected"}</TableCell>
+                              <TableCell>
+                                <div className="flex gap-2">
+                                  <Input
+                                    placeholder="Ban reason..."
+                                    className="h-8 text-xs w-40"
+                                    onChange={(e) => { setBanTargetId(alert.accountId); setBanReason(e.target.value); }}
+                                  />
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    disabled={banPlayerMutation.isPending}
+                                    onClick={() => {
+                                      if (!banReason) { toast({ title: "Enter a ban reason", variant: "destructive" }); return; }
+                                      banPlayerMutation.mutate({ accountId: alert.accountId, reason: banReason });
+                                    }}
+                                  >
+                                    <Ban className="w-3 h-3 mr-1" />
+                                    Ban
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader><CardTitle className="text-sm flex items-center gap-2"><Eye className="w-4 h-4" />Anti-Cheat Logs</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    {anticheatLogs.length === 0 ? (
+                      <div className="text-center py-4 text-muted-foreground text-sm">No anti-cheat logs found</div>
+                    ) : anticheatLogs.map((log: any, i: number) => (
+                      <div key={i} className="flex items-start gap-2 text-xs py-1 border-b border-border/50 last:border-0">
+                        <span className="text-muted-foreground shrink-0 w-20">{new Date(log.createdAt || Date.now()).toLocaleTimeString()}</span>
+                        <span className="text-red-400 shrink-0">⚠</span>
+                        <span>{log.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader><CardTitle className="text-sm flex items-center gap-2"><Ban className="w-4 h-4" />Manual Ban</CardTitle></CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid md:grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Player Username</Label>
+                      <Input
+                        list="player-list-ban"
+                        placeholder="Enter username..."
+                        onChange={(e) => {
+                          const p = players.find(pl => pl.username.toLowerCase() === e.target.value.toLowerCase());
+                          if (p) setBanTargetId(p.id);
+                        }}
+                      />
+                      <datalist id="player-list-ban">
+                        {players.map((p) => <option key={p.id} value={p.username} />)}
+                      </datalist>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Reason</Label>
+                      <Input placeholder="Ban reason..." value={banReason} onChange={(e) => setBanReason(e.target.value)} />
+                    </div>
+                    <div className="flex items-end">
+                      <Button
+                        variant="destructive"
+                        className="w-full"
+                        disabled={banPlayerMutation.isPending || !banTargetId || !banReason}
+                        onClick={() => banPlayerMutation.mutate({ accountId: banTargetId, reason: banReason })}
+                      >
+                        <Ban className="w-4 h-4 mr-2" />
+                        {banPlayerMutation.isPending ? "Banning..." : "Ban Player"}
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="ai_requests">
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="font-serif text-lg font-semibold">AI Story Requests</h2>
+                <Button variant="outline" size="sm" onClick={() => refetchAiRequests()}>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
+              {aiRequests.length === 0 ? (
+                <Card>
+                  <CardContent className="py-12 text-center text-muted-foreground">
+                    <Bot className="w-8 h-8 mx-auto mb-3 opacity-40" />
+                    <p>No pending AI requests</p>
+                    <p className="text-xs mt-1">Requests appear when the AI asks for admin approval for story events or rewards</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-4">
+                  {aiRequests.map((req: any) => {
+                    const player = players.find(p => p.id === req.accountId);
+                    return (
+                      <Card key={req.id} className="border-blue-500/30">
+                        <CardHeader className="pb-2">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <CardTitle className="text-sm flex items-center gap-2">
+                                <Bot className="w-4 h-4 text-blue-400" />
+                                {req.requestType || "AI Request"} — {player?.username || "Unknown"}
+                              </CardTitle>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {new Date(req.createdAt || Date.now()).toLocaleString()}
+                              </p>
+                            </div>
+                            <Badge variant={req.status === "pending" ? "secondary" : req.status === "approved" ? "default" : "destructive"}>
+                              {req.status || "pending"}
+                            </Badge>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div className="p-3 rounded bg-muted/50 text-sm">{req.content || req.message || "No details provided"}</div>
+                          {req.metadata && (
+                            <div className="text-xs text-muted-foreground font-mono">
+                              Metadata: {JSON.stringify(req.metadata)}
+                            </div>
+                          )}
+                          {req.status === "pending" && (
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                className="bg-green-600 hover:bg-green-700"
+                                disabled={resolveAiRequestMutation.isPending}
+                                onClick={() => resolveAiRequestMutation.mutate({ id: req.id, status: "approved" })}
+                              >
+                                <Check className="w-3 h-3 mr-1" />
+                                Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={resolveAiRequestMutation.isPending}
+                                onClick={() => resolveAiRequestMutation.mutate({ id: req.id, status: "answered" })}
+                              >
+                                <ChevronRight className="w-3 h-3 mr-1" />
+                                Answer
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={resolveAiRequestMutation.isPending}
+                                onClick={() => resolveAiRequestMutation.mutate({ id: req.id, status: "rejected" })}
+                              >
+                                <X className="w-3 h-3 mr-1" />
+                                Reject
+                              </Button>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
         </Tabs>
       </main>
 

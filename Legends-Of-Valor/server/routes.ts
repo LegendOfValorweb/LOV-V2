@@ -3770,6 +3770,7 @@ export async function registerRoutes(
       // Run V2 combat engine
       const combatResult = runAutoCombat(playerCombatant, npcCombatant, 20);
       const won = combatResult.winner === account.id;
+      let deathPenaltyInfo: { goldLost: number; durabilityDamage: number } | null = null;
       
       console.log(`V2 Battle - ${account.username} vs ${npcName}: ${won ? "WON" : "LOST"} in ${combatResult.rounds.length} rounds`);
       console.log(`V2 Battle - Player HP: ${combatResult.finalHP[account.id]}, NPC HP: ${combatResult.finalHP[npcCombatant.id]}`);
@@ -3822,6 +3823,7 @@ export async function registerRoutes(
         await storage.updateNpcProgress(account.id, newFloor, newLevel);
       } else {
         const penalty = calculateDeathPenalty(account.gold);
+        deathPenaltyInfo = { goldLost: penalty.goldLost, durabilityDamage: penalty.durabilityDamage };
         await db.update(accounts).set({
           gold: Math.max(0, account.gold - penalty.goldLost),
           isDead: true,
@@ -3865,6 +3867,7 @@ export async function registerRoutes(
           elements: petElements,
           power: petElementalPower,
         } : null,
+        deathPenalty: deathPenaltyInfo,
         rewards,
         newFloor,
         newLevel,
