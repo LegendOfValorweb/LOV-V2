@@ -159,7 +159,7 @@ export default function Achievements() {
   const currentCategory = categories.find(c => c.category === selectedCategory);
 
   return (
-    <div className="h-full bg-gradient-to-br from-background via-background to-accent/10 p-4">
+    <div className="game-page-scroll bg-gradient-to-br from-background via-background to-accent/10 p-4">
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">

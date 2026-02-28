@@ -104,6 +104,13 @@ cd Legends-Of-Valor && npm run db:push
 - Zone backdrops: shop (marketplace), fishing (lake), base (castle), arena, tower, pets (training grounds)
 - World map is central hub after login with player avatar display, quick travel, and zone navigation
 
+### Session 7 Features (February 2026)
+- Tutorial overlay (9-step interactive guide) shown to new players on first world-map visit
+  - Covers race/stats, combat, NPC tower, pets, world, guilds, economy
+  - Skip button available; progress dots navigation; marks complete via POST /api/ai/tutorial/:id/complete
+- Scroll fix: achievements, leaderboard, events, tournaments, quests pages all use game-page-scroll class
+- NPC race patch: existing NPC accounts without a race auto-updated on startup
+
 ### Session 5-6 Features (February 2026)
 - Weather-based spawn modifiers: thunderstorm 3× boss, rain 1.8× elite, fog 2× champion, blizzard 2× boss
 - Status effects in NPC combat: stun (😵), freeze (🧊 -50% power), silence (🔇 disables spells)

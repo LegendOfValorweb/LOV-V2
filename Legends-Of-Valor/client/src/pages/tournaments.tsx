@@ -238,7 +238,7 @@ export default function Tournaments() {
   );
 
   return (
-    <div className="h-full bg-gradient-to-br from-gray-900 via-purple-900/20 to-gray-900 p-4">
+    <div className="game-page-scroll bg-gradient-to-br from-gray-900 via-purple-900/20 to-gray-900 p-4">
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">

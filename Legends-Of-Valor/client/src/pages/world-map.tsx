@@ -14,6 +14,7 @@ import { useGame } from "@/lib/game-context";
 import { LoadingScreen } from "@/components/loading-screen";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import TutorialOverlay from "@/components/tutorial-overlay";
 import {
   Dialog,
   DialogContent,
@@ -311,6 +312,26 @@ export default function WorldMap() {
   const [, navigate] = useLocation();
   const { account, logout, setAccount } = useGame();
   const { toast } = useToast();
+  const [showTutorial, setShowTutorial] = useState(false);
+
+  const { data: storylineData } = useQuery<any>({
+    queryKey: ["/api/ai/storyline", account?.id],
+    queryFn: async () => {
+      if (!account?.id) return null;
+      const res = await fetch(`/api/ai/storyline/${account.id}`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!account?.id,
+    staleTime: 60000,
+  });
+
+  useEffect(() => {
+    if (storylineData && storylineData.tutorialCompleted === false) {
+      setShowTutorial(true);
+    }
+  }, [storylineData]);
+
   const [selectedZone, setSelectedZone] = useState<Zone | null>(null);
   const [hoveredZone, setHoveredZone] = useState<Zone | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
@@ -602,6 +623,9 @@ export default function WorldMap() {
 
   return (
     <div className="game-page world-map-page">
+      {showTutorial && (
+        <TutorialOverlay onComplete={() => setShowTutorial(false)} />
+      )}
       {isTraveling && (
         <div className="absolute inset-0 z-[100] bg-black/80 flex flex-col items-center justify-center transition-opacity duration-300">
           <div className="text-center space-y-4">

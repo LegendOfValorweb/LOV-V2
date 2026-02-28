@@ -1,12 +1,16 @@
 import { storage } from "./storage";
+import { db } from "./db";
+import { accounts } from "@shared/schema";
+import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 // NPC player configuration with power level (0 = weakest, 1 = strongest)
+// Each NPC has a unique race (same rules as real players — max 2 per race)
 export const NPC_PLAYERS = [
-  { username: "Guardian_Kira", password: "npc_kira_2024", powerLevel: 1.0 },  // Strongest - matches best player
-  { username: "Shadow_Vex", password: "npc_vex_2024", powerLevel: 0.7 },      // Upper-mid tier
-  { username: "Iron_Magnus", password: "npc_magnus_2024", powerLevel: 0.4 }, // Lower-mid tier
-  { username: "Storm_Lyra", password: "npc_lyra_2024", powerLevel: 0.0 },    // Weakest - matches weakest player
+  { username: "Guardian_Kira", password: "npc_kira_2024", powerLevel: 1.0, race: "elf",       gender: "female" },
+  { username: "Shadow_Vex",    password: "npc_vex_2024",  powerLevel: 0.7, race: "demon",     gender: "male"   },
+  { username: "Iron_Magnus",   password: "npc_magnus_2024", powerLevel: 0.4, race: "dwarf",   gender: "male"   },
+  { username: "Storm_Lyra",    password: "npc_lyra_2024", powerLevel: 0.0, race: "elemental", gender: "female" },
 ];
 
 export const NPC_GUILD_NAME = "The Eternal Watch";
@@ -31,6 +35,8 @@ export async function initializeNPCAccounts() {
         username: npc.username,
         password: hashedPassword,
         role: "player",
+        race: npc.race as any,
+        gender: npc.gender as any,
         gold: 100000,
         rubies: 1000,
         soulShards: 500,
@@ -47,7 +53,11 @@ export async function initializeNPCAccounts() {
         npcFloor: 1,
         npcLevel: 1,
       });
-      console.log(`[NPC] Created NPC account: ${npc.username}`);
+      console.log(`[NPC] Created NPC account: ${npc.username} (${npc.race})`);
+    } else if (!account.race) {
+      // Update existing NPC accounts that don't have a race set yet
+      await db.update(accounts).set({ race: npc.race as any, gender: npc.gender as any }).where(eq(accounts.id, account.id));
+      console.log(`[NPC] Updated race for ${npc.username}: ${npc.race}`);
     }
     
     npcAccountIds.push(account.id);

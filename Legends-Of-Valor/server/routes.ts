@@ -29,6 +29,8 @@ import {
   calculateMonsterRewards,
   getZoneWeather,
   getAllZoneWeather,
+  setZoneWeather,
+  WEATHER_TYPES,
   getActiveMonsterCount,
   getZoneMonsterTemplates,
   getWeatherExclusiveBosses,
@@ -13401,6 +13403,20 @@ export async function registerRoutes(
   app.get("/api/zones/:zoneId/weather", (req, res) => {
     const weather = getZoneWeather(req.params.zoneId);
     res.json(weather);
+  });
+
+  app.post("/api/admin/weather/set", async (req, res) => {
+    try {
+      const { adminId, zoneId, weatherType, duration } = req.body;
+      const admin = await storage.getAccount(adminId);
+      if (!admin || admin.role !== "admin") return res.status(403).json({ error: "Admin access required" });
+      if (!WEATHER_TYPES.includes(weatherType)) return res.status(400).json({ error: "Invalid weather type" });
+      const zones = zoneId === "all" ? ["capital_city", "mountain_caverns", "ancient_ruins", "enchanted_forest", "crystal_lake", "coastal_village", "ruby_mines", "battle_arena", "research_lab", "pet_training", "hell_zone", "mystic_tower"] : [zoneId];
+      for (const z of zones) setZoneWeather(z, weatherType, duration || 1800000);
+      res.json({ success: true, message: `Weather set to ${weatherType} in ${zones.length} zone(s)` });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to set weather" });
+    }
   });
 
   app.get("/api/zones/:zoneId/monsters/templates", (req, res) => {

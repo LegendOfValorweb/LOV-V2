@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Crown, LogOut, Gift, Sword, Shield, Gem, Coins, Users, Edit, Trophy, Zap, Brain, Target, Clover, Trash2, Calendar, Plus, AlertTriangle, Swords, Check, Cat, Castle, Gavel, Clock, Play, Pause, Sparkles, Activity, Radio, Globe, Server, Ban, BarChart2, RefreshCw, Skull, Flame, Bot, Settings, Megaphone, Star, ChevronRight, Eye, X } from "lucide-react";
+import { Search, Crown, LogOut, Gift, Sword, Shield, Gem, Coins, Users, Edit, Trophy, Zap, Brain, Target, Clover, Trash2, Calendar, Plus, AlertTriangle, Swords, Check, Cat, Castle, Gavel, Clock, Play, Pause, Sparkles, Activity, Radio, Globe, Server, Ban, BarChart2, RefreshCw, Skull, Flame, Bot, Settings, Megaphone, Star, ChevronRight, Eye, X, CloudSun } from "lucide-react";
 import { ALL_SKILLS, getSkillById, type SkillDefinition } from "@shared/skills-data";
 import type { SkillAuction } from "@shared/schema";
 import { TierFilter } from "@/components/tier-filter";
@@ -772,6 +772,9 @@ export default function Admin() {
   const [broadcastMessage, setBroadcastMessage] = useState("");
   const [broadcastType, setBroadcastType] = useState<"announcement" | "maintenance" | "event">("announcement");
   const [hellZoneDuration, setHellZoneDuration] = useState(30);
+  const [weatherControlZone, setWeatherControlZone] = useState("all");
+  const [weatherControlType, setWeatherControlType] = useState("clear");
+  const [weatherControlDuration, setWeatherControlDuration] = useState(30);
 
   const [grantTargetUsername, setGrantTargetUsername] = useState("");
   const [grantGold, setGrantGold] = useState(0);
@@ -890,6 +893,15 @@ export default function Admin() {
     },
     onSuccess: () => toast({ title: "Hell Zone ended" }),
     onError: () => toast({ title: "Error", description: "Failed to end Hell Zone", variant: "destructive" }),
+  });
+
+  const setWeatherMutation = useMutation({
+    mutationFn: async (body: any) => {
+      const res = await apiRequest("POST", "/api/admin/weather/set", body);
+      return res.json();
+    },
+    onSuccess: (data) => toast({ title: "Weather Set", description: data.message }),
+    onError: () => toast({ title: "Error", description: "Failed to set weather", variant: "destructive" }),
   });
 
   const grantResourcesMutation = useMutation({
@@ -3051,6 +3063,76 @@ export default function Admin() {
                     <Radio className="w-4 h-4 mr-2" />
                     {broadcastMutation.isPending ? "Sending..." : "Send Broadcast"}
                   </Button>
+                </CardContent>
+              </Card>
+              <Card className="border-cyan-500/30">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-cyan-400">
+                    <CloudSun className="w-5 h-5" />
+                    Weather Control
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label>Zone</Label>
+                      <Select value={weatherControlZone} onValueChange={setWeatherControlZone}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">🌍 All Zones</SelectItem>
+                          <SelectItem value="capital_city">🏰 Capital City</SelectItem>
+                          <SelectItem value="mountain_caverns">⛰️ Mountain Caverns</SelectItem>
+                          <SelectItem value="ancient_ruins">🏛️ Ancient Ruins</SelectItem>
+                          <SelectItem value="enchanted_forest">🌲 Enchanted Forest</SelectItem>
+                          <SelectItem value="crystal_lake">💎 Crystal Lake</SelectItem>
+                          <SelectItem value="coastal_village">🌊 Coastal Village</SelectItem>
+                          <SelectItem value="ruby_mines">💎 Ruby Mines</SelectItem>
+                          <SelectItem value="battle_arena">⚔️ Battle Arena</SelectItem>
+                          <SelectItem value="research_lab">🔬 Research Lab</SelectItem>
+                          <SelectItem value="pet_training">🐾 Pet Training</SelectItem>
+                          <SelectItem value="hell_zone">🔥 Hell Zone</SelectItem>
+                          <SelectItem value="mystic_tower">🗼 Mystic Tower</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Weather Type</Label>
+                      <Select value={weatherControlType} onValueChange={setWeatherControlType}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="clear">☀️ Clear</SelectItem>
+                          <SelectItem value="rain">🌧️ Rain (Elite ↑)</SelectItem>
+                          <SelectItem value="thunderstorm">⛈️ Thunderstorm (Boss ×3)</SelectItem>
+                          <SelectItem value="fog">🌫️ Fog (Champion ×2)</SelectItem>
+                          <SelectItem value="blizzard">❄️ Blizzard (Boss ×2)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Duration (minutes)</Label>
+                      <Select value={String(weatherControlDuration)} onValueChange={(v) => setWeatherControlDuration(Number(v))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="15">15 minutes</SelectItem>
+                          <SelectItem value="30">30 minutes</SelectItem>
+                          <SelectItem value="60">1 hour</SelectItem>
+                          <SelectItem value="120">2 hours</SelectItem>
+                          <SelectItem value="480">8 hours</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Button
+                      onClick={() => setWeatherMutation.mutate({ adminId: account?.id, zoneId: weatherControlZone, weatherType: weatherControlType, duration: weatherControlDuration * 60000 })}
+                      disabled={setWeatherMutation.isPending}
+                      className="bg-cyan-600 hover:bg-cyan-700"
+                    >
+                      <CloudSun className="w-4 h-4 mr-2" />
+                      {setWeatherMutation.isPending ? "Setting..." : "Apply Weather"}
+                    </Button>
+                    <p className="text-xs text-muted-foreground">Weather affects monster spawn rates, difficulty, and rare boss encounters in the selected zone(s).</p>
+                  </div>
                 </CardContent>
               </Card>
             </div>

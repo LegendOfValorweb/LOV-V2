@@ -140,7 +140,7 @@ export default function Leaderboard() {
   };
 
   return (
-    <div className="h-full bg-background">
+    <div className="game-page-scroll bg-background">
       <header className="border-b border-border/40 bg-card/30 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
           <div className="flex flex-wrap items-center justify-between gap-4">

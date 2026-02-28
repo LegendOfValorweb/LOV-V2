@@ -322,6 +322,17 @@ export function calculateMonsterRewards(monster: SpawnedMonster): {
   };
 }
 
+export const WEATHER_TYPES: WeatherType[] = ["clear", "rain", "thunderstorm", "fog", "blizzard"];
+
+export function setZoneWeather(zoneId: string, weatherType: WeatherType, durationMs = 1800000): void {
+  zoneWeather.set(zoneId, {
+    type: weatherType,
+    startedAt: Date.now(),
+    duration: durationMs,
+    zoneId,
+  });
+}
+
 export function getAllZoneWeather(): Record<string, WeatherState> {
   const allZones = Object.keys(ZONE_MONSTER_TEMPLATES);
   const result: Record<string, WeatherState> = {};
