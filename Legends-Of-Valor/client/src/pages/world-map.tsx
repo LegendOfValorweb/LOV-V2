@@ -142,11 +142,11 @@ export default function WorldMap() {
         </div>
       )}
 
-      <div className="relative w-full h-full flex items-center justify-center">
+      <div className="relative w-full h-full flex items-center justify-center map-container">
         <div className="relative aspect-[16/9] w-full max-h-full max-w-full">
           <img 
             src="/maps/world_map.png" 
-            className="absolute inset-0 w-full h-full object-contain pointer-events-none" 
+            className="absolute inset-0 w-full h-full object-contain pointer-events-none map-image" 
             alt="World Map"
           />
           

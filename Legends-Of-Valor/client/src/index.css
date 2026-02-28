@@ -88,34 +88,44 @@
     height: 100%;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
   }
   
   .world-map-page {
-    height: 100%;
+    position: absolute;
+    inset: 0;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
   }
 
   .world-map-page .relative.w-full.h-full {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #000;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .world-map-page .map-container {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  
+  .world-map-page img.map-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
   }
 
   .world-map-page .relative.aspect-\[16\/9\] {
     width: 100%;
-    height: auto;
+    height: 100%;
     max-height: none;
-  }
-  
-  /* Make the map image cover more space in portrait if possible, 
-     but preserve aspect ratio for landmark coordinate accuracy */
-  .world-map-page img {
-    object-fit: contain;
-    width: 100%;
-    height: auto;
+    aspect-ratio: auto;
   }
 }
 
@@ -135,7 +145,7 @@
   right: 0;
   height: auto;
   min-height: 80px;
-  background: linear-gradient(to bottom, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.6) 60%, transparent 100%);
+  background: linear-gradient(to bottom, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 60%, transparent 100%);
   display: flex;
   flex-direction: column;
   padding: 8px 12px;
