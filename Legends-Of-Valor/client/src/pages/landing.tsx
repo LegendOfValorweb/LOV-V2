@@ -61,6 +61,7 @@ export default function Landing() {
   const [showRaceSelection, setShowRaceSelection] = useState(false);
   const [selectedRace, setSelectedRace] = useState<string | null>(null);
   const [selectedGender, setSelectedGender] = useState<"male" | "female">("male");
+  const [selectedEgg, setSelectedEgg] = useState<string>("Fire");
   const [raceData, setRaceData] = useState<RaceData | null>(null);
   const [error, setError] = useState("");
 
@@ -106,7 +107,7 @@ export default function Landing() {
     }
     
     setError("");
-    const result = await login(playerName.trim(), playerPassword, "player", selectedRace, selectedGender);
+    const result = await login(playerName.trim(), playerPassword, "player", selectedRace, selectedGender, selectedEgg);
     
     if (result.account) {
       navigate("/world-map");
@@ -143,6 +144,28 @@ export default function Landing() {
           </header>
 
           <main className="flex-1 flex flex-col items-center px-4 pb-8">
+            <div className="text-center mb-6">
+              <h2 className="font-serif text-2xl font-bold text-foreground mb-2">
+                Choose Your Starting Pet Egg
+              </h2>
+              <p className="text-muted-foreground text-sm">
+                Select the element of your first companion.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap justify-center gap-2 mb-8 max-w-2xl">
+              {["Fire", "Water", "Earth", "Air", "Lightning", "Ice", "Nature", "Dark", "Light", "Arcana"].map((el) => (
+                <Button
+                  key={el}
+                  variant={selectedEgg === el ? "default" : "outline"}
+                  onClick={() => setSelectedEgg(el)}
+                  className="min-w-[100px]"
+                >
+                  {el}
+                </Button>
+              ))}
+            </div>
+
             <div className="text-center mb-6">
               <h2 className="font-serif text-2xl font-bold text-foreground mb-2">
                 Choose Your Race

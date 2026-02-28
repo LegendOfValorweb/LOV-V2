@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Trophy, Swords, Users, Clock, Crown, ArrowLeft, Map, Loader2, CheckCircle, XCircle } from "lucide-react";
+import { Trophy, Swords, Users, Clock, Crown, ArrowLeft, Map, Loader2, CheckCircle, XCircle, Coins } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface TournamentMatch {
@@ -86,6 +86,29 @@ export default function Tournaments() {
     }
   };
 
+  const betMutation = useMutation({
+    mutationFn: async ({ tournamentId, matchIndex, betAmount, predictedWinner }: { tournamentId: string, matchIndex: number, betAmount: number, predictedWinner: string }) => {
+      const res = await apiRequest("POST", `/api/tournaments/${tournamentId}/matches/${matchIndex}/bet`, {
+        accountId: account?.id,
+        betAmount,
+        predictedWinner,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Bet placed!", description: "May the odds be in your favor!" });
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts", account?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tournaments"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to place bet",
+        description: error.message || "Could not place bet",
+        variant: "destructive",
+      });
+    },
+  });
+
   const renderBracket = (tournament: Tournament) => {
     if (!tournament.brackets || tournament.brackets.length === 0) {
       return <p className="text-gray-400 text-sm">Brackets not yet generated</p>;
@@ -102,20 +125,44 @@ export default function Tournaments() {
                   key={idx}
                   className="bg-gray-800/50 rounded-lg p-3 border border-gray-700"
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className={match.winner === match.player1 ? "text-green-400 font-bold" : "text-gray-300"}>
-                        {match.player1?.length > 8 ? `${match.player1.substring(0, 8)}...` : match.player1 ?? "Unknown"}
-                      </span>
-                      <span className="text-gray-500">vs</span>
-                      <span className={match.winner === match.player2 ? "text-green-400 font-bold" : "text-gray-300"}>
-                        {match.player2?.length > 8 ? `${match.player2.substring(0, 8)}...` : match.player2 ?? "Unknown"}
-                      </span>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={match.winner === match.player1 ? "text-green-400 font-bold" : "text-gray-300"}>
+                          {match.player1?.length > 8 ? `${match.player1.substring(0, 8)}...` : match.player1 ?? "Unknown"}
+                        </span>
+                        <span className="text-gray-500">vs</span>
+                        <span className={match.winner === match.player2 ? "text-green-400 font-bold" : "text-gray-300"}>
+                          {match.player2?.length > 8 ? `${match.player2.substring(0, 8)}...` : match.player2 ?? "Unknown"}
+                        </span>
+                      </div>
+                      {match.winner ? (
+                        <CheckCircle className="w-4 h-4 text-green-400" />
+                      ) : (
+                        <Clock className="w-4 h-4 text-yellow-400" />
+                      )}
                     </div>
-                    {match.winner ? (
-                      <CheckCircle className="w-4 h-4 text-green-400" />
-                    ) : (
-                      <Clock className="w-4 h-4 text-yellow-400" />
+                    {tournament.status === "pending" && match.player1 && match.player2 && match.player2 !== "BYE" && (
+                      <div className="flex gap-2 mt-2">
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          className="text-[10px] h-6 border-amber-600/30 hover:bg-amber-900/20"
+                          onClick={() => betMutation.mutate({ tournamentId: tournament.id, matchIndex: idx, betAmount: 1000, predictedWinner: match.player1 })}
+                          disabled={betMutation.isPending}
+                        >
+                          Bet 1k on {match.player1?.substring(0, 5)}
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          className="text-[10px] h-6 border-amber-600/30 hover:bg-amber-900/20"
+                          onClick={() => betMutation.mutate({ tournamentId: tournament.id, matchIndex: idx, betAmount: 1000, predictedWinner: match.player2 })}
+                          disabled={betMutation.isPending}
+                        >
+                          Bet 1k on {match.player2?.substring(0, 5)}
+                        </Button>
+                      </div>
                     )}
                   </div>
                 </div>

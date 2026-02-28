@@ -23,7 +23,7 @@ interface GameContextType {
   spendGold: (amount: number) => boolean;
   addGold: (amount: number) => void;
   logout: () => void;
-  login: (username: string, password: string, role: "player" | "admin", race?: string, gender?: string) => Promise<{ account: Account | null; error?: string; needsRaceSelection?: boolean }>;
+  login: (username: string, password: string, role: "player" | "admin", race?: string, gender?: string, startingEggElement?: string) => Promise<{ account: Account | null; error?: string; needsRaceSelection?: boolean }>;
   refreshInventory: () => Promise<void>;
   refetchAccount: () => Promise<void>;
 }
@@ -121,13 +121,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = useCallback(async (username: string, _password: string, role: "player" | "admin", race?: string, gender?: string) => {
+  const login = useCallback(async (username: string, _password: string, role: "player" | "admin", race?: string, gender?: string, startingEggElement?: string) => {
     try {
       // Try API login first
       const response = await fetch("/api/accounts/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password: _password, role, race, gender }),
+        body: JSON.stringify({ username, password: _password, role, race, gender, startingEggElement }),
       });
 
       if (response.ok) {
@@ -230,7 +230,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }
   }, [setAccount]);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try {
+      await fetch("/api/accounts/logout", { method: "POST" });
+    } catch (e) {
+      console.error("Logout API failed", e);
+    }
     localStorage.removeItem(SESSION_KEY);
     setAccountState(null);
     setInventory([]);

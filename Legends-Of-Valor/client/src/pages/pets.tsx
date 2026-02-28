@@ -105,6 +105,10 @@ export default function Pets() {
   const [personalityDialog, setPersonalityDialog] = useState<Pet | null>(null);
   const [skinDialog, setSkinDialog] = useState<Pet | null>(null);
   const [isSettingSkin, setIsSettingSkin] = useState(false);
+  const [mercenaryDialog, setMercenaryDialog] = useState<Pet | null>(null);
+  const [mercenaryDuration, setMercenaryDuration] = useState(1);
+  const [isDeployingMercenary, setIsDeployingMercenary] = useState(false);
+  const [isCollectingReward, setIsCollectingReward] = useState(false);
 
   const { data: playerPets = [], isLoading: petsLoading, refetch: refetchPets } = useQuery<Pet[]>({
     queryKey: ["/api/accounts", account?.id, "pets"],
@@ -490,6 +494,63 @@ export default function Pets() {
     }
   };
 
+  const handleDeployMercenary = async () => {
+    if (!mercenaryDialog || !account) return;
+    setIsDeployingMercenary(true);
+    try {
+      const res = await apiRequest("POST", `/api/pets/${mercenaryDialog.id}/mercenary`, {
+        accountId: account.id,
+        durationHours: mercenaryDuration
+      });
+      const data = await res.json();
+      
+      await refetchPets();
+      toast({
+        title: "Pet Deployed!",
+        description: data.message,
+      });
+      setMercenaryDialog(null);
+    } catch (error: any) {
+      const errorData = await error.json?.() || { error: "Failed to deploy mercenary" };
+      toast({
+        title: "Deployment Failed",
+        description: errorData.error,
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeployingMercenary(false);
+    }
+  };
+
+  const handleCollectMercenary = async (pet: Pet) => {
+    if (!account) return;
+    setIsCollectingReward(true);
+    try {
+      const res = await apiRequest("POST", `/api/pets/${pet.id}/collect-mercenary`, {
+        accountId: account.id
+      });
+      const data = await res.json();
+      
+      await refetchPets();
+      const accountRes = await apiRequest("GET", `/api/accounts/${account.id}`);
+      setAccount(await accountRes.json());
+      
+      toast({
+        title: "Reward Collected!",
+        description: data.message,
+      });
+    } catch (error: any) {
+      const errorData = await error.json?.() || { error: "Failed to collect reward" };
+      toast({
+        title: "Collection Failed",
+        description: errorData.error,
+        variant: "destructive",
+      });
+    } finally {
+      setIsCollectingReward(false);
+    }
+  };
+
   if (!account || account.role !== "player") {
     navigate("/");
     return null;
@@ -506,8 +567,11 @@ export default function Pets() {
     const petSkin = pet.skin || "default";
     const skinImagePath = `/skins/pet/${petSkin}.png`;
 
+    const isMercenary = pet.mercenaryUntil && new Date(pet.mercenaryUntil) > new Date();
+    const isMercenaryFinished = pet.mercenaryUntil && new Date(pet.mercenaryUntil) <= new Date();
+
     return (
-      <Card key={pet.id} className={`border ${tierColors[tier]}`}>
+      <Card key={pet.id} className={`border ${tierColors[tier]} ${isMercenary ? 'opacity-70' : ''}`}>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center justify-between gap-2">
             <span className="flex items-center gap-2">
@@ -521,122 +585,164 @@ export default function Pets() {
               />
               <span className="truncate">{pet.name}</span>
             </span>
-            <Badge className={tierColors[tier]} data-testid={`badge-pet-tier-${pet.id}`}>
-              {tier.charAt(0).toUpperCase() + tier.slice(1)}
-            </Badge>
+            <div className="flex flex-col items-end gap-1">
+              <Badge className={tierColors[tier]} data-testid={`badge-pet-tier-${pet.id}`}>
+                {tier.charAt(0).toUpperCase() + tier.slice(1)}
+              </Badge>
+              {isMercenary && (
+                <Badge variant="secondary" className="text-[10px] py-0">
+                  Mercenary
+                </Badge>
+              )}
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex flex-wrap gap-1 mb-2">
-            {(pet.elements || [pet.element]).map((elem: string) => (
-              <Badge key={elem} variant="outline" className={`text-xs ${elementColors[elem] || 'text-muted-foreground'}`}>
-                {elem}
-              </Badge>
-            ))}
-          </div>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="flex items-center gap-1">
-              <Zap className="w-3 h-3 text-red-400" />
-              <span>STR: {stats.Str}</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Sparkles className="w-3 h-3 text-blue-400" />
-              <span>SPD: {stats.Spd}</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Clover className="w-3 h-3 text-green-400" />
-              <span>LUCK: {stats.Luck}</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Flame className="w-3 h-3 text-orange-400" />
-              <span>ELEM: {stats.ElementalPower}</span>
-            </div>
-          </div>
-
-          {config.maxExp !== null && (
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>EXP</span>
-                <span>{pet.exp} / {config.maxExp}</span>
+          {isMercenary ? (
+            <div className="space-y-2 py-2">
+              <div className="text-xs text-center text-muted-foreground flex items-center justify-center gap-1">
+                <Calendar className="w-3 h-3" />
+                Mission ends: {new Date(pet.mercenaryUntil!).toLocaleString()}
               </div>
-              <Progress value={expProgress} className="h-2" />
+              <Progress 
+                value={Math.max(0, Math.min(100, (1 - (new Date(pet.mercenaryUntil!).getTime() - Date.now()) / (24 * 60 * 60 * 1000)) * 100))} 
+                className="h-1" 
+              />
             </div>
-          )}
+          ) : isMercenaryFinished ? (
+            <Button 
+              className="w-full bg-green-600 hover:bg-green-700" 
+              onClick={() => handleCollectMercenary(pet)}
+              disabled={isCollectingReward}
+            >
+              <Coins className="w-4 h-4 mr-2" />
+              Collect {pet.mercenaryRewardGold?.toLocaleString()} Gold
+            </Button>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-1 mb-2">
+                {(pet.elements || [pet.element]).map((elem: string) => (
+                  <Badge key={elem} variant="outline" className={`text-xs ${elementColors[elem] || 'text-muted-foreground'}`}>
+                    {elem}
+                  </Badge>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="flex items-center gap-1">
+                  <Zap className="w-3 h-3 text-red-400" />
+                  <span>STR: {stats.Str}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-blue-400" />
+                  <span>SPD: {stats.Spd}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Clover className="w-3 h-3 text-green-400" />
+                  <span>LUCK: {stats.Luck}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Flame className="w-3 h-3 text-orange-400" />
+                  <span>ELEM: {stats.ElementalPower}</span>
+                </div>
+              </div>
 
-          <div className="flex gap-2 flex-wrap">
-            <Button
-              size="sm"
-              variant="outline"
-              className="flex-1"
-              onClick={() => setFeedDialog(pet)}
-              disabled={account.gold <= 0 && (account.petExp || 0) <= 0}
-              data-testid={`button-feed-${pet.id}`}
-            >
-              <Heart className="w-3 h-3 mr-1" />
-              Feed
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="flex-1"
-              onClick={() => setTrainStatDialog(pet)}
-              disabled={(account.soulShards || 0) < 10}
-              data-testid={`button-train-${pet.id}`}
-            >
-              <Sparkles className="w-3 h-3 mr-1 text-purple-400" />
-              Train
-            </Button>
-            {canEvolve && config.evolutionCost !== null && (
-              <Button
-                size="sm"
-                className="flex-1 bg-gradient-to-r from-yellow-600 to-orange-600"
-                onClick={() => handleEvolve(pet)}
-                disabled={isEvolving || account.gold < config.evolutionCost}
-                data-testid={`button-evolve-${pet.id}`}
-              >
-                <ArrowUp className="w-3 h-3 mr-1" />
-                Evolve ({config.evolutionCost.toLocaleString()}g)
-              </Button>
-            )}
-            <Button
-              size="sm"
-              variant="outline"
-              className="flex-1"
-              onClick={() => setBondDialog(pet)}
-              disabled={(account.soulGins || 0) < 100}
-            >
-              <Heart className="w-3 h-3 mr-1 text-pink-400" />
-              Bond
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setPersonalityDialog(pet)}
-              title="Personality"
-            >
-              <Sparkles className="w-3 h-3" />
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setSkinDialog(pet)}
-              title="Change Skin"
-            >
-              <Palette className="w-3 h-3" />
-            </Button>
-            {tier === "mythic" && (
-              <Button
-                size="sm"
-                className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600"
-                onClick={() => setRebirthDialog(pet)}
-                disabled={account.gold < 500000000}
-              >
-                <ArrowLeftRight className="w-3 h-3 mr-1" />
-                Rebirth
-              </Button>
-            )}
-          </div>
-          {pet.isFainted && (
+              {config.maxExp !== null && (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>EXP</span>
+                    <span>{pet.exp} / {config.maxExp}</span>
+                  </div>
+                  <Progress value={expProgress} className="h-2" />
+                </div>
+              )}
+
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setFeedDialog(pet)}
+                  disabled={account.gold <= 0 && (account.petExp || 0) <= 0}
+                  data-testid={`button-feed-${pet.id}`}
+                >
+                  <Heart className="w-3 h-3 mr-1" />
+                  Feed
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() => setTrainStatDialog(pet)}
+                  disabled={(account.soulShards || 0) < 10}
+                  data-testid={`button-train-${pet.id}`}
+                >
+                  <Sparkles className="w-3 h-3 mr-1 text-purple-400" />
+                  Train
+                </Button>
+                {canEvolve && config.evolutionCost !== null && (
+                  <Button
+                    size="sm"
+                    className="flex-1 bg-gradient-to-r from-yellow-600 to-orange-600"
+                    onClick={() => handleEvolve(pet)}
+                    disabled={isEvolving || account.gold < config.evolutionCost}
+                    data-testid={`button-evolve-${pet.id}`}
+                  >
+                    <ArrowUp className="w-3 h-3 mr-1" />
+                    Evolve ({config.evolutionCost.toLocaleString()}g)
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setBondDialog(pet)}
+                  disabled={(account.soulGins || 0) < 100}
+                >
+                  <Heart className="w-3 h-3 mr-1 text-pink-400" />
+                  Bond
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setPersonalityDialog(pet)}
+                  title="Personality"
+                >
+                  <Sparkles className="w-3 h-3" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setSkinDialog(pet)}
+                  title="Change Skin"
+                >
+                  <Palette className="w-3 h-3" />
+                </Button>
+                {tier === "mythic" && (
+                  <Button
+                    size="sm"
+                    className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600"
+                    onClick={() => setRebirthDialog(pet)}
+                    disabled={account.gold < 500000000}
+                  >
+                    <ArrowLeftRight className="w-3 h-3 mr-1" />
+                    Rebirth
+                  </Button>
+                )}
+                {account.equippedPetId !== pet.id && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 border-yellow-500/50 text-yellow-500"
+                    onClick={() => setMercenaryDialog(pet)}
+                  >
+                    <Swords className="w-3 h-3 mr-1" />
+                    Loan
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
+          {pet.isFainted && !isMercenary && (
             <div className="bg-red-500/20 border border-red-500/30 rounded p-2 text-xs text-red-400 flex items-center justify-between">
               <span>⚠️ Fainted - Cannot use in combat</span>
               <Button
@@ -1229,6 +1335,76 @@ export default function Pets() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setSkinDialog(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!mercenaryDialog} onOpenChange={() => setMercenaryDialog(null)}>
+        <DialogContent className="max-w-md bg-[#1a1a2e] border-blue-500/30">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-blue-400 font-serif">
+              <Swords className="w-5 h-5" />
+              Pet Mercenary Mission: {mercenaryDialog?.name}
+            </DialogTitle>
+            <DialogDescription className="text-blue-100/70">
+              Loan your pet as a mercenary to earn passive gold income. Your pet will be unavailable for combat until the mission ends.
+            </DialogDescription>
+          </DialogHeader>
+          {mercenaryDialog && (
+            <div className="space-y-6 py-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-blue-300">Mission Duration (Hours)</label>
+                <div className="flex items-center gap-4">
+                  <input
+                    type="range"
+                    min="1"
+                    max="24"
+                    step="1"
+                    value={mercenaryDuration}
+                    onChange={(e) => setMercenaryDuration(parseInt(e.target.value))}
+                    className="flex-1 accent-blue-500"
+                  />
+                  <span className="font-mono font-bold text-lg text-blue-400 min-w-[3rem] text-center">
+                    {mercenaryDuration}h
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-blue-200">Estimated Reward:</span>
+                  <span className="font-mono font-bold text-yellow-500 flex items-center gap-1">
+                    <Coins className="w-4 h-4" />
+                    {Math.floor(mercenaryDuration * 100 * (
+                      mercenaryDialog.tier === 'egg' ? 0.1 :
+                      mercenaryDialog.tier === 'baby' ? 0.5 :
+                      mercenaryDialog.tier === 'teen' ? 1 :
+                      mercenaryDialog.tier === 'adult' ? 2 :
+                      mercenaryDialog.tier === 'legend' ? 5 : 15
+                    ) * (1 + ((mercenaryDialog.stats as any).Str + (mercenaryDialog.stats as any).Spd + (mercenaryDialog.stats as any).Luck + (mercenaryDialog.stats as any).ElementalPower) / 100)).toLocaleString()} Gold
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-xs text-blue-100/50">
+                  <span>Mission End:</span>
+                  <span>{new Date(Date.now() + mercenaryDuration * 60 * 60 * 1000).toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div className="text-xs text-blue-200/60 flex items-start gap-2 italic">
+                <Sparkles className="w-3 h-3 mt-0.5 shrink-0" />
+                <span>Income scales with pet tier and stats. Mythic pets earn significantly more!</span>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="ghost" onClick={() => setMercenaryDialog(null)} className="text-blue-100/70 hover:text-blue-100">Cancel</Button>
+            <Button 
+              className="bg-blue-600 hover:bg-blue-700 text-white" 
+              onClick={handleDeployMercenary}
+              disabled={isDeployingMercenary}
+            >
+              {isDeployingMercenary ? "Deploying..." : "Start Mission"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

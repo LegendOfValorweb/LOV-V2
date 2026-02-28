@@ -105,6 +105,8 @@ interface MyBRStatus {
   battleStatus: string;
   isRegistered: boolean;
   isParticipant: boolean;
+  currentTurn?: number;
+  safeZoneRadius?: number;
   myData: {
     hp: number;
     maxHp: number;
@@ -563,6 +565,24 @@ export default function HellZone() {
                               <Skull className="w-4 h-4 text-purple-400" />
                               <span>Kills: {myBRStatus.myData.kills}</span>
                             </div>
+                            {myBRStatus.safeZoneRadius !== undefined && (
+                              <div className="mt-4 pt-4 border-t border-purple-500/30 space-y-2">
+                                <div className="flex items-center justify-between text-xs text-purple-200/70">
+                                  <span className="flex items-center gap-1">
+                                    <AlertTriangle className="w-3 h-3 text-orange-500" />
+                                    The Collapse
+                                  </span>
+                                  <span>Turn {myBRStatus.currentTurn}</span>
+                                </div>
+                                <Progress 
+                                  value={myBRStatus.safeZoneRadius} 
+                                  className="h-2 bg-purple-900"
+                                />
+                                <p className="text-[10px] text-center text-red-400 animate-pulse">
+                                  Safe Zone: {myBRStatus.safeZoneRadius}% - Avoid the edges!
+                                </p>
+                              </div>
+                            )}
                           </div>
                         )}
 

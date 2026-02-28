@@ -56,6 +56,8 @@ const leaderboardTypes = [
   { id: "guild_dungeon", label: "Guild Dungeon", icon: Castle, color: "text-emerald-500" },
   { id: "guild_wins", label: "Guild Wins", icon: Swords, color: "text-orange-500" },
   { id: "pet_arena", label: "Pet Arena", icon: Sparkles, color: "text-pink-500" },
+  { id: "resource_gathering", label: "Gathering", icon: TrendingUp, color: "text-green-500" },
+  { id: "seasonal", label: "Seasonal", icon: Calendar, color: "text-blue-400" },
   { id: "base_raids", label: "Base Raids", icon: Castle, color: "text-red-600" },
 ];
 
@@ -268,7 +270,7 @@ export default function Leaderboard() {
           </CardHeader>
           <CardContent>
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-6 mb-6">
+              <TabsList className="grid w-full grid-cols-5 md:grid-cols-10 mb-6">
                 {leaderboardTypes.map((type) => (
                   <TabsTrigger 
                     key={type.id} 

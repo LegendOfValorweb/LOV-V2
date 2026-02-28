@@ -143,6 +143,30 @@ interface GuildBattle {
   createdAt: string;
 }
 
+interface GuildQuestContribution {
+  id: string;
+  questId: string;
+  accountId: string;
+  amount: number;
+  updatedAt: string;
+}
+
+interface GuildQuest {
+  id: string;
+  guildId: string | null;
+  name: string;
+  description: string;
+  type: "gather" | "dungeon" | "pvp" | "slay";
+  targetAmount: number;
+  currentAmount: number;
+  rewardUnityCoins: number;
+  rewardGold: number;
+  rewardGuildExp: number;
+  status: "active" | "completed" | "expired";
+  expiresAt: string | null;
+  contributions: GuildQuestContribution[];
+}
+
 export default function GuildPage() {
   const { account, logout } = useGame();
   const [, navigate] = useLocation();
@@ -327,6 +351,32 @@ export default function GuildPage() {
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message || "Failed to distribute", variant: "destructive" });
+    },
+  });
+
+  const { data: guildQuests = [] } = useQuery<GuildQuest[]>({
+    queryKey: ["/api/guilds", guild?.id, "quests"],
+    enabled: !!guild,
+    refetchInterval: 10000,
+  });
+
+  const contributeQuestMutation = useMutation({
+    mutationFn: async (data: { questId: string; amount: number }) => {
+      const res = await apiRequest("POST", `/api/guilds/${guild!.id}/quests/${data.questId}/contribute`, {
+        amount: data.amount,
+      });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/guilds", guild?.id, "quests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts", account?.id] });
+      toast({ 
+        title: data.completed ? "Quest Completed!" : "Contribution added!",
+        description: data.completed ? "Rewards have been distributed to all contributors." : `Progress: ${data.currentAmount}`
+      });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to contribute", variant: "destructive" });
     },
   });
 
@@ -1167,6 +1217,78 @@ export default function GuildPage() {
                         </DialogFooter>
                       </DialogContent>
                     </Dialog>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Unity Group Quests Section */}
+            <Card className="md:col-span-2">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="w-5 h-5 text-blue-500" />
+                  Unity Group Quests
+                </CardTitle>
+                <CardDescription>
+                  Work together with your guild to complete these challenges for shared rewards.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {guildQuests.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-4 col-span-2">No active group quests</p>
+                  ) : (
+                    guildQuests.map((quest) => {
+                      const myContribution = quest.contributions.find(c => c.accountId === account.id)?.amount || 0;
+                      const progress = (quest.currentAmount / quest.targetAmount) * 100;
+                      
+                      return (
+                        <div key={quest.id} className="p-4 rounded-lg border bg-card/50 space-y-3">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h4 className="font-bold text-primary">{quest.name}</h4>
+                              <p className="text-xs text-muted-foreground">{quest.description}</p>
+                            </div>
+                            <Badge variant="outline">{quest.type.toUpperCase()}</Badge>
+                          </div>
+                          
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs">
+                              <span>Progress: {quest.currentAmount} / {quest.targetAmount}</span>
+                              <span>{Math.round(progress)}%</span>
+                            </div>
+                            <Progress value={progress} className="h-2" />
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2 text-center">
+                            <div className="p-1.5 rounded bg-blue-500/10 border border-blue-500/20">
+                              <p className="text-[10px] text-blue-400 uppercase font-bold">Unity</p>
+                              <p className="text-sm font-bold">{quest.rewardUnityCoins}</p>
+                            </div>
+                            <div className="p-1.5 rounded bg-yellow-500/10 border border-yellow-500/20">
+                              <p className="text-[10px] text-yellow-400 uppercase font-bold">Gold</p>
+                              <p className="text-sm font-bold">{quest.rewardGold.toLocaleString()}</p>
+                            </div>
+                            <div className="p-1.5 rounded bg-purple-500/10 border border-purple-500/20">
+                              <p className="text-[10px] text-purple-400 uppercase font-bold">Guild EXP</p>
+                              <p className="text-sm font-bold">{quest.rewardGuildExp}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between pt-2">
+                            <span className="text-xs text-muted-foreground">My Contribution: {myContribution}</span>
+                            <Button 
+                              size="sm" 
+                              variant="secondary"
+                              onClick={() => contributeQuestMutation.mutate({ questId: quest.id, amount: 1 })}
+                              disabled={contributeQuestMutation.isPending}
+                            >
+                              Contribute +1
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               </CardContent>

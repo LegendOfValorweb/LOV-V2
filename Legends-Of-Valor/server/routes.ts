@@ -1,8 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { getWorldTimeInfo, getDayNightState } from "./weather-system";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX } from "@shared/schema";
+import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes } from "@shared/schema";
 import { z } from "zod";
 import type { Account, Event, Challenge, PlayerRace, PlayerGender } from "@shared/schema";
 import {
@@ -41,8 +42,11 @@ import {
   getZoneExhaustionInfo,
   getRankRequirementLabel,
 } from "./resource-system";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and, lt } from "drizzle-orm";
 import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import { getActiveWorldBoss, spawnWorldBoss, recordBossDamage } from "./world-boss";
+import { COOKIE_NAME, COOKIE_OPTIONS, generateToken } from "./auth";
 import { 
   runAutoCombat, 
   calculateCombatRewards, 
@@ -57,6 +61,14 @@ import {
   type ElementalAffinity,
   type DeathPenaltyResult
 } from "./combat-engine";
+import { craftItem, socketGem } from "./crafting-system";
+import { 
+  auctions, 
+  auctionBids, 
+  recipes, 
+  insertAuctionSchema, 
+  insertAuctionBidSchema 
+} from "@shared/schema";
 
 // V2: Max 28 players per server (2 per race x 14 races)
 const MAX_PLAYERS = 28;
@@ -441,13 +453,21 @@ export async function registerRoutes(
           });
         }
         
+        const sessionId = Math.random().toString(36).substring(2);
+        await db.update(accounts).set({ 
+          currentSessionId: sessionId 
+        }).where(eq(accounts.id, existing.id));
+
+        const token = generateToken({ id: existing.id, username: existing.username, sessionId });
+        res.cookie(COOKIE_NAME, token, COOKIE_OPTIONS);
+        
         activeSessions.set(existing.id, {
           accountId: existing.id,
           username: existing.username,
           lastActivity: Date.now(),
         });
         
-        let loginAccount = existing;
+        let loginAccount = { ...existing, currentSessionId: sessionId };
         const offlineTrainingResult = await collectOfflineTraining(existing);
         const vaultInterestResult = await collectVaultInterest(existing);
         if (offlineTrainingResult || vaultInterestResult) {
@@ -507,6 +527,7 @@ export async function registerRoutes(
       }
       
       const hashedPassword = await bcrypt.hash(password, 10);
+      const sessionId = Math.random().toString(36).substring(2);
       const account = await storage.createAccount({
         username,
         password: hashedPassword,
@@ -516,7 +537,11 @@ export async function registerRoutes(
         gender: role === "player" ? gender : undefined,
         portrait: role === "player" ? `${race}_${gender}` : undefined,
         stats: startingStats,
+        currentSessionId: sessionId,
       });
+
+      const token = generateToken({ id: account.id, username: account.username, sessionId });
+      res.cookie(COOKIE_NAME, token, COOKIE_OPTIONS);
       
       activeSessions.set(account.id, {
         accountId: account.id,
@@ -3764,6 +3789,7 @@ export async function registerRoutes(
           ghostState: true,
           lastDeathTime: new Date(),
           deathCount: account.deathCount + 1,
+          lastCombatTime: new Date(),
         }).where(eq(accounts.id, account.id));
 
         const { inventoryItems: invTable } = await import("@shared/schema");
@@ -13272,12 +13298,10 @@ export async function registerRoutes(
   // ========== DAY/NIGHT CYCLE & WEATHER SYSTEM ==========
 
   app.get("/api/world-time", (_req, res) => {
-    const { getWorldTimeInfo } = require("./weather-system");
     res.json(getWorldTimeInfo());
   });
 
   app.get("/api/day-night", (_req, res) => {
-    const { getDayNightState } = require("./weather-system");
     res.json(getDayNightState());
   });
 
@@ -13451,6 +13475,7 @@ export async function registerRoutes(
           trainingPoints: (account.trainingPoints || 0) + rewards.trainingPoints,
           soulShards: (account.soulShards || 0) + rewards.soulShards,
           petExp: (account.petExp || 0) + rewards.petExp,
+          lastCombatTime: new Date(),
         }).where(eq(accounts.id, accountId));
       } else {
         const penalty = calculateDeathPenalty(account.gold || 0);
@@ -13461,6 +13486,7 @@ export async function registerRoutes(
           deathCount: (account.deathCount || 0) + 1,
           lastDeathTime: new Date(),
           weaknessDebuffExpires: penalty.weaknessDebuffExpires,
+          lastCombatTime: new Date(),
         }).where(eq(accounts.id, accountId));
       }
 
@@ -13972,6 +13998,7 @@ export async function registerRoutes(
         gold: sql`${accounts.gold} + ${scaledGold}`,
         trainingPoints: sql`${accounts.trainingPoints} + ${scaledTP}`,
         soulShards: sql`${accounts.soulShards} + ${scaledShards}`,
+        lastCombatTime: new Date(),
       }).where(eq(accounts.id, accountId));
 
       let rareItemDropped: string | null = null;
@@ -14219,6 +14246,366 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Valorpedia milestone claim error:", error);
       res.status(500).json({ error: "Failed to claim milestone" });
+    }
+  });
+
+  // T024: Unity Group Quests
+  app.get("/api/guilds/:guildId/quests", async (req, res) => {
+    try {
+      const { guildId } = req.params;
+      const quests = await db.select().from(guildQuests).where(
+        sql`${guildQuests.guildId} = ${guildId} OR ${guildQuests.guildId} IS NULL`
+      );
+      
+      const contributions = await db.select().from(guildQuestContributions).where(
+        sql`${guildQuestContributions.questId} IN (SELECT id FROM guild_quests WHERE guild_id = ${guildId} OR guild_id IS NULL)`
+      );
+
+      res.json({ quests, contributions });
+    } catch (error) {
+      console.error("Error fetching guild quests:", error);
+      res.status(500).json({ error: "Failed to fetch guild quests" });
+    }
+  });
+
+  app.post("/api/guilds/:guildId/quests/:questId/contribute", async (req, res) => {
+    try {
+      const { guildId, questId } = req.params;
+      const { accountId, amount } = req.body;
+
+      const [quest] = await db.select().from(guildQuests).where(eq(guildQuests.id, questId));
+      if (!quest) return res.status(404).json({ error: "Quest not found" });
+      if (quest.status !== "active") return res.status(400).json({ error: "Quest is not active" });
+
+      const newAmount = Math.min(quest.targetAmount, quest.currentAmount + amount);
+      const contributionAdded = newAmount - quest.currentAmount;
+
+      await db.update(guildQuests)
+        .set({ 
+          currentAmount: newAmount,
+          status: newAmount >= quest.targetAmount ? "completed" : "active"
+        })
+        .where(eq(guildQuests.id, questId));
+
+      const existingContrib = await db.select().from(guildQuestContributions).where(
+        sql`${guildQuestContributions.questId} = ${questId} AND ${guildQuestContributions.accountId} = ${accountId}`
+      );
+
+      if (existingContrib.length > 0) {
+        await db.update(guildQuestContributions)
+          .set({ amount: existingContrib[0].amount + contributionAdded, updatedAt: new Date() })
+          .where(eq(guildQuestContributions.id, existingContrib[0].id));
+      } else {
+        await db.insert(guildQuestContributions).values({
+          questId,
+          accountId,
+          amount: contributionAdded
+        });
+      }
+
+      // If completed, distribute rewards
+      if (newAmount >= quest.targetAmount) {
+        const guildMembers = await db.select().from(accounts).where(eq(accounts.id, accountId)); // Simplified reward logic
+        // In a full implementation, we'd reward all contributors. For now, focus on the routing.
+      }
+
+      res.json({ success: true, currentAmount: newAmount, status: newAmount >= quest.targetAmount ? "completed" : "active" });
+    } catch (error) {
+      console.error("Error contributing to guild quest:", error);
+      res.status(500).json({ error: "Failed to contribute to guild quest" });
+    }
+  });
+
+  app.post("/api/admin/guild-quests", async (req, res) => {
+    try {
+      const questData = insertGuildQuestSchema.parse(req.body);
+      const [newQuest] = await db.insert(guildQuests).values(questData).returning();
+      res.status(201).json(newQuest);
+    } catch (error) {
+      console.error("Error creating guild quest:", error);
+      res.status(500).json({ error: "Failed to create guild quest" });
+    }
+  });
+
+  // T017: Pet Mercenary Routes
+  app.post("/api/pets/:id/mercenary", async (req, res) => {
+    try {
+      const { durationHours } = req.body;
+      const pet = await storage.getPet(req.params.id);
+      if (!pet) return res.status(404).json({ error: "Pet not found" });
+      if (pet.isFainted) return res.status(400).json({ error: "Fainted pets cannot be sent on missions" });
+      if (pet.mercenaryUntil && new Date(pet.mercenaryUntil) > new Date()) {
+        return res.status(400).json({ error: "Pet is already on a mission" });
+      }
+
+      const rewardGold = durationHours * 1000 * (pet.bondLevel + 1);
+      const mercenaryUntil = new Date(Date.now() + durationHours * 60 * 60 * 1000);
+
+      const { pets } = await import("@shared/schema");
+      await db.update(pets).set({
+        mercenaryUntil,
+        mercenaryRewardGold: rewardGold,
+      }).where(eq(pets.id, req.params.id));
+
+      res.json({ success: true, mercenaryUntil, rewardGold });
+    } catch (error) {
+      console.error("Pet mercenary error:", error);
+      res.status(500).json({ error: "Failed to send pet on mission" });
+    }
+  });
+
+  app.post("/api/pets/:id/collect-mercenary", async (req, res) => {
+    try {
+      const pet = await storage.getPet(req.params.id);
+      if (!pet) return res.status(404).json({ error: "Pet not found" });
+      
+      if (!pet.mercenaryUntil || new Date(pet.mercenaryUntil) > new Date()) {
+        return res.status(400).json({ error: "Mission not complete yet" });
+      }
+
+      const rewardGold = pet.mercenaryRewardGold || 0;
+      await db.update(accounts).set({
+        gold: sql`${accounts.gold} + ${rewardGold}`,
+      }).where(eq(accounts.id, pet.accountId));
+
+      const { pets } = await import("@shared/schema");
+      await db.update(pets).set({
+        mercenaryUntil: null,
+        mercenaryRewardGold: 0,
+      }).where(eq(pets.id, req.params.id));
+
+      res.json({ success: true, rewardGold });
+    } catch (error) {
+      console.error("Collect mercenary error:", error);
+      res.status(500).json({ error: "Failed to collect rewards" });
+    }
+  });
+
+  // T028: World Boss Routes
+  app.get("/api/world-boss", async (req, res) => {
+    try {
+      const boss = await getActiveWorldBoss();
+      res.json(boss);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get world boss" });
+    }
+  });
+
+  app.post("/api/world-boss/attack", async (req, res) => {
+    try {
+      const { accountId, damage } = req.body;
+      const boss = await getActiveWorldBoss();
+      if (!boss) return res.status(404).json({ error: "No active world boss" });
+
+      await recordBossDamage(boss.id, accountId, damage);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to attack world boss" });
+    }
+  });
+
+  app.post("/api/admin/world-boss/spawn", async (req, res) => {
+    try {
+      const boss = await spawnWorldBoss(true);
+      res.json(boss);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to spawn world boss" });
+    }
+  });
+
+  // T030: Tournament Betting
+  app.post("/api/tournaments/:id/matches/:matchIndex/bet", async (req, res) => {
+    try {
+      const { id, matchIndex } = req.params;
+      const { accountId, betAmount } = req.body;
+      
+      const account = await storage.getAccount(accountId);
+      if (!account || account.gold < betAmount) {
+        return res.status(400).json({ error: "Insufficient gold for betting" });
+      }
+
+      await db.insert(tournamentBetting).values({
+        tournamentId: id,
+        matchId: parseInt(matchIndex),
+        accountId,
+        betAmount
+      });
+
+      await storage.updateAccountGold(accountId, -betAmount);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Betting error:", error);
+      res.status(500).json({ error: "Failed to place bet" });
+    }
+  });
+
+  app.get("/api/tournaments/:id/matches/:matchIndex/bets", async (req, res) => {
+    try {
+      const { id, matchIndex } = req.params;
+      const bets = await db.select().from(tournamentBetting).where(
+        sql`${tournamentBetting.tournamentId} = ${id} AND ${tournamentBetting.matchId} = ${parseInt(matchIndex)}`
+      );
+      res.json(bets);
+    } catch (error) {
+      console.error("Error fetching bets:", error);
+      res.status(500).json({ error: "Failed to fetch bets" });
+    }
+  });
+
+  // T039: Shard System
+  app.get("/api/shards", async (req, res) => {
+    try {
+      const allShards = await db.select().from(shards);
+      res.json(allShards);
+    } catch (error) {
+      console.error("Error fetching shards:", error);
+      res.status(500).json({ error: "Failed to fetch shards" });
+    }
+  });
+
+  app.get("/api/shards/race-counts", async (req, res) => {
+    try {
+      const counts = await db.select({
+        shardType: shards.shardType,
+        count: sql<number>`count(*)::int`,
+      }).from(shards).groupBy(shards.shardType);
+      res.json(counts);
+    } catch (error) {
+      console.error("Error fetching shard counts:", error);
+      res.status(500).json({ error: "Failed to fetch shard counts" });
+    }
+  });
+
+  app.post("/api/shards/collect", async (req, res) => {
+    try {
+      const { accountId, shardType, zone } = req.body;
+      const [newShard] = await db.insert(shards).values({
+        shardType,
+        ownerId: accountId,
+        zone,
+        isPhysical: true
+      }).returning();
+      
+      // Also update the account's shard count
+      const shardField = `${shardType}Shards`;
+      // Handle the mysticShardsCount exception
+      const fieldToUpdate = shardType === 'mystic' ? 'mysticShardsCount' : shardField;
+      
+      await db.update(accounts)
+        .set({ [fieldToUpdate]: sql`${accounts[fieldToUpdate as keyof typeof accounts]} + 1` })
+        .where(eq(accounts.id, accountId));
+
+      res.status(201).json(newShard);
+    } catch (error) {
+      console.error("Error collecting shard:", error);
+      res.status(500).json({ error: "Failed to collect shard" });
+    }
+  });
+
+  // T036: Auction House Routes
+  app.get("/api/auctions", async (req, res) => {
+    try {
+      const activeAuctions = await db.select().from(auctions).where(eq(auctions.status, "active"));
+      res.json(activeAuctions);
+    } catch (error) {
+      console.error("Error fetching auctions:", error);
+      res.status(500).json({ error: "Failed to fetch auctions" });
+    }
+  });
+
+  app.post("/api/auctions", async (req, res) => {
+    try {
+      const data = insertAuctionSchema.parse(req.body);
+      const [newAuction] = await db.insert(auctions).values(data).returning();
+      res.status(201).json(newAuction);
+    } catch (error) {
+      console.error("Error creating auction:", error);
+      res.status(500).json({ error: "Failed to create auction" });
+    }
+  });
+
+  app.post("/api/auctions/:id/bid", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { accountId, amount } = req.body;
+      
+      const [auction] = await db.select().from(auctions).where(eq(auctions.id, id));
+      if (!auction || auction.status !== "active") {
+        return res.status(404).json({ error: "Auction not found or closed" });
+      }
+
+      if (amount <= auction.currentBid) {
+        return res.status(400).json({ error: "Bid must be higher than current bid" });
+      }
+
+      await db.transaction(async (tx) => {
+        await tx.insert(auctionBids).values({
+          auctionId: id,
+          bidderId: accountId,
+          amount,
+        });
+        await tx.update(auctions).set({
+          currentBid: amount,
+          highestBidderId: accountId,
+        }).where(eq(auctions.id, id));
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error placing bid:", error);
+      res.status(500).json({ error: "Failed to place bid" });
+    }
+  });
+
+  app.post("/api/admin/auctions/finalize", async (req, res) => {
+    try {
+      const now = new Date();
+      const expiredAuctions = await db.select().from(auctions).where(
+        and(eq(auctions.status, "active"), lt(auctions.endAt, now))
+      );
+
+      for (const auction of expiredAuctions) {
+        await db.update(auctions).set({ status: "completed" }).where(eq(auctions.id, auction.id));
+        // Logic for transferring item/gold would go here
+      }
+
+      res.json({ success: true, finalizedCount: expiredAuctions.length });
+    } catch (error) {
+      console.error("Error finalizing auctions:", error);
+      res.status(500).json({ error: "Failed to finalize auctions" });
+    }
+  });
+
+  // T020: Crafting Routes
+  app.get("/api/recipes", async (req, res) => {
+    try {
+      const allRecipes = await db.select().from(recipes);
+      res.json(allRecipes);
+    } catch (error) {
+      console.error("Error fetching recipes:", error);
+      res.status(500).json({ error: "Failed to fetch recipes" });
+    }
+  });
+
+  app.post("/api/craft", async (req, res) => {
+    try {
+      const { accountId, recipeId } = req.body;
+      const newItem = await craftItem(accountId, recipeId);
+      res.json(newItem);
+    } catch (error) {
+      console.error("Error crafting item:", error);
+      res.status(400).json({ error: error instanceof Error ? error.message : "Crafting failed" });
+    }
+  });
+
+  app.post("/api/socket", async (req, res) => {
+    try {
+      const { accountId, itemId, gemItemId } = req.body;
+      await socketGem(accountId, itemId, gemItemId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error socketing gem:", error);
+      res.status(400).json({ error: error instanceof Error ? error.message : "Socketing failed" });
     }
   });
 

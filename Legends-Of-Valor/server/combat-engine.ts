@@ -1,3 +1,6 @@
+import { db } from "./db";
+import { accounts } from "@shared/schema";
+import { eq } from "drizzle-orm";
 import { raceModifiers, playerRanks, type PlayerRank, type PlayerRace } from "../shared/schema";
 import { calculateElementModifier, checkResonance, ELEMENT_MODIFIERS, type ResonanceResult } from "./elemental-resonance";
 
@@ -780,11 +783,19 @@ export function processAction(
   };
 }
 
-export function runAutoCombat(
+export async function runAutoCombat(
   player: Combatant,
   npc: Combatant,
   maxRounds: number = 20
-): CombatResult {
+): Promise<CombatResult> {
+  // Update last combat time for anti-combat logging
+  if (player.isPlayer) {
+    await db.update(accounts).set({ lastCombatTime: new Date() }).where(eq(accounts.id, player.id)).execute();
+  }
+  if (npc.isPlayer) {
+    await db.update(accounts).set({ lastCombatTime: new Date() }).where(eq(accounts.id, npc.id)).execute();
+  }
+
   const playerHP = calculateMaxHP(player.stats, player.level, player.race, player.rank);
   const npcHP = calculateMaxHP(npc.stats, npc.level, npc.race, npc.rank);
 

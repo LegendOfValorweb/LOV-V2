@@ -328,6 +328,8 @@ export const accounts = pgTable("accounts", {
   energy: integer("energy").notNull().default(50),
   maxEnergy: integer("max_energy").notNull().default(50),
   lastEnergyUpdate: timestamp("last_energy_update").defaultNow(),
+  currentSessionId: text("current_session_id"),
+  lastCombatTime: timestamp("last_combat_time"),
   heritageCount: integer("heritage_count").notNull().default(0),
   heritageBonusPercent: integer("heritage_bonus_percent").notNull().default(0),
   dailyFishCaught: integer("daily_fish_caught").notNull().default(0),
@@ -337,7 +339,172 @@ export const accounts = pgTable("accounts", {
   equippedRaceActive: text("equipped_race_active"),
   equippedRacePassive: text("equipped_race_passive"),
   customSkillNames: jsonb("custom_skill_names").notNull().default({}).$type<Record<string, string>>(),
+  mercenarySlots: integer("mercenary_slots").notNull().default(1),
+  unityCoins: bigint("unity_coins", { mode: "number" }).notNull().default(0),
+  // T039: Shard System - per-race tracking for Convergence War
+  humanShards: integer("human_shards").notNull().default(0),
+  elfShards: integer("elf_shards").notNull().default(0),
+  dwarfShards: integer("dwarf_shards").notNull().default(0),
+  orcShards: integer("orc_shards").notNull().default(0),
+  beastfolkShards: integer("beastfolk_shards").notNull().default(0),
+  mysticShardsCount: integer("mystic_shards_count").notNull().default(0), // Renamed from mysticShards to avoid collision
+  faeShards: integer("fae_shards").notNull().default(0),
+  elementalShards: integer("elemental_shards").notNull().default(0),
+  undeadShards: integer("undead_shards").notNull().default(0),
+  demonShards: integer("demon_shards").notNull().default(0),
+  draconicShards: integer("draconic_shards").notNull().default(0),
+  celestialShards: integer("celestial_shards").notNull().default(0),
+  aquaticShards: integer("aquatic_shards").notNull().default(0),
+  titanShards: integer("titan_shards").notNull().default(0),
+  unlockedRecipes: text("unlocked_recipes").array().default(sql`ARRAY[]::text[]`),
 });
+
+export const recipes = pgTable("recipes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  resultItemId: text("result_item_id").notNull(),
+  tier: text("tier").notNull().$type<ItemTier>(),
+  requiredRank: text("required_rank").notNull().$type<PlayerRank>(),
+  ingredients: jsonb("ingredients").notNull().$type<{itemId: string; quantity: number}[]>(),
+  goldCost: integer("gold_cost").notNull().default(0),
+  description: text("description"),
+});
+
+export const shardTypes = ["human", "elf", "dwarf", "orc", "beastfolk", "mystic", "fae", "elemental", "undead", "demon", "draconic", "celestial", "aquatic", "titan"] as const;
+export type ShardType = typeof shardTypes[number];
+
+export const shards = pgTable("shards", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  shardType: text("shard_type").notNull().$type<ShardType>(),
+  ownerId: varchar("owner_id").references(() => accounts.id), // null if in guild storage
+  guildId: varchar("guild_id").references(() => guilds.id), // null if in player inventory
+  isPhysical: boolean("is_physical").notNull().default(true),
+  collectedAt: timestamp("collected_at").notNull().defaultNow(),
+  zone: text("zone").notNull(),
+});
+
+export const shardsRelations = relations(shards, ({ one }) => ({
+  owner: one(accounts, {
+    fields: [shards.ownerId],
+    references: [accounts.id],
+  }),
+  guild: one(guilds, {
+    fields: [shards.guildId],
+    references: [guilds.id],
+  }),
+}));
+
+export const insertShardSchema = createInsertSchema(shards).omit({ id: true, collectedAt: true });
+export type Shard = typeof shards.$inferSelect;
+
+
+export const guilds = pgTable("guilds", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  masterId: varchar("master_id").notNull().references(() => accounts.id),
+  bank: jsonb("bank").notNull().default({ gold: 0, rubies: 0, soulShards: 0, focusedShards: 0, runes: 0, trainingPoints: 0 }).$type<GuildBank>(),
+  dungeonFloor: integer("dungeon_floor").notNull().default(1),
+  dungeonLevel: integer("dungeon_level").notNull().default(1),
+  unityCoins: bigint("unity_coins", { mode: "number" }).notNull().default(0),
+  dungeonsCompleted: integer("dungeons_completed").notNull().default(0),
+  guildBuffs: jsonb("guild_buffs").notNull().default([]).$type<GuildBuff[]>(),
+  wins: integer("wins").notNull().default(0),
+  level: integer("level").notNull().default(1),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  experience: bigint("experience", { mode: "number" }).notNull().default(0),
+});
+
+export const guildQuests = pgTable("guild_quests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  guildId: varchar("guild_id").references(() => guilds.id, { onDelete: "cascade" }), // null for global templates or admin created
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  type: text("type").notNull().$type<"gather" | "dungeon" | "pvp" | "slay">(),
+  targetAmount: integer("target_amount").notNull(),
+  currentAmount: integer("current_amount").notNull().default(0),
+  rewardUnityCoins: integer("reward_unity_coins").notNull().default(0),
+  rewardGold: integer("reward_gold").notNull().default(0),
+  rewardGuildExp: integer("reward_guild_exp").notNull().default(0),
+  status: text("status").notNull().default("active").$type<"active" | "completed" | "expired">(),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const guildQuestContributions = pgTable("guild_quest_contributions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  questId: varchar("quest_id").notNull().references(() => guildQuests.id, { onDelete: "cascade" }),
+  accountId: varchar("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
+  amount: integer("amount").notNull().default(0),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const guildQuestsRelations = relations(guildQuests, ({ one, many }) => ({
+  guild: one(guilds, {
+    fields: [guildQuests.guildId],
+    references: [guilds.id],
+  }),
+  contributions: many(guildQuestContributions),
+}));
+
+export const guildQuestContributionsRelations = relations(guildQuestContributions, ({ one }) => ({
+  quest: one(guildQuests, {
+    fields: [guildQuestContributions.questId],
+    references: [guildQuests.id],
+  }),
+  account: one(accounts, {
+    fields: [guildQuestContributions.accountId],
+    references: [accounts.id],
+  }),
+}));
+
+export const insertGuildQuestSchema = createInsertSchema(guildQuests).omit({ id: true, createdAt: true });
+export type GuildQuest = typeof guildQuests.$inferSelect;
+export const insertGuildQuestContributionSchema = createInsertSchema(guildQuestContributions).omit({ id: true, updatedAt: true });
+export type GuildQuestContribution = typeof guildQuestContributions.$inferSelect;
+
+export const worldBosses = pgTable("world_bosses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  type: text("type").notNull(),
+  rank: text("rank").notNull().$type<PlayerRank>(),
+  hp: bigint("hp", { mode: "number" }).notNull(),
+  maxHp: bigint("max_hp", { mode: "number" }).notNull(),
+  stats: jsonb("stats").notNull().$type<PlayerStats>(),
+  elements: text("elements").array().notNull().default(sql`ARRAY[]::text[]`),
+  status: text("status").notNull().default("active"),
+  spawnedAt: timestamp("spawned_at").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
+  defeatedAt: timestamp("defeated_at"),
+  location: text("location").notNull().default("World"),
+});
+
+export const worldBossDamage = pgTable("world_boss_damage", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bossId: varchar("boss_id").notNull().references(() => worldBosses.id, { onDelete: "cascade" }),
+  accountId: varchar("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
+  damage: bigint("damage", { mode: "number" }).notNull().default(0),
+  lastHitAt: timestamp("last_hit_at").notNull().defaultNow(),
+});
+
+export const worldBossesRelations = relations(worldBosses, ({ many }) => ({
+  damageContributors: many(worldBossDamage),
+}));
+
+export const worldBossDamageRelations = relations(worldBossDamage, ({ one }) => ({
+  boss: one(worldBosses, {
+    fields: [worldBossDamage.bossId],
+    references: [worldBosses.id],
+  }),
+  account: one(accounts, {
+    fields: [worldBossDamage.accountId],
+    references: [accounts.id],
+  }),
+}));
+
+export const insertWorldBossSchema = createInsertSchema(worldBosses).omit({ id: true, spawnedAt: true });
+export type WorldBoss = typeof worldBosses.$inferSelect;
+export const insertWorldBossDamageSchema = createInsertSchema(worldBossDamage).omit({ id: true, lastHitAt: true });
+export type WorldBossDamage = typeof worldBossDamage.$inferSelect;
 
 export const inventoryItems = pgTable("inventory_items", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -347,10 +514,37 @@ export const inventoryItems = pgTable("inventory_items", {
   durability: integer("durability").notNull().default(100),
   maxDurability: integer("max_durability").notNull().default(100),
   purchasedAt: timestamp("purchased_at").notNull().defaultNow(),
+  sockets: integer("sockets").notNull().default(0),
+  gems: jsonb("gems").notNull().default([]).$type<{id: string; stats: Partial<Stats>}[]>(),
 });
+
+export const tournamentBetting = pgTable("tournament_betting", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tournamentId: text("tournament_id").notNull(),
+  matchId: integer("match_id").notNull(), // Index in the brackets match array
+  accountId: varchar("account_id").notNull().references(() => accounts.id),
+  betAmount: integer("bet_amount").notNull(),
+  predictedWinner: text("predicted_winner").notNull(), // Username or ID of the player predicted to win
+  odds: text("odds").notNull(), // Store as string to handle precision if needed, e.g. "1.5"
+  status: text("status").notNull().default("pending").$type<"pending" | "won" | "lost" | "cancelled">(),
+  payout: integer("payout").default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const tournamentBettingRelations = relations(tournamentBetting, ({ one }) => ({
+  account: one(accounts, {
+    fields: [tournamentBetting.accountId],
+    references: [accounts.id],
+  }),
+}));
+
+export const insertTournamentBettingSchema = createInsertSchema(tournamentBetting).omit({ id: true, createdAt: true });
+export type InsertTournamentBetting = z.infer<typeof insertTournamentBettingSchema>;
+export type TournamentBetting = typeof tournamentBetting.$inferSelect;
 
 export const accountsRelations = relations(accounts, ({ many }) => ({
   inventory: many(inventoryItems),
+  bets: many(tournamentBetting),
 }));
 
 export const inventoryItemsRelations = relations(inventoryItems, ({ one }) => ({
@@ -462,6 +656,8 @@ export const pets = pgTable("pets", {
   tempElement: text("temp_element"),
   tempElementExpires: timestamp("temp_element_expires"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  mercenaryUntil: timestamp("mercenary_until"),
+  mercenaryRewardGold: integer("mercenary_reward_gold").default(0),
 });
 
 export const petsRelations = relations(pets, ({ one }) => ({
@@ -887,21 +1083,6 @@ export const GUILD_PERKS: Record<number, { name: string; description: string }> 
   10: { name: "Dungeon Level 4 & 5 Unlock", description: "Access the Draconic Spire and Convergence Nexus." },
 };
 
-export const guilds = pgTable("guilds", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull().unique(),
-  masterId: varchar("master_id").notNull().references(() => accounts.id),
-  bank: jsonb("bank").notNull().default({ gold: 0, rubies: 0, soulShards: 0, focusedShards: 0, runes: 0, trainingPoints: 0 }).$type<GuildBank>(),
-  dungeonFloor: integer("dungeon_floor").notNull().default(1),
-  dungeonLevel: integer("dungeon_level").notNull().default(1),
-  unityCoins: bigint("unity_coins", { mode: "number" }).notNull().default(0),
-  dungeonsCompleted: integer("dungeons_completed").notNull().default(0),
-  guildBuffs: jsonb("guild_buffs").notNull().default([]).$type<GuildBuff[]>(),
-  wins: integer("wins").notNull().default(0),
-  level: integer("level").notNull().default(1),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
-
 export const guildChat = pgTable("guild_chat", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   guildId: varchar("guild_id").notNull().references(() => guilds.id, { onDelete: "cascade" }),
@@ -1136,6 +1317,71 @@ export const guildBattlesRelations = relations(guildBattles, ({ one }) => ({
 export const insertGuildBattleSchema = createInsertSchema(guildBattles).omit({ id: true, createdAt: true });
 export type InsertGuildBattle = z.infer<typeof insertGuildBattleSchema>;
 export type GuildBattle = typeof guildBattles.$inferSelect;
+
+// ==================== AUCTION HOUSE EXPANSION ====================
+export const auctionTypes = ["gold", "vip"] as const;
+export type AuctionType = typeof auctionTypes[number];
+
+export const auctionItemTypes = ["item", "skill"] as const;
+export type AuctionItemType = typeof auctionItemTypes[number];
+
+export const auctions = pgTable("auctions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sellerId: varchar("seller_id").references(() => accounts.id), // null if admin/system
+  type: text("type").notNull().$type<AuctionType>().default("gold"),
+  itemType: text("item_type").notNull().$type<AuctionItemType>().default("item"),
+  itemId: text("item_id").notNull(), // refId for inventory item or skill ID
+  startingPrice: integer("starting_price").notNull(),
+  minIncrement: integer("min_increment").notNull().default(1), // percentage (1-5%)
+  currentBid: integer("current_bid").notNull().default(0),
+  highestBidderId: varchar("highest_bidder_id").references(() => accounts.id),
+  status: text("status").notNull().default("active"), // active, completed, cancelled
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  endAt: timestamp("end_at").notNull(),
+});
+
+export const auctionBids = pgTable("auction_bids", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  auctionId: varchar("auction_id").notNull().references(() => auctions.id, { onDelete: "cascade" }),
+  bidderId: varchar("bidder_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
+  amount: integer("amount").notNull(),
+  isAutoBid: boolean("is_auto_bid").notNull().default(false),
+  maxAutoBid: integer("max_auto_bid"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const auctionsRelations = relations(auctions, ({ one, many }) => ({
+  seller: one(accounts, {
+    fields: [auctions.sellerId],
+    references: [accounts.id],
+    relationName: "seller",
+  }),
+  highestBidder: one(accounts, {
+    fields: [auctions.highestBidderId],
+    references: [accounts.id],
+    relationName: "highestBidder",
+  }),
+  bids: many(auctionBids),
+}));
+
+export const auctionBidsRelations = relations(auctionBids, ({ one }) => ({
+  auction: one(auctions, {
+    fields: [auctionBids.auctionId],
+    references: [auctions.id],
+  }),
+  bidder: one(accounts, {
+    fields: [auctionBids.bidderId],
+    references: [accounts.id],
+  }),
+}));
+
+export const insertAuctionSchema = createInsertSchema(auctions).omit({ id: true, createdAt: true });
+export type InsertAuction = z.infer<typeof insertAuctionSchema>;
+export type Auction = typeof auctions.$inferSelect;
+
+export const insertAuctionBidSchema = createInsertSchema(auctionBids).omit({ id: true, createdAt: true });
+export type InsertAuctionBid = z.infer<typeof insertAuctionBidSchema>;
+export type AuctionBid = typeof auctionBids.$inferSelect;
 
 // ==================== PET PVP BATTLES (3v3) ====================
 export const petBattleStatuses = ["pending", "accepted", "in_progress", "completed", "declined"] as const;

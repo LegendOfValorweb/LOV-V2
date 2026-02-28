@@ -28,6 +28,7 @@ import Base from "@/pages/base";
 import PetArena from "@/pages/pet-arena";
 import Achievements from "@/pages/achievements";
 import ValorShop from "@/pages/valor-shop";
+import AuctionHouse from "@/pages/auction-house";
 import CosmeticsShop from "@/pages/cosmetics-shop";
 import Tournaments from "@/pages/tournaments";
 import PetShop from "@/pages/pet-shop";
@@ -64,6 +65,7 @@ function Router() {
       <Route path="/pet-arena" component={PetArena} />
       <Route path="/achievements" component={Achievements} />
       <Route path="/valor-shop" component={ValorShop} />
+      <Route path="/auction-house" component={AuctionHouse} />
       <Route path="/cosmetics-shop" component={CosmeticsShop} />
       <Route path="/tournaments" component={Tournaments} />
       <Route path="/pet-shop" component={PetShop} />
