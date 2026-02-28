@@ -593,23 +593,6 @@ export default function WorldMap() {
     navigate("/");
   };
 
-  const getPortraitPath = () => {
-    if ((account as any).equippedCharacterSkin && (account as any).equippedCharacterSkin !== 'default') {
-      return `/skins/character/${(account as any).equippedCharacterSkin}.png`;
-    }
-    if (account.portrait && account.portrait.includes('/')) {
-      return account.portrait;
-    }
-    if (account.portrait) {
-      return `/portraits/${account.portrait}.png`;
-    }
-    if (account.race && account.gender) {
-      return `/portraits/${account.race}_${account.gender}.png`;
-    }
-    return '/portraits/human_male.png';
-  };
-  const portraitPath = getPortraitPath();
-
   const currentZone = zones.find(z => z.id === playerPosition);
   const playerCoords = currentZone?.coordinates || { x: 50, y: 50 };
 
@@ -778,63 +761,8 @@ export default function WorldMap() {
         )}
       </div>
 
-      <div className="absolute top-3 left-3 z-20 flex items-center gap-2">
-        <div className="rpg-panel flex items-center gap-3 px-3 py-2">
-          <img 
-            src={portraitPath}
-            alt={account.username}
-            className="w-10 h-10 rounded border-2 border-amber-600/60 object-cover"
-            onError={(e) => { (e.target as HTMLImageElement).src = "/portraits/human_male.png"; }}
-          />
-          <div className="min-w-0">
-            <p className="font-serif font-bold text-sm text-amber-200 truncate">{account.username}</p>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="capitalize">{account.race}</span>
-              <Badge className="text-[9px] px-1 py-0 h-4">{account.rank || "Novice"}</Badge>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="absolute top-3 right-3 z-20 flex items-center gap-2">
-        <div className="rpg-panel flex items-center gap-3 px-3 py-2">
-          <div className="flex items-center gap-1.5">
-            <Coins className="w-4 h-4 text-yellow-400" />
-            <span className="text-sm font-mono text-yellow-300">{(account.gold || 0).toLocaleString()}</span>
-          </div>
-          <div className="w-px h-5 bg-amber-700/40" />
-          <div className="flex items-center gap-1.5">
-            <Heart className="w-4 h-4 text-red-400" />
-            <span className="text-sm font-mono text-red-300">100%</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="absolute bottom-3 left-3 z-20 flex gap-1.5">
-        <button
-          onClick={() => navigate("/inventory")}
-          className="rpg-button-secondary px-2.5 py-2 rounded text-xs flex items-center gap-1.5"
-        >
-          <Package className="w-4 h-4" />
-          <span className="hidden sm:inline">Inventory</span>
-        </button>
-        <button
-          onClick={() => navigate("/ai-chat")}
-          className="rpg-button-secondary px-2.5 py-2 rounded text-xs flex items-center gap-1.5"
-        >
-          <MessageCircle className="w-4 h-4" />
-          <span className="hidden sm:inline">AI Guide</span>
-        </button>
-        <button
-          onClick={handleLogout}
-          className="rpg-button-secondary px-2.5 py-2 rounded text-xs flex items-center gap-1.5"
-        >
-          <LogOut className="w-4 h-4" />
-        </button>
-      </div>
-
       {selectedZone && (
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 w-full max-w-md px-4">
+        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20 w-full max-w-md px-4">
           <div className="rpg-panel-ornate p-4 space-y-3">
             <div className="flex items-center gap-3">
               <div className={`p-2 rounded-lg bg-black/40 ${difficultyColors[selectedZone.difficulty]}`}>

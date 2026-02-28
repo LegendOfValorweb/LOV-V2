@@ -122,71 +122,66 @@ export default function AudioPlayer() {
   };
 
   return (
-    <div className="absolute bottom-4 left-4 z-50 flex flex-col items-start gap-1 pointer-events-auto">
-      <div className="bg-card/40 backdrop-blur-sm p-2 rounded-full border border-border/50 shadow-lg flex items-center gap-2 opacity-70 hover:opacity-100 transition-opacity">
+    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-0.5 pointer-events-auto">
+      <div className="bg-card/40 backdrop-blur-sm px-2 py-1.5 rounded-full border border-border/50 shadow-lg flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity">
         <audio
           ref={audioRef}
           src={MUSIC_TRACKS[currentTrack].src}
           preload="auto"
         />
+        <Music className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+        <span className={`text-[9px] max-w-[120px] truncate ${hasError ? 'text-red-400' : 'text-muted-foreground'}`}>
+          {hasError ? `${MUSIC_TRACKS[currentTrack].name} (Error)` :
+           isLoading ? `${MUSIC_TRACKS[currentTrack].name} (Loading...)` :
+           MUSIC_TRACKS[currentTrack].name}
+        </span>
+        <div className="w-px h-3 bg-border/50 mx-0.5" />
         <Button
           variant="ghost"
           size="icon"
-          className={`h-8 w-8 rounded-full ${hasError ? 'text-red-500' : ''}`}
+          className={`h-6 w-6 rounded-full ${hasError ? 'text-red-500' : ''}`}
           onClick={togglePlay}
           disabled={isLoading}
           title={hasError ? "Error loading track" : isPlaying ? "Pause Music" : "Play Music"}
         >
           {isLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="h-3 w-3 animate-spin" />
           ) : isPlaying ? (
-            <Pause className="h-4 w-4" />
+            <Pause className="h-3 w-3" />
           ) : (
-            <Play className="h-4 w-4 ml-0.5" />
+            <Play className="h-3 w-3 ml-0.5" />
           )}
         </Button>
-        
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 rounded-full"
+          className="h-6 w-6 rounded-full"
           onClick={nextTrack}
           title="Next Track"
         >
-          <SkipForward className="h-4 w-4" />
+          <SkipForward className="h-3 w-3" />
         </Button>
-        
-        <div className="flex items-center gap-2 px-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 rounded-full"
-            onClick={toggleMute}
-            title={isMuted ? "Unmute" : "Mute"}
-          >
-            {isMuted || volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-          </Button>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            value={isMuted ? 0 : volume * 100}
-            onChange={(e) => {
-              const val = parseInt(e.target.value);
-              setVolume(val / 100);
-              if (val > 0) setIsMuted(false);
-            }}
-            className="w-20 h-1.5 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
-          />
-        </div>
-      </div>
-      <div className="flex items-center gap-2 ml-2">
-        <Music className="h-3 w-3 text-muted-foreground" />
-        <span className={`text-[10px] ${hasError ? 'text-red-400' : 'text-muted-foreground'}`}>
-          {hasError ? `${MUSIC_TRACKS[currentTrack].name} (Error)` : 
-           isLoading ? `${MUSIC_TRACKS[currentTrack].name} (Loading...)` : 
-           MUSIC_TRACKS[currentTrack].name}
-        </span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 rounded-full"
+          onClick={toggleMute}
+          title={isMuted ? "Unmute" : "Mute"}
+        >
+          {isMuted || volume === 0 ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
+        </Button>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          value={isMuted ? 0 : volume * 100}
+          onChange={(e) => {
+            const val = parseInt(e.target.value);
+            setVolume(val / 100);
+            if (val > 0) setIsMuted(false);
+          }}
+          className="w-16 h-1 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
+        />
       </div>
     </div>
   );
