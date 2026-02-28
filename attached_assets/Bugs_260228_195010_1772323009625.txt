@@ -1,0 +1,54 @@
+The following zones dont do their intended purposes:
+
+Ancient runes: currently routes to quests tab
+Its supposed to show a page where you play a minigame to hunt for artifacts and win rewards like resources, weapons or spells, it should also have its own unique dungeon 
+
+Quests tab should be a seperate entity
+
+Research lab: currently routes to auction house
+Its supposed to show apage where you can enchant weapons armor or amulets with artifacts, show recipes for crafting weapons and give the ability to craft them, research skills that can be learned by your pet or character of your race
+
+Auction house should be a seperate entity and all bidding 
+
+Crystal Lake- routes correctly however page stuck, buttons not tappable and page not scrollable
+
+Hell Zone: routes battle royale not working, page not scrollable, buttons not tapping
+
+Battle arena: routes incorrectly to leaderboard, should route to challenges tab so players can fight
+
+Pet training grounds routea corrently however page doesnt work, buttons not tappable, page doesnt scroll
+
+Enchanted forest: routes incorrectly to bird shop
+It should show a page where you can fight the dungeon designated to the forest, interact with npcs from elf, dwarve and fairy kingdoms, fight wild pets with a catch option, collect resources from over 50 types of resources buy chopping trees, destroying ores etc that are used for crafting
+
+Bird shop should be a seperate page
+
+Guild hall routes correctly however page doesnt work, cant tap or scroll
+
+Mountain caverns routes correctly however, rewards incorrect for mining, the reward should be the ores not exp and gold example you mine silver ore you recieve silver ore which are also used for crafting, its also missing its dungeon
+
+Create recipes for weapons to be crafted 5 per rank
+
+Tournament doesnt work, please fix
+
+Ruby mine- routes correctly but page not working, untappable and unscrollable
+
+Mystic tower- routes correctly but page not working, unscrollable and untappable
+
+Item shop- weapons only display info afyer tapping please fix
+
+Mysterium emperioum egg store routes correctly but page not working- unscrollable and untappable, all admin to add pets to that store
+
+Home base routes correctly but page not working, unscrollable and untappable
+
+There should be a dungeon in every single zone and a dungeon in captial city that only unlocks at mythical legend
+
+All weapons for all 15 ranks not showing on admin side
+
+Update tutorial and the ai should start the story upon first log in telling players where to go not just read tutorial
+
+Weather overlay not working correctly, weather not changing, nonstop snow and rain with occasional flashes, please fix, weather
+
+Game music should play until turned off upon login
+
+The remaining pages cosmetics and $valor unscrollable and untappable
