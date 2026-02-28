@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { GameProvider } from "@/lib/game-context";
 import AudioPlayer from "@/components/audio-player";
+import FloatingAIButton from "@/components/floating-ai-button";
 import { GameHUD } from "@/components/game-hud";
 import Landing from "@/pages/landing";
 import Shop from "@/pages/shop";
@@ -40,21 +41,6 @@ import { MobileLandscapePrompt } from "@/components/mobile-landscape-prompt";
 import { AppLoadingWrapper } from "@/components/app-loading-wrapper";
 import { GameViewport } from "@/components/game-viewport";
 import { WeatherOverlay } from "@/components/weather-overlay";
-import { TutorialOverlay } from "@/components/tutorial-overlay";
-import { useGame } from "@/lib/game-context";
-import { useState } from "react";
-
-function TutorialGate({ children }: { children: React.ReactNode }) {
-  const { account } = useGame();
-  const [dismissed, setDismissed] = useState(false);
-  const showTutorial = !!account && account.tutorialCompleted === false && !dismissed;
-  return (
-    <>
-      {children}
-      {showTutorial && <TutorialOverlay onComplete={() => setDismissed(true)} />}
-    </>
-  );
-}
 
 function Router() {
   return (
@@ -102,7 +88,9 @@ function App() {
           <GameViewport>
             <AppLoadingWrapper>
               <Toaster />
+              <AudioPlayer />
               <GameHUD />
+              <FloatingAIButton />
               <WeatherOverlay />
               <Router />
             </AppLoadingWrapper>

@@ -129,7 +129,7 @@ export default function Landing() {
 
   if (showRaceSelection && raceData) {
     return (
-      <div className="min-h-screen relative overflow-y-auto overflow-x-hidden bg-background selection:bg-primary/30 touch-pan-y">
+      <div className="min-h-screen relative overflow-y-auto overflow-x-hidden bg-background">
         <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-accent/20 fixed pointer-events-none" />
         
         <div className="relative z-10 w-full min-h-screen flex flex-col">
@@ -298,7 +298,7 @@ export default function Landing() {
   }
 
   return (
-    <div className="min-h-screen relative overflow-y-auto overflow-x-hidden bg-background selection:bg-primary/30">
+    <div className="min-h-screen relative overflow-y-auto overflow-x-hidden bg-background">
       <div
         className="absolute inset-0 fixed pointer-events-none"
         style={{
