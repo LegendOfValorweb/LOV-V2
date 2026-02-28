@@ -69,7 +69,7 @@ export function GameHUD() {
   const [activeBird, setActiveBird] = useState<BirdData | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const isVisible = location !== "/" && !!account;
+  const isVisible = location !== "/" && location !== "/admin" && !!account;
   const accountId = account?.id;
   const accountRole = account?.role;
   const equippedPetId = account?.equippedPetId;

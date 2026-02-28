@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 export default function FloatingAIButton() {
   const [location, navigate] = useLocation();
 
-  if (location === "/" || location === "/ai-chat") {
+  if (location === "/" || location === "/ai-chat" || location === "/admin") {
     return null;
   }
 
