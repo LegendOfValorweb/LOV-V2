@@ -263,6 +263,9 @@ export function GameHUD() {
             <button className="hud-menu-item" onClick={() => navigateTo("/events")}>
               <span>📅</span><span>Events</span>
             </button>
+            <button className="hud-menu-item" onClick={() => navigateTo("/ai-chat")}>
+              <span>🤖</span><span>AI Chat</span>
+            </button>
             {account.role === "admin" && (
               <button className="hud-menu-item" onClick={() => navigateTo("/admin")}>
                 <span>🔧</span><span>Admin</span>

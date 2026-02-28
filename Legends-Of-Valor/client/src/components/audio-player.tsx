@@ -122,7 +122,7 @@ export default function AudioPlayer() {
   };
 
   return (
-    <div className="absolute bottom-4 left-4 z-50 flex flex-col items-start gap-1 pointer-events-auto">
+    <div className="absolute bottom-20 left-4 z-50 flex flex-col items-start gap-1 pointer-events-auto">
       <div className="bg-card/40 backdrop-blur-sm p-2 rounded-full border border-border/50 shadow-lg flex items-center gap-2 opacity-70 hover:opacity-100 transition-opacity">
         <audio
           ref={audioRef}

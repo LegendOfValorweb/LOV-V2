@@ -5,7 +5,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { GameProvider } from "@/lib/game-context";
 import AudioPlayer from "@/components/audio-player";
-import FloatingAIButton from "@/components/floating-ai-button";
 import { GameHUD } from "@/components/game-hud";
 import Landing from "@/pages/landing";
 import Shop from "@/pages/shop";
@@ -90,7 +89,6 @@ function App() {
               <Toaster />
               <AudioPlayer />
               <GameHUD />
-              <FloatingAIButton />
               <WeatherOverlay />
               <Router />
             </AppLoadingWrapper>
