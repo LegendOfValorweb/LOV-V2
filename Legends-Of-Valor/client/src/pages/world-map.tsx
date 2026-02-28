@@ -130,7 +130,7 @@ export default function WorldMap() {
   if (!account) return null;
 
   return (
-    <div className="game-page-scroll world-map-page overflow-hidden bg-black">
+    <div className="game-page world-map-page bg-black overflow-hidden h-full w-full">
       {isTraveling && (
         <div className="fixed inset-0 z-[100] bg-black/80 flex flex-col items-center justify-center">
           <div className="text-center space-y-4">

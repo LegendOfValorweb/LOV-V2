@@ -10,8 +10,8 @@ export function GameViewport({ children }: GameViewportProps) {
   const isLanding = location === "/";
 
   return (
-    <div className="game-viewport">
-      <div className={isLanding ? "w-full h-full relative overflow-y-auto overflow-x-hidden" : "game-content-wrapper"}>
+    <div className="game-viewport bg-black">
+      <div className={isLanding ? "w-full h-full relative overflow-y-auto overflow-x-hidden" : "game-content-wrapper relative w-full h-full"}>
         {children}
       </div>
     </div>
