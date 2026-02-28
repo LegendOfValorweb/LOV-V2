@@ -1,0 +1,87 @@
+🤖 AI INTEGRATED STORY MODE — PLANNING
+1️⃣ Core Goals
+Dynamic Story Generation: AI generates quests, events, and interactions personalized to player stats, Rank, Tower progress, and companions.
+Controlled Freedom: AI must enforce unlocks and main story consistency, preventing access to zones, skills, or items the player hasn’t earned.
+NPC Integration: Every zone has AI-generated NPCs relevant to the story.
+TXT/2D Visual Interface: Player sees a static portrait at bottom-left, interactive entity at bottom-right, with visual placeholders for unknown entities.
+Zone Entry: Clicking a zone triggers a zone screen with a loading placeholder, maintaining immersion.
+2️⃣ AI Story Generation Rules
+a) Player-Aware Story Constraints
+AI can read player state:
+Stats, Pot, Rank, Level, Tower floor, Companion stage
+Inventory, unlocked skills, current quests, zone access
+AI restrictions:
+Cannot give tasks that require skills, pets, or Rank the player doesn’t have
+Cannot send the player to zones they haven’t unlocked
+Pot influence: AI can suggest storylines aligned with player Pot type (e.g., offensive Pot → combat-heavy quests)
+b) Main Story Integration
+Main story acts as guiding framework: Awakening → Fractured Realms → Hell Zone → Convergence War
+AI can generate:
+Subplots
+Personalized NPC missions
+Zone-specific side quests
+Must reference main story events to avoid contradiction
+3️⃣ NPCs in Zones
+a) NPC Generation
+Each zone dynamically spawns NPCs relevant to the AI story
+NPC Types:
+Quest givers
+Traders / resource helpers
+Lore characters
+Event triggers
+b) Interaction Rules
+AI reads player stats and history to determine NPC dialogue and quests
+Dialogue and quests scale with:
+Rank
+Tower floor
+Companion evolution / bond
+Visual representation:
+Assigned portrait if available
+Otherwise: black silhouette
+4️⃣ Zone Interaction Flow
+Player clicks a zone → triggers zone transition
+Loading screen → can show tips, lore snippets, or NPC silhouettes
+Zone view:
+Static background map or scene
+Player character portrait bottom-left
+Interactable entity (NPC, resource, monster) bottom-right
+Textual prompts for action (talk, attack, gather, interact)
+a) Visual Rules
+Player portrait: always bottom-left
+Interacting entity: bottom-right
+Unknown entity: black silhouette / TXT placeholder
+Optional: add border color or glow for rare NPCs or story-critical entities
+5️⃣ AI-Driven Quest / Interaction System
+Quest Generation
+AI uses player state, unlocked zones, and companions to craft quests
+Quest objectives always achievable given current stats, skills, companions
+Rewards scale with difficulty and zone risk
+Dynamic Dialogue
+NPC dialogue generated based on:
+Player history
+AI story path
+Companion / pet presence
+Integration with Gameplay
+AI-generated quests award:
+Stat XP
+Gold / materials
+Companion items or Bond XP
+AI can trigger optional bonus encounters with zone-specific NPCs
+6️⃣ TXT / 2D-Friendly Representation
+Element
+Visual / TXT Representation
+Player
+Static portrait bottom-left
+Entity / NPC
+Portrait bottom-right (if exists) / black silhouette if missing
+Zone
+Static 2D background / icon grid
+Interactions
+Text-based buttons or prompt commands (e.g., “Talk / Attack / Gather”)
+AI Quest Updates
+Inline textual notifications or pop-up messages
+7️⃣ Optional Enhancements
+Zone transition effects: simple fade-in/out for loading screen
+NPC rarity indicators: border glow or icon for story-critical NPCs
+Pot-based story influence: offensive, defensive, or hybrid Pot affects AI mission style
+Dynamic companion mentions: AI can include pets or birds in dialogue or quest objectives

@@ -1,0 +1,4472 @@
+📁 1. REPLIT PROJECT STRUCTURE
+Copy code
+
+/lov-v2
+ ├── server/
+ │    ├── index.js
+ │    ├── db.js
+ │    ├── combat/
+ │    │     ├── turnResolver.js
+ │    │     ├── damageCalc.js
+ │    │     ├── dodgeLogic.js
+ │    │     ├── spellCalc.js
+ │    │     └── petTurn.js
+ │    ├── systems/
+ │    │     ├── rankSystem.js
+ │    │     ├── inventorySystem.js
+ │    │     ├── guildSystem.js
+ │    │     ├── shopSystem.js
+ │    │     ├── craftingSystem.js
+ │    │     ├── dropSystem.js
+ │    │     └── resourceSystem.js
+ │    ├── data/
+ │    │     ├── items.json
+ │    │     ├── tiers.json
+ │    │     ├── elements.json
+ │    │     ├── pets.json
+ │    │     ├── resources.json
+ │    │     └── ranks.json
+ │    └── admin/
+ │          ├── adminRoutes.js
+ │          └── adminController.js
+ │
+ ├── client/
+ │    ├── ui/
+ │    │     ├── battleScreen.txt
+ │    │     ├── capitalCity.txt
+ │    │     ├── zoneScreen.txt
+ │    │     ├── inventory.txt
+ │    │     ├── guildHall.txt
+ │    │     ├── shop.txt
+ │    │     └── adminPanel.txt
+ │    └── state/
+ │          └── playerState.js
+🧬 2. PLAYER CORE FORMULAS
+HP FORMULA
+Copy code
+
+HP = RaceBaseHP + RankBaseHP + (Vitality × 8)
+CRIT
+Copy code
+
+CritChance = Luck ÷ 40   (cap 50%)
+CritDamage = ×3
+Spells CAN crit
+⚔️ 3. COMBAT ENGINE (TURN BASED)
+TURN ORDER
+Copy code
+
+Higher Speed acts first
+Tie → random roll
+ACTIONS
+ATTACK
+Copy code
+
+Damage = Strength
+Apply crit if triggered
+Apply element modifier
+DEFEND
+Copy code
+
+If Defense ≥ EnemyAttack → 0 damage
+Else DamageTaken = EnemyAttack − Defense
+DODGE
+Two checks:
+Copy code
+
+If Speed > EnemyDefense → avoid defense and hit
+If Speed > EnemyAttack → full evade
+Else fail dodge
+SPELL (INT BASED, UNDEFENDABLE)
+Copy code
+
+SpellDamage = Intelligence × SpellMultiplier
+Ignores Defense
+Can crit
+Element applied
+🐾 4. PET SYSTEM (COMBAT + PASSIVE)
+PET SLOTS BY RANK
+Rank
+Active Pets
+Novice–Adept
+1
+Vanguard–Champion
+2
+Warlord–Ascendant
+3
+Mythic–Eternal
+4
+Apex–Mythical Legend
+5
+Pets:
+Have HP bar
+Attack after player turn
+Grant passive stat bonus
+🌌 5. ELEMENT LIST (FULL)
+Base: Fire, Water, Air, Earth, Nature, Light, Dark, Plasma, Space, Time, Aether, Soul
+Mythic: Void, Storm, Metal, Blood, Crystal, Arcane
+Total = 18 elements
+🔁 6. ELEMENT COUNTER MATRIX (CORE RULE)
+Each element has:
+2 Strong vs
+2 Weak vs
+Example core logic (full table stored in elements.json):
+Element
+Strong Against
+Weak Against
+Fire
+Nature, Metal
+Water, Earth
+Water
+Fire, Plasma
+Nature, Storm
+Air
+Earth, Crystal
+Metal, Plasma
+Earth
+Fire, Storm
+Air, Nature
+Nature
+Water, Earth
+Fire, Blood
+Light
+Dark, Void
+Aether, Soul
+Dark
+Light, Soul
+Aether, Plasma
+Plasma
+Air, Dark
+Water, Earth
+Space
+Time, Aether
+Void, Soul
+Time
+Plasma, Storm
+Space, Arcane
+Aether
+Light, Dark
+Void, Blood
+Soul
+Aether, Blood
+Dark, Light
+Void
+Aether, Space
+Light, Nature
+Storm
+Water, Air
+Earth, Time
+Metal
+Crystal, Air
+Fire, Nature
+Blood
+Nature, Soul
+Light, Aether
+Crystal
+Plasma, Void
+Metal, Earth
+Arcane
+Time, Aether
+Void, Soul
+Modifiers:
+Copy code
+
+Strong = ×1.5
+Weak = ×0.5
+Neutral = ×1.0
+🏆 7. RANK STRUCTURE
+LEVELS
+10 levels per rank
+15 ranks
+Max level = 150
+STAT POINTS PER LEVEL
+Copy code
+
++5 stat points per level
+🎒 8. INVENTORY LIMITS BY RANK
+BASE RULE
+Dump = permanent delete (simple confirm)
+Rank
+Inventory Slots
+Novice
+20
+Initiate
+25
+Adept
+30
+Vanguard
+35
+Elite
+40
+Champion
+45
+Warlord
+50
+Paragon
+55
+Ascendant
+60
+Mythic
+70
+Transcendent
+80
+Exalted
+90
+Eternal
+100
+Apex
+115
+Mythical Legend
+130
+EQUIP LIMITS
+Weapon: 1
+Armor: 1
+Amulets: 2
+Consumables equipped: 3
+Spell: 1
+Pets: rank-based
+Resources stored separately (no inventory cap, goes to resource pouch)
+⛏️ 9. RESOURCES (RANK LOCKED)
+Stored in resources.json
+Starter: Iron Ore, Wood, Fiber, Stone
+Mid: Silver Ore, Beast Hide, Sapphire, Amber, Obsidian
+High: Ruby, Emerald, Mythril, Void Fragment, Aether Dust
+Endgame: Soul Shard, Chrono Crystal, Plasma Core
+Total = 15
+⚒️ 10. CRAFTED GEAR RULE
+Crafted gear:
+Strongest in tier
+Not sold in shop
+Requires:
+Resource recipe
+Rank unlock
+Research unlock (for high tiers)
+🧰 11. TIER SYSTEM
+You have:
+Copy code
+
+15 ranks × 5 tiers = 75 tiers
+Each tier contains:
+10 weapons
+10 shields
+10 amulets
+Instead of hardcoding 2250 items, use:
+Copy code
+
+baseItem + tierModifier + randomEffectPool
+Tier naming example pattern:
+Copy code
+
+Novice I → Novice V
+Initiate I → Initiate V
+...
+Mythical Legend V
+💰 12. CURRENCIES
+Gold → main
+Rubies → rare trade/crafting
+Unity Coins → guild
+$Valor → admin granted premium only
+🏪 13. SHOP SYSTEMS
+CAPITAL SHOPS
+Weapon Shop (gold/ruby)
+Armor Shop
+Amulet Shop
+Item Shop (potions, revive tokens)
+Pet/Bird Shop
+Resource Trade Exchange
+LAVIC TOWN
+Spell Auction House
+Alternate shop inventories (rank locked)
+GUILD SHOP
+Currency: Unity Coins
+🏰 14. GUILD SYSTEM
+MAX
+Members: 10
+Guild Level: 10
+GUILD STORAGE SCALING
+Guild Level
+Resource Storage
+Weapon Vault
+1
+100
+10
+5
+500
+40
+10
+1000
+80
+GUILD PERKS BY LEVEL
+Unlock guild shop tiers
+Increase dungeon access
+Increase unity coin gain
+Storage expansion
+GUILD DUNGEONS (5)
+Stat scaled by online members only
+Dungeon unlock chain: 1 → 2 → 3 → 4 → 5
+🧠 15. SPELL SYSTEM
+Sources:
+Auction (unique server items)
+Research Lab
+Rules:
+1 equipped
+INT scaling
+Undefendable
+Elemental
+Cooldown stored per spell
+🧾 16. ADMIN PANEL (SEPARATE SYSTEM)
+Admin:
+Cannot enter game zones
+No combat interface
+Admin abilities:
+View players (stats, gear, pets)
+Add/remove items
+Grant $Valor
+Spawn pets
+Create quests
+Trigger events
+Open Hell Zone
+View leaderboards
+Inject shop items
+Separate login route:
+Copy code
+
+/admin/login
+Separate DB role:
+Copy code
+
+role: "admin"
+🥊 17. PVP MODES
+ZONE PVP
+Only if same zone
+Challenge → accept/decline
+ARENA CASUAL
+Rewards
+No rank change
+ARENA RANKED
+Matchmaking queue
+Winner takes opponent rank title if higher
+No forfeit allowed
+🎁 18. STARTING PLAYER STATE
+Gold: 1000
+Rubies: 0
+Rank: Novice
+Level: 1
+Tier access: Novice I
+Pets: 1 starter egg
+📈 19. REWARD SCALING
+Formula:
+Copy code
+
+Reward = EnemyRank × EnemyTier × ZoneModifier
+Includes:
+Gold
+Resource drop
+Pet XP (bond)
+Chance for gear
+💾 20. DATA PERSISTENCE
+Server DB = primary
+Export option:
+Copy code
+
+Download player.json
+Import:
+Validate checksum
+Prevent stat injection
+
+🌍 GLOBAL ZONE ENGINE
+PLAYER LOCATION STATE
+Id="p_loc"
+Copy code
+player.location = "capital" | "home" | "arena" | "glorifac" | "forest" | "lavic" | "tower" | "lab" | "hell"
+Only one active at a time.
+ZONE TRANSITION FLOW
+Id="z_flow"
+Copy code
+Capital → tap building → load zone → zone screen
+Zone → Return → Capital
+Capital → Home Base → Return → Capital
+No direct zone-to-zone travel except Tower floors.
+REALTIME PLAYER LIST
+Each zone stores:
+Id="z_online"
+Copy code
+zone.onlinePlayers = [playerId]
+Used for:
+PvP challenge list
+Guild presence scaling
+Hell Zone battle royale pool
+🎒 CARRY CAPACITY SYSTEM
+FORMULA
+Id="carry_formula"
+Copy code
+CarryCapacity = BaseByRank + (Strength × 2) + (PetsCarryBonus)
+BASE BY RANK
+Rank
+Capacity
+Novice
+50
+Initiate
+60
+Adept
+70
+Vanguard
+80
+Elite
+90
+Champion
+100
+Warlord
+120
+Paragon
+140
+Ascendant
+160
+Mythic
+180
+Transcendent
+200
+Exalted
+230
+Eternal
+260
+Apex
+300
+Mythical Legend
+350
+Resources weigh:
+Common = 1
+Rare = 2
+Epic = 3
+Mythic = 5
+When full → gathering buttons disabled.
+👾 MONSTER SPAWN SYSTEM
+Hybrid B + C:
+TIMER SPAWN
+Every zone has:
+Id="spawn_timer"
+Copy code
+zone.monsterSpawnTimer = 60–180 seconds
+ACTION SPAWN
+Each gather/mine action:
+Id="spawn_chance"
+Copy code
+15% chance to spawn monster
+If monster active → show Fight Monster button.
+🗺️ ZONE DEFINITIONS
+🏰 CAPITAL CITY (RACE VARIANT)
+Buttons
+Weapon Shop
+Armor Shop
+Amulet Shop
+Item Shop
+Pet/Bird Shop
+Resource Exchange
+Guild Hall
+Arena
+Home Base
+Lavic Town
+Whispering Forest
+Glorifac Cave
+Mystic Tower
+Gandolf Lab (rank unlock)
+Hell Zone (admin unlock)
+PvP
+❌ Disabled
+NPCs
+Race-specific visuals
+🏠 HOME BASE
+Buttons
+Storage
+Crafting
+Training (time → stat XP)
+Rest (HP regen)
+Return
+PvP ❌
+⚔️ ARENA
+Buttons
+Casual Match
+Ranked Match
+Challenge Player (list)
+View Leaderboard
+Return
+PvP ✅ (isolated instance)
+⛏️ GLORIFAC CAVE (RUBY MINES INTERIOR)
+Unlock Rank
+Initiate
+Buttons
+Mine Resource
+Fight Monster (if spawned)
+Challenge Player
+Return
+Resources
+Iron, Silver, Ruby, Mythril, Plasma Core, Chrono Crystal
+PvP
+✅ Enabled (PvPvE)
+🌲 WHISPERING FOREST
+Unlock Rank
+Novice
+Buttons
+Gather Resource
+Hunt Beast (pet combat)
+Challenge Player
+NPC Interaction (story flag)
+Return
+Resources
+Wood, Fiber, Beast Hide, Nature Essence, Soul Shard
+PvP
+✅ Enabled
+🏙️ LAVIC TOWN
+Unlock Rank
+Adept
+Buttons
+Spell Auction
+Advanced Shops (rank locked inventory)
+NPC Interaction
+Return
+PvP ❌
+🗼 MYSTIC TOWER
+Unlock Rank
+Novice
+Buttons
+Enter Next Floor
+View Progress
+Return
+PvP ❌
+Instance-based combat only.
+🧪 GANDOLF RESEARCH LAB
+Unlock Rank
+Vanguard
+Buttons
+Research Spell
+Unlock Crafting Recipes
+NPC Gandolf Dialogue
+Return
+PvP ❌
+Consumes resources + gold.
+🔥 HELL ZONE (ADMIN EVENT)
+Unlock
+Admin toggle
+Mode
+Battle Royale
+Buttons
+Enter Hell Zone
+View Survivors
+Leave Queue
+PvP ✅ Forced
+No safe return until death or victory.
+🧭 ZONE DATA MODEL
+Each zone object:
+Id="zone_model"
+Copy code
+{
+  zoneId,
+  onlinePlayers: [],
+  monsterActive: false,
+  monsterType: null,
+  spawnTimer,
+  allowedPvp: true/false,
+  resources: [],
+  npcs: [],
+  rankRequired
+}
+🧠 STORY FLAG INTEGRATION (NON-OVERRIDING)
+Each zone has:
+Id="story_flag"
+Copy code
+zone.storyAvailable = true/false
+If true → show Story Prompt Button
+Does NOT replace gameplay buttons.
+🎨 UI RULES
+Static background per zone
+Player portrait bottom-left
+Target portrait bottom-right
+If no image → black silhouette
+Color theme based on zone element
+
+🎣 FISHING OVERVIEW
+Location: Lavic Town → Lavic Lake
+Method: Button → 3–5 second timer → result
+PvP: ❌ Disabled
+Limiter: Daily catch limit
+Primary Uses:
+Feed pets → flat stat gain
+Sell for gold
+Crafting materials (select fish)
+⏱️ FISHING FLOW
+Id="fish_flow"
+Copy code
+Tap Fish → startTimer(3–5s) → rollCatch() → addToInventory → reduceDailyLimit
+If:
+Inventory full → block action
+Daily limit reached → disable button
+🎣 DAILY CATCH LIMIT (BY RANK)
+Rank
+Daily Catches
+Novice
+10
+Initiate
+12
+Adept
+14
+Vanguard
+16
+Elite
+18
+Champion
+20
+Warlord
+22
+Paragon
+24
+Ascendant
+26
+Mythic
+28
+Transcendent
+30
+Exalted
+32
+Eternal
+34
+Apex
+36
+Mythical Legend
+40
+Reset at server daily reset.
+🪝 ROD SYSTEM (15 RANK TIERS)
+Each rank unlocks 1 rod tier.
+Rod bonuses:
+Catch rarity multiplier
+Bonus Luck for fishing only
+Id="rod_bonus"
+Copy code
+effectiveLuck = player.luck + rod.luckBonus
+rarityRoll = baseRoll × rod.rarityMultiplier
+Rod does not break.
+🐟 FISH RARITY TABLE
+Rarity
+Weight
+Sell Gold
+Pet Stat Gain
+Crafting
+Common
+1
+50
++1
+❌
+Uncommon
+1
+100
++2
+❌
+Rare
+2
+250
++3
+❌
+Epic
+2
+500
++4
+❌
+Legendary
+3
+1,000
++5
+✔
+Mythic
+4
+2,500
++7
+✔
+Stat applied to pet Strength by default.
+🐟 FISH LIST (CORE SET)
+You can expand later; system supports unlimited.
+Common
+Silver Minnow
+Blue Guppy
+River Dart
+Uncommon
+Emerald Carp
+Golden Koi
+Rare
+Frostfin Trout
+Ember Bass
+Epic
+Storm Pike
+Crystal Eel
+Legendary (Crafting)
+Aether Salmon
+Chrono Catfish
+Mythic (Crafting)
+Void Leviathan Fry
+Soul Lantern Fish
+🎯 CATCH FORMULA
+Id="catch_formula"
+Copy code
+rarityScore = random(1–100) + effectiveLuck
+Thresholds
+Score
+Result
+0–40
+Common
+41–65
+Uncommon
+66–80
+Rare
+81–92
+Epic
+93–98
+Legendary
+99+
+Mythic
+Rod multiplier adds directly to score (higher tiers).
+🐾 PET FEEDING SYSTEM
+FLOW
+Id="pet_feed"
+Copy code
+Select Pet → Select Fish → Confirm → ApplyStat → DeleteFish
+STAT GAIN
+Flat based on rarity (table above).
+Cap: Pet stat gain from feeding per day = Rank × 5
+Prevents infinite scaling.
+⚖️ WEIGHT SYSTEM
+Fish use carry capacity.
+Example: Mythic fish weight = 4
+If full → cannot fish.
+🛠️ CRAFTING FISH USAGE
+Legendary & Mythic fish used in:
+Mythic weapons (water element)
+Pet evolution recipes
+High-tier potions (future)
+🧠 UI LAYOUT
+Lavic Lake screen:
+Top:
+Daily catches remaining
+Inventory weight
+Buttons:
+Fish
+Feed Pet
+Sell Fish
+Return
+Right panel:
+Fish log (discovered species)
+Bottom:
+Player portrait
+Target (fish silhouette on catch)
+🗃️ SERVER DATA MODEL
+Id="fish_model"
+Copy code
+player.fishing = {
+  dailyCaught: number,
+  lastReset: timestamp
+}
+Fish item:
+Id="fish_item"
+Copy code
+{
+  itemId,
+  rarity,
+  weight,
+  sellValue,
+  petStatGain,
+  craftingMaterial: true/false
+}
+🔓 RANK UNLOCKS
+Each rank unlocks:
+New rod tier
+Higher rarity catch chance
+Higher daily cap
+
+🐦 BIRD COMPANION SYSTEM SPEC
+Purpose:
+Birds are secondary companions. They do not attack directly but provide passive buffs (Speed, Defense) in combat and can augment resource gathering and travel. Birds have their own progression and unlock system.
+1️⃣ BIRD SLOTS / EQUIPMENT
+Rank
+Max Active Birds
+Max Inventory Birds
+Novice
+1
+2
+Initiate
+1
+3
+Adept
+1
+4
+Vanguard
+2
+5
+Elite
+2
+6
+Champion
+2
+7
+Warlord
+2
+8
+Paragon
+3
+9
+Ascendant
+3
+10
+Mythic
+3
+12
+Transcendent
+3
+14
+Exalted
+3
+16
+Eternal
+3
+18
+Apex
+3
+20
+Mythical Legend
+3
+25
+Birds are equipable separately from pets. Active birds provide buffs in combat; inactive birds are stored in inventory.
+2️⃣ STATS AND BUFFS
+Bird stats are scaled to player rank:
+Stat
+Effect
+Speed
++% to initiative in combat
+Defense
++% damage mitigation
+Resource Luck
++% chance of rare resource
+Carry Boost
++% carry capacity
+Example Buff:
+Id="bird_buff"
+Copy code
+player.speedBonus += bird.speed * 0.1
+player.defenseBonus += bird.defense * 0.05
+player.resourceLuck += bird.resourceLuck * 0.02
+player.carryBonus += bird.carryBoost
+Buffs are additive and capped at 50% per stat from all birds combined.
+3️⃣ BIRD EVOLUTION & LEVELING
+Birds do not have numeric levels. They evolve using Focus Shards collected from quests, PvP, and raids.
+Stage
+Requirement
+Effect
+Egg
+Purchased/unlocked
+Base stats
+Hatchling
+5 Focus Shards
++5% buff bonus
+Adolescent
+10 Focus Shards
++10% buff bonus
+Adult
+20 Focus Shards
++15% buff bonus
+Elder
+40 Focus Shards
++25% buff bonus
+Legend
+80 Focus Shards
++40% buff bonus
+Immortal
+160 Focus Shards
+Maxed buffs
+Evolution is permanent, cannot revert.
+4️⃣ CURRENCY
+Bird upgrades require Focus Shards and optionally Beak Coins.
+Focus Shards: Earned from PvE, PvP, guild dungeons.
+Beak Coins: Special currency; rare rewards or purchases via shop.
+5️⃣ ELEMENTAL CONVERGENCE
+Birds can have one element, which interacts with player race and pet elements. Bonuses only trigger if matching synergy:
+Convergence
+Effect
+Race ↔ Bird
++10% initiative
+Pet ↔ Bird
++10% defense
+Race+Pet+Bird
++20% buffs (triple synergy)
+6️⃣ BIRD ACQUISITION
+Purchase in Pet/Bird Shop (gold) → rank-locked
+Reward from Guild Dungeon (random drop)
+Event drops (admin-triggered)
+7️⃣ BIRD INVENTORY MODEL
+Id="bird_object"
+Copy code
+{
+  birdId,
+  name,
+  element,
+  stage,
+  buffs: {speed, defense, carryBoost, resourceLuck},
+  active: true/false,
+  obtainedFrom: "shop/guild/event"
+}
+Player storage:
+Id="bird_inventory"
+Copy code
+player.birds = [birdObject]
+Active birds apply buffs; inactive are stored.
+8️⃣ UI & INTERACTION
+Screen Layout:
+Top: Active birds + buffs
+Middle: Inventory / upgrade tab
+Bottom: Player portrait / main buttons
+Actions: Equip, Unequip, Feed Focus Shard, View Stats
+Feeding Focus Shards prompts confirmation; shards are consumed permanently.
+9️⃣ PET COMBO EFFECTS
+Birds + pets + player create combo buffs for:
+PvP → speed and defense advantage
+PvE → faster monster initiative and higher gather/resource yield
+Tower / dungeon → initiative ordering affects floor outcomes
+10️⃣ SERVER DATA MODEL
+Id="bird_server"
+Copy code
+player.birds = {
+  active: [birdId],
+  inventory: [birdObject],
+  focusShards: number,
+  beakCoins: number
+}
+Tracks buffs, evolution stage, and synergy bonuses.
+
+🏛️ AUCTION HOUSE SYSTEM SPEC
+Location: Lavic Town → Auction House
+Access: Rank Novice+ (higher-tier auctions may require higher ranks)
+PvP: ❌ Disabled
+Primary Uses:
+Acquire rare spells (offensive, defensive, passive)
+Acquire unique skills (one per server)
+Rank-locked items
+1️⃣ AUCTION TYPES
+Type
+Description
+Standard
+Open to all players, normal gold bidding
+VIP
+$Valor only, rare spells or cosmetic-exclusive items
+Skill Auction
+One-of-a-kind global skill, server-wide, uses Valor Tokens
+2️⃣ AUCTION FLOW
+Id="auction_flow"
+Copy code
+1. Player selects item → view details
+2. Player enters bid amount
+3. Timer starts (30–60 seconds for regular, 120 seconds for skill auction)
+4. Other players may outbid
+5. Highest bid at timer end wins
+6. Item delivered to inventory automatically
+Rules:
+Cannot bid more than player gold or $Valor balance
+Admin can add items, set base price, duration
+No gifting or bypassing limits by players
+3️⃣ RANK LOCKS
+Item Tier
+Min Rank
+Common Spells
+Novice
+Uncommon
+Initiate
+Rare
+Adept
+Epic
+Vanguard
+Legendary
+Elite+
+Skill Auctions automatically bypass rank if required but item effect will only work if player meets in-game unlock requirements.
+4️⃣ ITEM TYPES
+Spells
+Equippable: 1 active spell at a time
+Usage: Intelligence stat determines damage/effect
+Cooldowns: Optional per spell
+Skills
+Global Unique: Only one per server
+Permanent: Cannot be sold/traded after acquisition
+Consumables / Buffs
+Limited quantity items, can only affect PvE or PvP where allowed
+5️⃣ BIDDING MECHANICS
+Gold Auction: In-game currency
+$Valor Auction: Real-money currency
+Increment: Must exceed previous bid by min value (1–5% of previous bid)
+Auto Outbid: Optional, player can set max to avoid missing auction
+6️⃣ UI LAYOUT
+Top Panel:
+Current item image + stats
+Current bid + time remaining
+Middle:
+Bid input
+Place bid button
+View bid history
+Bottom:
+Player portrait
+Inventory quick view
+Notifications:
+Outbid alert
+Auction won/lost
+Server-wide event announcement for rare skill
+7️⃣ SERVER DATA MODEL
+Id="auction_model"
+Copy code
+auctionHouse = [
+  {
+    itemId,
+    itemName,
+    type: "spell"|"skill"|"buff",
+    minRank,
+    currency: "gold"|"valor",
+    currentBid: {playerId, amount},
+    endTime: timestamp,
+    highestBidder: playerId,
+    status: "active"|"ended"
+  }
+]
+Player data:
+Id="player_auction"
+Copy code
+player.auctions = {
+  activeBids: [auctionId],
+  wonItems: [itemId],
+  lostBids: [auctionId]
+}
+8️⃣ INTEGRATION WITH STORY & ZONES
+Only in Lavic Town
+Spells only usable in zones that allow PvP or PvE action (like Arena, Glorifac Cave, Mystic Tower)
+AI Story Mode: Items may trigger story prompts when used
+Rank Enforcement: AI ensures spells/skills cannot be exploited by under-leveled players
+9️⃣ ADMIN INTERFACE
+Add new items (spells, rare skills)
+Set base price & duration
+Monitor all ongoing auctions
+Remove items if needed
+Admin cannot enter game combat or PvP as normal player.
+
+📊 LEADERBOARD SYSTEM SPEC
+Location: Accessible from Capital City → Arena → Leaderboard button
+PvP: ❌ Viewing only, updates in real-time
+Purpose:
+Track player performance (PvP, dungeon, tower progress)
+Track guild progress (guild dungeons, rank, currency)
+Permanent recognition of top players and guilds
+1️⃣ LEADERBOARD TYPES
+Leaderboard
+Description
+Metrics
+PvP
+Individual combat ranking
+Wins, losses, rank tier, Elo-like rating
+Guild
+Guild competition
+Guild level, Unity Coins earned, dungeons completed
+Tower
+Mystic Tower floors
+Highest floor completed, number of floors cleared
+Resource Gathering
+Rare resource collection
+Total rare/mined items collected per rank
+Seasonal Events
+Event performance
+Points earned, exclusive rewards
+2️⃣ PLAYER RANKING METRICS
+PvP Rating:
+Id="pvp_rating"
+Copy code
+EloRating = Base + Win/Loss multiplier + OpponentRankFactor
+Tower Progress: Track highest floor completed
+Shards Collected: For story completion & server ruler race
+Resource Gathering: Total rare items collected (weighted by rarity)
+Rankings update in real-time but stored permanently for historical data.
+3️⃣ GUILD LEADERBOARD METRICS
+Guild Level
+Dungeons completed
+Unity Coins earned
+Active members (online influence)
+Id="guild_leaderboard"
+Copy code
+guilds = [
+  {
+    guildId,
+    name,
+    level,
+    dungeonsCompleted,
+    unityCoins,
+    activeMembers
+  }
+]
+Guild PvP performance (optional metric if guild fights other guilds)
+4️⃣ DISPLAY RULES
+UI Layout:
+Top: Leaderboard filter (PvP, Guild, Tower, Resource, Seasonal)
+Middle: Table view (Name, Rank, Points/Metric, Guild if applicable)
+Bottom: Player portrait + current rank info
+Highlight:
+Player sees themselves always in list, even if not top
+Guild members can see guild ranking in a separate tab
+5️⃣ PERMANENT RANK INTEGRATION
+Player ranks (Novice → Mythical Legend) do not decay except via admin update
+Rankings update after PvP matches, guild dungeons, tower progress
+Achievements reflected as badges (VIP / Rank / Guild) — cosmetic only
+6️⃣ SERVER DATA MODEL
+Id="leaderboard_model"
+Copy code
+leaderboards = {
+  pvp: [{playerId, name, rating, rankTier}],
+  guild: [{guildId, name, level, unityCoins, dungeonsCompleted}],
+  tower: [{playerId, highestFloor}],
+  resources: [{playerId, rareResourcesCollected}],
+  seasonal: [{playerId, pointsEarned}]
+}
+Player reference:
+Id="player_leaderboard"
+Copy code
+player.stats = {
+  pvpRating,
+  guildRank,
+  towerFloor,
+  resourceCount,
+  seasonalPoints
+}
+7️⃣ INTEGRATION WITH OTHER SYSTEMS
+PvP matches: Update Elo, wins, losses
+Guild dungeons: Update guild metrics + personal leaderboard metrics
+Tower progression: Update floor completion leaderboard
+Resource gathering: Adds weighted counts for rare materials
+Seasonal events: Temporary leaderboards for duration of event, reset after completion
+Admin can view leaderboards, export historical data, but cannot manipulate player stats directly
+
+🏅 ACHIEVEMENTS / TITLES / BADGES SYSTEM SPEC
+Purpose:
+Track player accomplishments and reward progression mechanically
+Provide titles/badges that display stats, rank, or guild affiliation
+No cosmetic rewards (cosmetics only via $Valor or admin)
+1️⃣ TITLES
+Rules:
+Players can equip up to 3 titles simultaneously
+Titles are ranked or achievement-based
+Examples of title types:
+Rank Titles: e.g., Novice, Adept, Mythical Legend
+Guild Titles: e.g., “Rank 1 Guild Member”
+Event Titles: e.g., “Convergence Veteran”
+Equipping:
+Player can select which 3 titles to display
+Titles reflect mechanical status, not cosmetics
+If player leaves a guild or rank changes, title becomes unequipable until conditions met
+2️⃣ BADGES
+Only 3 badges exist:
+VIP Badge → permanent if admin assigns
+Guild Badge → shows guild affiliation / level
+Rank Badge → highest permanent rank achieved
+Display:
+Always visible on player profile or during PvP
+Cannot be sold, traded, or lost
+3️⃣ ACHIEVEMENTS (Mechanical Only)
+Achievement Type
+Trigger
+Reward
+PvP Wins
+X wins at a rank
+Stats / XP multiplier
+Dungeon Completion
+Guild dungeon cleared
+Unity Coins bonus
+Tower Floors
+Reach milestone floor
+Passive XP bonus
+Resource Gathering
+Collect X rare resources
+Crafting multiplier
+Story Progression
+Complete shard quests
+Access to next zone
+Achievements cannot give cosmetics — only XP, stats, guild currency, or resource multipliers
+4️⃣ SERVER DATA MODEL
+Id="achievements_model"
+Copy code
+player.achievements = {
+  titlesEquipped: [titleId, titleId, titleId],
+  badges: [badgeId, badgeId, badgeId],
+  achievementsUnlocked: [
+    {id, type, dateUnlocked, rewardApplied: true/false}
+  ]
+}
+5️⃣ UI LAYOUT
+Player Profile / Stats Screen:
+Top: Badges (VIP, Guild, Rank)
+Middle: Titles equipped (3 max)
+Bottom: Achievement list (mechanical triggers, progress bars)
+Interactions:
+Equip / Unequip titles (confirm button)
+View achievement details and rewards
+Badges are permanent; no equip option for badges
+6️⃣ INTEGRATION WITH OTHER SYSTEMS
+PvP / PvE → trigger PvP win achievements, tower floors
+Guild Dungeons → trigger dungeon completion achievements
+Resource Gathering → track achievements by rare resource count
+Rank System → automatically assign rank badges and titles
+Admin → can assign VIP badges or event-specific titles
+
+🌍 ZONES & ZONE MECHANICS SPEC — LOV V2
+1️⃣ ZONE OVERVIEW
+Zone
+Activities
+PvP
+Story
+Resources
+NPCs
+Glorifac Cave
+Mining / PvE / Monsters
+✅
+Optional
+Gems (rank-locked, rare spawn)
+Story-triggered only
+Whispering Forest
+Wild Pets / PvE / Monsters
+✅
+Optional
+Herbs, rare woods
+Story-triggered only
+Lavic Town
+Fishing / Shops
+❌
+Optional
+Fish (some crafting)
+Always present, story-triggered prompts appear
+Mystic Tower
+PvE / Combat Floors
+❌
+Optional
+None
+Story-triggered only
+Capital City
+Shops / Guild / Home Base
+❌
+Story hub
+None
+NPCs always present
+Home Base
+Rest / Crafting / Storage
+❌
+Story hub
+None
+NPCs always present
+Hell Zone
+PvPvE / Final Raid
+✅
+Optional
+Rare shards
+Story-triggered only
+2️⃣ ZONE LOCKING & PROGRESSION
+Zones unlock based on both rank and story progression:
+Example:
+Whispering Forest → Novice + Act I completed
+Mystic Tower Floor 1 → Novice + story prompt triggered
+Glorifac Cave → Initiate + shard discovery
+Higher-tier resources or rare monsters only spawn when player rank is sufficient.
+Admin can unlock zones or open Hell Zone manually for live events.
+3️⃣ PLAYER INTERACTIONS
+PvP allowed in all zones except Capital City and Home Base.
+PvP flow: select nearby player → challenge → accept/decline → turn-based combat.
+PvE flow: tap enemy/monster → choose action (Attack / Defend / Dodge / Spell).
+Multi-enemy encounters: select target → choose action per turn.
+4️⃣ NPCS & AI STORY PROMPTS
+NPCs only appear when a story event triggers them.
+Story prompts are optional per encounter but cannot skip main milestones.
+Interaction options:
+Talk → triggers AI-generated dialogue
+Quest → starts/updates story mission
+Shop → only available in towns
+Example: Whispering Forest → Story-triggered elf NPC appears → tap → AI generates race-specific dialogue → option to accept quest or learn lore.
+5️⃣ RESOURCES & RANK LOCKING
+Mining / Gathering / Fishing / Herb collection tied to rank.
+Rare resources spawn only in specific zones:
+Glorifac Cave → Ruby, Sapphire, Mythic Crystal
+Whispering Forest → Enchanted Wood, Spirit Herb
+Lavic Lake → Mythic Fish, Legendary Fish
+Carry limits scale with player stats, rank, pets, and bird companions.
+Players can dump resources permanently if over limit.
+6️⃣ UI & INTERFACE
+Static zone background with animated/interactable elements: water shimmer, moving NPCs, glowing resources.
+Player portrait always visible in bottom-left.
+Target interaction panel in bottom-right (enemy, pet, resource, NPC).
+Buttons for actions appear contextually:
+PvE → Attack, Defend, Dodge, Spell
+PvP → Challenge/Accept/Decline
+Resources → Mine / Gather / Fish
+Story → Tap to engage AI prompt
+7️⃣ RESOURCE & PET INTEGRATION
+Gathering resources can feed pets, craft weapons, or sell for gold/Unity Coins.
+Bird companions provide carry capacity and resource-gathering buffs.
+Inventory & pet slots enforce rank-based limits.
+8️⃣ SERVER DATA MODEL
+Id="zone_player_model"
+Copy code
+player.zones = {
+  currentZone: "zoneId",
+  unlockedZones: ["zoneId1", "zoneId2"],
+  resourcesCollected: [{resourceId, quantity}],
+  activeNPCs: [{npcId, triggered: true/false}],
+  PvPChallenges: [{opponentId, status}],
+  AIStoryFlags: {prompt1: true, prompt2: false}
+}
+Id="zone_resource_model"
+Copy code
+zone.resources = [
+  {resourceId, name, zoneId, rankRequired, rarity, spawnRate}
+]
+9️⃣ SPECIAL ZONE RULES
+Lavic Town: Fishing, shops, story prompts → no PvP.
+Mystic Tower: PvE floors only → floor stats scale exponentially.
+Hell Zone: Admin-triggered → PvPvE event → high-risk, high-reward.
+Capital City / Home Base: Safe zones → shops, crafting, guild actions.
+10️⃣ NEXT SYSTEM
+After Zones & Zone Mechanics, the next system is: PvP Combat & Matchmaking, which will integrate:
+Ranked vs Casual matches
+Arena mechanics
+Turn order based on Speed
+Rewards scaling with opponent rank
+Leaderboard integration
+
+⚔️ PvP COMBAT & MATCHMAKING — LOV V2
+1️⃣ PvP MATCH TYPES
+Match Type
+Description
+Leaderboard Impact
+Rewards
+Casual Challenge
+Player can challenge anyone in the same zone or arena
+❌ None
+Gold, resources, minor XP
+Ranked Match
+Matched via automated system based on rank / Elo
+✅ PvP Leaderboard updates
+Gold, XP, rank tier progression, Unity Coins (optional)
+Rules:
+Matches cannot be forfeited.
+Players can only challenge other online players in allowed zones (Arena, Whispering Forest, Glorifac Cave).
+Players may decline casual challenges, but ranked matches auto-accept.
+2️⃣ MATCHMAKING & RANKING
+Casual: Manual selection of nearby player → challenge → accepts → battle begins
+Ranked: Auto-matching system pairs players:
+Based on current rank tier and PvP Elo rating
+Winner gains Elo points; loser loses proportional points
+If lower-ranked beats higher-ranked, lower-ranked advances rank instantly if tier thresholds are met
+Id="pvp_elo_calc"
+Copy code
+EloChange = K * (Result - Expected)
+Result = 1 win / 0 loss
+Expected = 1 / (1 + 10^((OpponentElo - PlayerElo)/400))
+K = scaling factor (depends on rank tier)
+Ranked matches update leaderboards permanently
+3️⃣ COMBAT TURN MECHANICS
+Initiative / Turn Order:
+Id="turn_order"
+Copy code
+TurnOrder = (Speed * 2) + random(Luck / 10)
+Available Actions:
+| Action | Effect | |--------|--------| | Attack | 100% Attack stat damage | | Defend | Reduce incoming damage by Defense - Opponent Attack | | Dodge | If Speed > Opponent Attack → avoid attack; else take full damage | | Spell | Uses Intelligence stat, cannot be blocked or defended, can crit |
+Critical Hits:
+Id="crit_calc"
+Copy code
+CritChance = Luck ÷ X
+CritMultiplier = 3
+Spell can also crit
+Pets:
+Each pet has separate health bar
+Can be used in PvP (attack or passive buffs)
+Player chooses which pet is active per match
+4️⃣ BATTLE SCREEN LAYOUT
+Left panel: Player portrait + HP + active pet health
+Right panel: Target portrait + HP + enemy pet if any
+Center: Action buttons → Attack / Defend / Dodge / Spell
+Top panel: Turn indicator + timer
+Bottom panel: Combat log (last 3-5 actions)
+5️⃣ REWARDS
+Casual: Gold, resource drops, minor XP
+Ranked:
+Gold + XP scaled by opponent rank
+Unity Coins (optional)
+PvP Leaderboard points
+Chance to gain rank badges / titles if conditions met
+Reward Scaling Formula:
+Id="reward_scaling"
+Copy code
+Reward = BaseReward * (OpponentRankTier / PlayerRankTier)
+6️⃣ INTEGRATION WITH OTHER SYSTEMS
+Leaderboards: Ranked match results update PvP stats
+Achievements: Track wins per tier or total PvP victories
+Pets / Spells: Stats apply directly to combat
+Zones: PvP only available in designated zones
+AI Story: Story prompts unaffected by PvP actions, but could be triggered post-match if relevant
+7️⃣ SERVER DATA MODEL
+Id="pvp_player_data"
+Copy code
+player.pvp = {
+  currentMatch: {opponentId, type, status},
+  rating: EloRating,
+  wins: totalWins,
+  losses: totalLosses,
+  rankTier: currentTier
+}
+Id="pvp_match_data"
+Copy code
+matches = [
+  {
+    matchId,
+    type: "casual"|"ranked",
+    player1Id,
+    player2Id,
+    actions: [{turn, actor, action, result}],
+    winnerId,
+    rewardsDistributed: true/false
+  }
+]
+8️⃣ ADMIN INTERFACE
+View ongoing PvP matches
+Monitor leaderboard stats
+Add/remove rewards or correct errors (no direct combat access)
+
+🏰 GUILD MECHANICS — LOV V2
+1️⃣ GUILD CREATION & MEMBERSHIP
+Location: Capital City → Guild Hall → Create Guild / Join Guild
+Cost:
+Creating guild costs Gold (joining is free)
+Guild Naming: Unique per server
+Max Members: 10
+Server Size: 56 players
+Guild Leader / Officers: Can manage perks, storage, dungeons, and member invitations
+Guild Rank / Level: Max 10
+2️⃣ GUILD STORAGE
+Two Storage Types:
+Resource Storage → Materials, crafting items
+Weapon Storage → Weapons, shields, amulets
+Capacity Scaling per Guild Level:
+| Guild Level | Resource Capacity | Weapon Capacity | Notes | |-------------|-----------------|----------------|------| | 1           | 500             | 50             | Base | | 2           | 700             | 70             | Unlock storage upgrade option | | 3           | 900             | 90             | Base guild perks start | | 4-10        | +200 / level    | +20 / level    | Perks scale with level |
+Guild Currency: Unity Coins → used in guild shop to buy weapons, shields, amulets, and event-specific items
+3️⃣ GUILD PERKS
+Perks unlocked by guild level
+Examples:
+| Guild Level | Perk | |------------|------| | 1           | Basic guild storage | | 2           | Access to guild shop | | 3           | Guild dungeon level 1 unlock | | 4           | +10% XP gain for members in guild zone | | 5           | Guild chat global access | | 6           | Dungeon level 2 unlock | | 7           | +20% resource storage efficiency | | 8           | Dungeon level 3 unlock | | 9           | Ability to equip guild title | | 10          | Dungeon level 4 & 5 unlock; max perks |
+4️⃣ GUILD DUNGEONS
+Total: 5 guild dungeons
+Access Rules:
+Next dungeon unlocks only after previous dungeon completion
+Calculated using stats of members online during dungeon run
+Stronger dungeons scale with previous dungeon completion
+Dungeon Mechanics:
+Similar to Mystic Tower (PvE combat floors)
+Rewards: Unity Coins, rare crafting materials, event drops
+Guild Leaderboards: Track dungeon completion, resources earned, and highest dungeon cleared
+5️⃣ GUILD SHOP
+Accessible after level 2
+Items: Weapons, shields, amulets, guild event items
+Currency: Unity Coins only
+Special Items: Certain high-tier weapons only purchasable through guild shop
+6️⃣ GUILD TITLES & BADGES
+Players in guild can equip guild rank title if perk unlocked
+Guild Badge visible on profile & PvP
+Guild title reflects guild level and rank within guild
+7️⃣ UI & INTERFACE
+Guild Hall:
+Create / Join buttons
+Guild Shop button
+Storage buttons → Resource / Weapon
+Dungeon button → shows available & locked dungeons
+Guild chat panel (if perk unlocked)
+Guild Info Panel:
+Guild Name, Level, Members, Dungeons Cleared
+Unity Coins total
+8️⃣ SERVER DATA MODEL
+Id="guild_model"
+Copy code
+guilds = [
+  {
+    guildId,
+    name,
+    level,
+    unityCoins,
+    members: [{playerId, rank, onlineStatus}],
+    storage: {resources: [{id, qty}], weapons: [{id, qty}]},
+    dungeonsCompleted: 0,
+    perksUnlocked: [1,2,3,...]
+  }
+]
+9️⃣ INTEGRATION WITH OTHER SYSTEMS
+PvP: Guild badge visible in battle
+Leaderboards: Guild performance tracked by Unity Coins, dungeon progress, member activity
+Resource Gathering / Crafting: Guild storage accessible for high-tier items
+AI Story / Zones: Some story events may trigger guild-specific objectives
+
+🎣 FISHING & PET/BIRD MECHANICS — LOV V2
+1️⃣ FISHING SYSTEM
+Location: Lavic Town → Fishing Lake
+Available Actions:
+Cast Rod → Wait for fish → Tap to reel
+Fishing Rods / Bait may increase catch rate or rarity
+Fish Types & Rank Locks:
+Fish Type
+Rank Required
+Use
+Common Fish
+Novice
+Sell for Gold / minor pet bonding
+Silverfin
+Initiate
+Crafting / pet feeding
+Tempest Pike
+Adept
+Crafting / pet feeding / rare recipes
+Mythic Koi
+Vanguard
+High-value crafting / pet feeding
+Legendary Leviathan
+Elite+
+Guild event fishing / rare recipes
+Mechanics:
+Fishing limited by carry capacity (affected by player stats, rank, pets, birds)
+Some fish can mutate or feed pets → increasing pet stats / bond
+Rare fish only spawn in specific conditions (time, rank, or story progression)
+2️⃣ PET MECHANICS
+Pet Evolution Stages:
+Baby → Teen → Adult → Elder → Legend → Immortal
+Evolutions unlock automatically by experience or bonding milestones
+Stats & Abilities:
+Each pet has Attack, Defense, Speed, Health, Element(s)
+Some pets are PvP-focused, others PvE/resource-focused
+Active pet provides stat bonuses to player based on element synergy
+Bonding:
+Spend time/currency with pet → increases Bond Level
+Bond Level affects:
+Stat multipliers (Attack, Defense, Speed)
+Resource gathering efficiency
+Pet ability power
+Pet in Combat:
+Separate health bar
+Can attack, provide buffs, or passive effects
+Elemental advantages apply to both PvE and PvP
+Inventory / Slots:
+Slots increase per rank → start with 1 active pet at Novice
+Max pets equippable per player determined by rank (you decide exact scaling)
+3️⃣ BIRD MECHANICS
+Secondary companion → focused on Defense & Speed buffs
+Upgraded using Focus Shards and Beak Coins
+Each bird provides:
+Carry capacity increase (affects resources/fishing)
+Passive bonuses to speed and defense
+Can influence PvP turn order via Speed modifier
+Bird Slots:
+Start with 1 bird → can unlock more with rank progression
+4️⃣ INTEGRATION WITH OTHER SYSTEMS
+Resource Gathering:
+Fish feed pets → increase stats
+Birds increase carry capacity → more resources in a single trip
+Combat:
+Pet attacks contribute damage
+Pet + bird buffs scale with player stats
+Story / Zones:
+Certain story events may require catching a rare fish or pet evolution
+Guild Mechanics:
+Rare fish can be stored in guild storage or used for guild crafting
+5️⃣ SERVER DATA MODEL
+Id="pet_data"
+Copy code
+player.pets = [
+  {
+    petId,
+    name,
+    evolutionStage, // Baby, Teen, Adult, Elder, Legend, Immortal
+    stats: {Attack, Defense, Speed, Health, Element1, Element2, Element3},
+    bondLevel,
+    active: true/false
+  }
+]
+
+player.birds = [
+  {
+    birdId,
+    name,
+    stats: {DefenseBonus, SpeedBonus, CarryCapacity},
+    upgraded: true/false,
+    active: true/false
+  }
+]
+Id="fishing_data"
+Copy code
+player.fishing = [
+  {fishId, type, quantity, rankRequired, location, rarity}
+]
+6️⃣ UI & INTERFACE
+Fishing:
+Static/animated water background
+Tap to cast → tap to reel
+Shows fish caught + inventory capacity
+Pet / Bird Info:
+Display health bar, stats, element
+Active pet + bird always visible in bottom-left alongside player portrait
+Combat Integration:
+Pet + bird stats apply automatically to player during PvP or PvE
+
+💰 TRADING, AUCTION HOUSE & LEADERBOARDS — LOV V2
+1️⃣ PLAYER TRADING
+Location: Auction House (Lavic Town / Capital City)
+Available Items:
+Weapons, Shields, Amulets
+Resources
+Pets (if rank and evolution allow)
+Rules & Restrictions:
+Rank-Based Restrictions:
+A Novice cannot receive or equip higher-tier items than their rank permits
+Rank limits also affect resources (higher-tier crafting materials only tradable by higher-ranked players)
+Trade Mechanics:
+Both players confirm trade → permanent exchange
+Time Lock: 1–2 minute confirmation window to prevent accidental scams
+Inventory Checks:
+Both players must have available slots for items/resources being traded
+Items/resources dumped permanently are not recoverable
+Server Data Model:
+Id="trade_model"
+Copy code
+trades = [
+  {
+    tradeId,
+    player1Id,
+    player2Id,
+    itemsSent: [{itemId, qty}],
+    itemsReceived: [{itemId, qty}],
+    status: "pending"|"confirmed"|"completed"
+  }
+]
+2️⃣ AUCTION HOUSE
+Types of Auctions:
+Auction Type
+Currency
+Items
+Access / Notes
+Gold Auction
+Gold
+Spells / Standard rare items
+Anyone can participate, max items per player active: 3
+VIP Auction
+$Valor
+Exclusive skins, high-tier items
+$Valor only, max items per player active: 1-2
+Auction Mechanics:
+Bidding: Players submit bids → countdown timer → highest bidder wins
+Rank Restrictions:
+Only items appropriate for the player’s rank can be received
+Server Model:
+Id="auction_model"
+Copy code
+auctions = [
+  {
+    auctionId,
+    type: "gold"|"vip",
+    itemId,
+    startingBid,
+    highestBid: {playerId, amount},
+    timeRemaining,
+    bidders: [{playerId, bidAmount}],
+    status: "active"|"closed"
+  }
+]
+Rewards / Delivery:
+Winning player receives item directly in inventory
+Items cannot exceed rank limits
+3️⃣ LEADERBOARDS
+Scope:
+Separate leaderboard per zone (Glorifac Cave, Whispering Forest, Mystic Tower, etc.)
+Tracks:
+PvP wins & ranked match performance
+PvE performance (Tower floors, Guild Dungeons, Fishing rare catches if relevant)
+Guild contributions (optional, per guild leaderboard)
+Rules:
+Rankings update real-time
+Players cannot modify leaderboard scores — only via legitimate actions
+Display: Player portrait, rank title, guild badge, wins, resources collected
+Server Model:
+Id="leaderboard_model"
+Copy code
+leaderboards = [
+  {
+    zoneId,
+    players: [{playerId, rank, wins, score, guildId}],
+    guilds: [{guildId, score, membersOnline}]
+  }
+]
+4️⃣ UI / INTERFACE
+Auction House Panel:
+Tabs for Gold Auctions & VIP Auctions
+Display current highest bid, time remaining, item preview
+Bid button → enter amount → confirm
+Trading Panel:
+Select player → drag/drop items → confirm
+Time lock countdown visible
+Leaderboard Panel:
+Zone dropdown → select leaderboard per zone
+Filter by guild or rank tier
+Player details → click to view profile / stats
+5️⃣ INTEGRATION
+PvP / PvE:
+Only allow rank-appropriate items for battles
+Leaderboards automatically pull stats from PvP/PvE actions
+Guilds:
+Guild contributions update guild leaderboard
+Story / Zones:
+Auction items or traded items can influence AI-generated story events
+
+🏠 HOME BASE & CRAFTING / RESOURCE MANAGEMENT — LOV V2
+1️⃣ HOME BASE STRUCTURE
+Base Types / Upgrade Tiers:
+Tier
+Name
+Features Unlocked
+1
+Camp
+Basic storage, rest, passive XP
+2
+Lodge
+Expanded storage, crafting bench, minor defenses
+3
+Keep
+Larger storage, advanced crafting recipes, training room
+4
+Manor
+Vault (gold interest), more crafting options, stronger defenses
+5
+Castle
+Full crafting tiers, max storage, dungeon portal, stat bonus rooms
+Base Rooms & Functionality:
+Room
+Function
+Storage
+Store resources; capacity scales with rank & base tier
+Weapon Locker
+Separate storage for crafted / rare weapons, shields, amulets
+Rest
+Passive HP regeneration over time
+Crafting
+Access to recipes for high-tier equipment; resource-to-item conversion
+Training
+Converts time into passive Stat XP
+Vault
+Stores gold safely; generates interest; protects against PvP loss
+Defenses
+Arrow Traps, Magic Wards; defend against raids; upgradeable per tier
+2️⃣ RESOURCE SYSTEM
+Resource Types (15+):
+Iron Ore
+Silver Ore
+Mythril Shard
+Crystal Shard
+Ruby
+Sapphire
+Emerald
+Obsidian
+Essence of Fire
+Essence of Water
+Essence of Air
+Essence of Earth
+Spirit Wood
+Tempest Stone
+Aether Fragment
+Gathering Locations & Rank Locks:
+Glorifac Cave → Ores / Gems
+Whispering Forest → Spirit Wood / Pet Materials
+Mystic Tower → Rare Essence / Tempest Stone
+Lavic Town → Aether Fragment / special crafting resources
+Carry Limit: Affected by rank, stats, pets, and birds
+3️⃣ CRAFTING MECHANICS
+Item Classes: Weapon, Shield, Amulet
+Crafted Item Rules:
+Strongest in their tier; unavailable in shops
+Require multiple resources to craft
+High-tier items immune to specific debuffs / elemental resistances
+Crafting Slots:
+Tier & Rank dependent (higher tier = more simultaneous crafting)
+Recipe Unlocks:
+Base upgrades / story progression unlock higher-tier recipes
+Rare resources only craftable by higher-ranked players
+Example Crafting Logic:
+Id="crafting_formula"
+Copy code
+ItemTier = BaseTier + (PlayerRank / 3)
+RequiredResources = [{resourceId, quantity}]
+CraftSuccess = 100% if all resources present
+ItemStats = BaseStats * RankMultiplier * ResourceQualityMultiplier
+4️⃣ INVENTORY & CAPACITY
+Player Limits:
+Item Type
+Slots / Max
+Scaling
+Weapons
+1
+Tier-based
+Armor
+1
+Tier-based
+Amulets
+2
+Tier-based
+Consumables
+3
+Base + Rank
+Resources
+Based on Carry Limit (stat + pet/bird bonuses)
+
+Pets
+Start 1 → scales with rank
+
+Birds
+Start 1 → scales with rank
+
+Dump Feature: Permanent deletion; simple confirm button
+5️⃣ BASE DEFENSES & RAID MECHANICS
+Defenses: Arrow Traps, Magic Wards
+Scaling: Upgradable per base tier
+Raid Logic: Random PvP/PvE raids from other players / monsters
+Protection: Vault protects gold; certain upgrades reduce raid effectiveness
+6️⃣ STAT BONUS & TRAINING
+Training Room: Convert time into passive Stat XP
+Stat Scaling: Affected by base tier and training frequency
+Pet/Bird Buffs: Active companions in base increase training efficiency or resource gathering
+7️⃣ UI / INTERFACE
+Base Panel:
+Shows player portrait + HP + pet health
+Room buttons: Storage, Crafting, Training, Rest, Vault, Defenses
+Resource Panel:
+Shows current inventory & carry capacity
+Crafting Panel:
+Shows available recipes, required resources, craft button
+Defense Panel:
+Upgrade / view active traps
+8️⃣ SERVER DATA MODEL
+Id="base_data"
+Copy code
+player.base = {
+  tier: 1-5,
+  rooms: {
+    storage: {capacity, resources: [{resourceId, qty}]},
+    weaponLocker: {capacity, items: [{itemId, qty}]},
+    training: {lastUsedTime, xpGained},
+    vault: {goldStored, interestAccrued},
+    defenses: [{type, level}]
+  },
+  carryLimit: calculatedStat,
+  inventory: {weapons, armor, amulets, consumables, pets, birds}
+}
+
+🌍 ZONES & COMBAT MECHANICS — LOV V2
+1️⃣ ZONE LIST & FUNCTION
+Zone Name
+Activities
+Rank / Unlock
+Story Integration
+Capital City
+Equip/Shop/Guild/Create/Join
+Starting zone
+NPCs, Admin Quests, AI Story triggers
+Glorifac Cave
+Mining / PvE / PvP / Monsters
+Rank Novice+
+Shard / resource quests, monsters tied to story
+Whispering Forest
+Wild Pets / PvE / PvP / Monsters / Gathering
+Rank Novice+
+AI story triggers with NPCs, pet hunts, rare resources
+Lavic Town
+Fishing / Shops / Auction / Story NPCs
+Rank Initiate+
+Fishing quests, spell acquisition, AI story events
+Mystic Tower
+PvE Combat Floors (1–100 per floor, 100 floors total)
+Rank Novice+
+AI-generated trials, Shard progression, boss encounters
+Gandolf Research Labs
+Research / Spell Discovery / Crafting Requirements
+Rank Adept+
+AI quests to unlock crafting recipes or rare spells
+Hell Zone
+PvPvE Battle Royal
+Admin Unlock
+Endgame AI story events, final bosses, shard collection
+Notes:
+Zones locked by rank until first unlock condition is met (floor, story, or resource requirement)
+PvP allowed in Glorifac Cave, Whispering Forest, Arena (Lavic Town PvP restricted)
+AI story triggers appear as icons or prompts → optional tap to engage story
+Static background + animated interactive elements for each zone
+Player portrait always visible bottom-left; interacting entity bottom-right
+2️⃣ COMBAT MECHANICS
+Trigger Methods:
+PvP (Arena / Open Zones)
+Player selects target → Challenge → Target accepts → Turn-based combat
+Actions per turn:
+Attack → Damage based on attack stat
+Defend → Reduces incoming damage by defense stat
+Dodge → Avoid damage if speed higher than opponent’s attack
+Use Spell → Magic attack using Intelligence, cannot be defended
+PvE / Monster Combat
+Tap enemy → Turn-based combat
+Player chooses action → Enemy responds → Rewards on win
+Loss → Sent back to Home Base + applicable debuff timer
+Pet & Bird bonuses apply automatically
+Multi-Enemy Combat
+Select target first → choose action → resolve per target
+Combat Stats:
+Speed → Turn order
+Attack / Defense → Damage calculation
+Luck → Critical chance: CritChance = Luck ÷ 500
+Crit multiplier: ×3 for physical and spell attacks
+Pet / Bird stats add bonuses / extra attacks
+Separate health bars for player, pet, and birds
+3️⃣ ELEMENTAL SYSTEM
+Elements:
+Water, Fire, Air, Earth, Nature, Light, Dark, Plasma, Space, Cronos, Time, Aether, Soul, Mythical Elements (e.g., Void, Celestial, Shadowflame)
+Elemental Multipliers:
+Neutral → 1x
+Resisted → 0.5x
+Strong → 1.25x
+Double Synergy → 2x
+Triple Convergence → 5x
+Full Counter Matrix: Applied for player, pet, and monster interactions
+4️⃣ ZONE RESOURCES & CARRY LIMITS
+Resources spawn per zone → some rare resources tied to specific rank
+Carry limit depends on:
+Player stats
+Pets & Bird bonuses
+Rank
+Some resources usable for crafting, pet feeding, or spell research
+Examples:
+Glorifac Cave → Iron, Silver, Mythril, Crystal, Ruby
+Whispering Forest → Spirit Wood, Beast Materials, Rare Pet Foods
+Lavic Town → Fish (crafting + pet feed), Spell Ingredients
+Mystic Tower → Rare Essence, Tempest Stones
+Hell Zone → Aether Fragments, Mythic Resources
+5️⃣ REWARDS & PROGRESSION
+Combat rewards scale with:
+Enemy level
+Zone difficulty
+Player rank
+PvE Rewards:
+Gold, Resources, Rare Items, XP
+PvP Rewards:
+Gold, Items, Leaderboard points
+Ranked matches affect global zone leaderboards
+Shards & Story Progression:
+Certain zones drop Valor Shards → unlock story progression and higher rank requirements
+6️⃣ UI / INTERFACE
+Zone Selection: Tap to enter → loading screen → static background + interactive elements
+Combat Screen:
+Bottom-left → Player portrait & stats
+Bottom-right → Enemy / NPC / Monster portrait & stats
+Top → Action buttons: Attack, Defend, Dodge, Spell
+Pet & Bird health displayed separately
+Zone Resources: Interactive icons → tap to gather / interact
+7️⃣ SERVER DATA MODEL
+Id="zone_data"
+Copy code
+player.zones = [
+  {
+    zoneId,
+    unlocked: true/false,
+    resourcesCollected: [{resourceId, qty}],
+    enemiesDefeated: [{enemyId, qty}],
+    storyEventsCompleted: [eventId]
+  }
+]
+
+combat = [
+  {
+    combatId,
+    type: "PvP"|"PvE",
+    participants: [{playerId, stats}, {petId, stats}, {birdId, stats}],
+    turnOrder: [playerId, enemyId,...],
+    actions: [{playerId, action, targetId, outcome}],
+    rewards: {gold, items, xp}
+  }
+]
+
+⚔️ PVP ARENA & RANKED PVP — LOV V2
+1️⃣ ARENA TYPES
+Arena Type
+Description
+PvP Effect
+Restrictions
+Casual Arena
+Players can challenge anyone in the same zone or open pool
+Rewards only (Gold, Resources, XP)
+Does not affect leaderboard; players can decline challenges
+Ranked Arena
+Players matched 1v1 by matchmaking algorithm
+Rewards + Leaderboard points; can promote/demote rank
+Must accept challenge; cannot forfeit ranked match
+Notes:
+PvP not allowed in Home Base or Capital City
+PvP allowed in: Glorifac Cave, Whispering Forest, Arena zone
+AI NPCs not part of PvP Arena, only PvE zones
+2️⃣ MATCHMAKING & RANK SYSTEM
+Matchmaking Logic:
+Ranked:
+Match players within ±2 rank tiers
+If none available, expand search gradually
+Casual:
+Challenge anyone in the same zone
+Shows pending challenges and active battles
+Rank Changes (Permanent):
+Defeat higher-ranked opponent → you inherit their rank if eligible
+Lose vs lower-ranked opponent → no rank loss (optional: penalty in rewards)
+Leaderboard Integration:
+Update zone-specific leaderboards real-time
+Tracks: wins, rank, guild contributions
+3️⃣ TURN-BASED COMBAT MECHANICS
+Combat Actions (per turn):
+Attack: Physical attack based on Attack stat
+Defend: Mitigates incoming damage using Defense stat
+Dodge: Evade if Speed > opponent attack
+Use Spell: Magic attack using Intelligence; cannot be defended
+Pets & Birds:
+Active companions automatically act or provide stat bonuses
+Separate health bar displayed
+Combat Outcome:
+Victory → rewards + leaderboard points
+Loss → debuff applied + return to Home Base
+4️⃣ REWARDS & SCALING
+Casual Arena:
+Gold, Resources, XP
+No rank change
+Ranked Arena:
+Gold, Resources, XP
+Rank change if defeating higher-ranked player
+Bonus: Rare crafting materials or Shards for top leaderboard positions
+Scaling:
+Rewards scale by:
+Player rank
+Opponent rank
+Pet & bird level / evolution
+Weapon & armor tier
+5️⃣ UI / INTERFACE
+Arena Lobby:
+Show nearby players online
+Option: challenge or join ranked queue
+Pending challenges list
+Combat Screen:
+Player portrait bottom-left, enemy bottom-right
+Pet & Bird health/status displayed
+Action buttons: Attack, Defend, Dodge, Spell
+Rewards preview after match
+Leaderboard Panel:
+Zone selection → display top players per rank
+Guild badges displayed
+6️⃣ SERVER DATA MODEL
+Id="pvp_data"
+Copy code
+arena = [
+  {
+    arenaId,
+    type: "casual"|"ranked",
+    participants: [{playerId, stats}, {petId, stats}, {birdId, stats}],
+    turnOrder: [playerId, opponentId,...],
+    actions: [{playerId, action, targetId, outcome}],
+    rewards: {gold, items, xp},
+    status: "pending"|"active"|"completed"
+  }
+]
+
+rankings = [
+  {
+    zoneId,
+    players: [{playerId, rank, wins, losses, guildId}],
+    guilds: [{guildId, score, membersOnline}]
+  }
+]
+
+🏰 GUILD MECHANICS — LOV V2
+1️⃣ GUILD CREATION & MANAGEMENT
+Location: Capital City → Guild Hall
+Options:
+Create Guild: Cost in Gold (determined by rank tier)
+Join Guild: Free
+Max Members: 10 per guild
+Server Max Guilds: Adjusted for server size 56 players
+Guild Administration:
+Guild Leader / Officers can manage:
+Guild storage
+Dungeon scheduling
+Guild events
+Perks and upgrades
+Server Data Model:
+Id="guild_model"
+Copy code
+guilds = [
+  {
+    guildId,
+    name,
+    leaderId,
+    officerIds: [],
+    members: [{playerId, rank}],
+    level: 1-10,
+    storage: {resources:[], weapons:[]},
+    currency: "Unity Coins",
+    dungeonsUnlocked: 1-5
+  }
+]
+2️⃣ GUILD STORAGE
+Separate Storage Rooms:
+Resources: Materials, crafting items
+Weapons: Crafted / rare items
+Capacity: Scales with guild level
+Guild Level Storage Example:
+Guild Level
+Resource Capacity
+Weapon Capacity
+1
+500
+50
+2
+750
+75
+3
+1000
+100
+…
+…
+…
+10
+5000
+500
+3️⃣ GUILD DUNGEONS
+Total: 5 Dungeons per guild
+Unlocking: Next dungeon unlocks after previous dungeon completion
+Difficulty:
+Based on online member stats
+Dungeon 2 stronger than Dungeon 1, etc.
+Rewards:
+Unity Coins, resources, rare crafting materials, Shards
+Dungeon Example:
+Dungeon
+Type
+Unlock
+Reward Example
+1
+PvE / Raid
+Always unlocked
+Unity Coins, Common Resources
+2
+PvE / Raid
+After 1
+Better Resources, Rare Shards
+3
+PvE / Raid
+After 2
+Higher-tier crafted items
+4
+PvE / Raid
+After 3
+Epic Shards / Exclusive materials
+5
+PvE / Raid
+After 4
+Mythic-tier items, Shard fragments
+4️⃣ GUILD PERKS
+Unlock perks based on guild level progression
+Examples:
+Level 2 → Guild shop access (weapons, items, skins)
+Level 3 → Increase storage capacity by +50%
+Level 4 → Access higher dungeon levels
+Level 5 → Passive bonus for members (XP or Gold gain +5%)
+Level 6 → Unlock guild-exclusive crafting recipes
+Level 7 → Reduced dungeon cooldowns
+Level 8 → Pet/Bird synergy bonus within guild
+Level 9 → Guild-wide event participation rewards
+Level 10 → Maximum perks + rare shard generation
+5️⃣ GUILD CURRENCY
+Unity Coins
+Earned by:
+Completing guild dungeons
+Participating in guild events
+Used for:
+Guild shop purchases
+Upgrading guild storage & defenses
+Crafting guild-exclusive items
+6️⃣ UI / INTERFACE
+Guild Hall Panel:
+Create / Join guild buttons
+View member list & ranks
+Access guild storage / weapon locker
+Access guild shop
+Launch / schedule dungeon events
+Dungeon Panel:
+Show available dungeons
+Show active members online
+Combat / PvE interface similar to player combat
+Track rewards & completion status
+Guild Shop Panel:
+Weapons, Armor, Amulets, Skins purchasable with Unity Coins
+Some rare items rank-locked
+
+🎣 FISHING & PET/BIRD INTEGRATION — LOV V2
+1️⃣ FISHING MECHANICS
+Location: Lavic Town → Fishing Lake
+Gameplay:
+Tap fishing spot → cast line → tap to reel in → mini-timing mechanic
+Fish caught vary by:
+Zone
+Player Rank
+Luck Stat
+Types of Fish:
+Common Fish: Goldfish, River Trout → usable for gold or minor crafting
+Rare Fish: Tempest Pike, Crystal Carp → high-tier crafting materials
+Mythical Fish: Aetherfin, Shadowfin → top-tier resources & pet feeding
+Uses of Fish:
+Crafting Material → recipes for weapons, amulets, and armor
+Pet Feeding / Bonding → increases pet stats and evolution progress
+Rank Locks:
+Some fish spawn only for higher ranks
+Higher ranks have increased chance for rare / mythical fish
+Carry Limit:
+Depends on player stats, rank, and active pet/bird bonuses
+2️⃣ PET SYSTEM
+Evolution Stages: Baby → Teen → Adult → Elder → Legend → Immortal
+Abilities & Stats:
+Pets provide passive bonuses:
+Stat boosts (Attack, Defense, Speed, Luck, Intelligence)
+Inventory carry increase
+Resource gathering boost
+Active combat role:
+Can attack in PvE & PvP
+Separate health bar from player
+Elemental type affects damage & synergy
+Bond System:
+Time / currency spent with pet increases Bond Level
+Bond bonuses scale with evolution stage
+Rebirth Mechanic:
+Mythic / Immortal pets can reset → permanent stat multipliers
+Skins:
+Cosmetic only
+Achievable via $Valor packs or admin distribution
+Slots:
+Novice → 1 active pet
+Slots increase with rank → max determined by player rank
+3️⃣ BIRD SYSTEM
+Role: Secondary companion, focused on Defense & Speed buffs
+Upgrading:
+Focus Shards & Beak Coins → increase effectiveness
+Evolutions not applicable; buffs scale per bird level
+Combat Use:
+Adds bonus to turn order (Speed)
+Can provide minor defensive buffs to player & pet
+Interaction:
+Feeding & care increases temporary buffs
+Slots increase with player rank
+4️⃣ RESOURCE & CRAFTING INTERACTION
+Fish & pet materials feed resource loops:
+Example: Crystal Carp → Crafting → Mythic Amulet
+Rare fish → boosts pet evolution, unlocks recipes
+Pets can carry resources, increasing carry limits
+Birds can automate minor gathering bonuses if in base or active zone
+5️⃣ UI / INTERFACE
+Fishing Panel:
+Tap lake → cast → mini-game → catch fish
+Display fish rarity & quantity
+Options: Keep for crafting, feed pet, sell for gold
+Pet Panel:
+Show active pets & stats
+Bond level & evolution stage
+Equip pet / remove pet
+Feed / bond actions
+Bird Panel:
+Show active bird & buffs
+Upgrade using Focus Shards / Beak Coins
+Assign to zone for passive bonus
+Combat Panel:
+Pet health & attack displayed separately
+Bird buffs auto-applied
+6️⃣ SERVER DATA MODEL
+Id="pets_birds"
+Copy code
+player.pets = [
+  {
+    petId,
+    name,
+    evolutionStage,
+    bondLevel,
+    stats: {Attack, Defense, Speed, Luck, Intelligence, Health},
+    active: true/false
+  }
+]
+
+player.birds = [
+  {
+    birdId,
+    name,
+    level,
+    buffs: {Defense, Speed},
+    active: true/false
+  }
+]
+
+fishing = [
+  {
+    playerId,
+    fishId,
+    quantity,
+    rarity,
+    zone
+  }
+]
+
+🗡️ WEAPON SHOP — LOV V2
+Structure
+Tier Unlocks: 5 tiers per rank → 15 ranks → 75 tiers total
+Weapons per Tier: 10 weapons each
+Craftable Weapon: 1 per tier (strongest of the tier, weaker than next tier weapons)
+Element / Special Effects: Unlocks per rank progression
+Pricing: Gold or Rubies depending on rarity, rank-locked
+Max Equippable: 1 weapon per player
+Example Template for Each Weapon
+Copy code
+
+Weapon Name: [Unique Name]
+Tier: [1-75]
+Rank Required: [Novice → Mythical Legend]
+Element: [None / Water / Fire / etc.] 
+Special Effect: [None / Poison / Life Steal / Spell Boost]
+Stats: Attack = X, Defense = Y, Speed = Z, Intelligence = W
+Craftable: [Yes / No]
+Price: [Gold / Rubies]
+Tier & Rank Example
+Tier 1–5 → Novice
+Tier 6–10 → Initiate
+Tier 11–15 → Adept
+…
+Tier 71–75 → Mythical Legend
+Craftable Weapon Example per Rank:
+Novice → “Iron Fang Sword” (strongest of Tier 1–5)
+Initiate → “Flamebrand Blade” (Tier 6–10)
+…
+Mythical Legend → “Aetherius Edge” (Tier 71–75)
+Unlock Example for Element/Effect:
+Rank 1–3 → No element, basic attack boost
+Rank 4–6 → Fire / Water / Poison effects
+Rank 7–10 → Lightning, Life Steal, Speed Boost
+Rank 11+ → Rare effects like Spell Amplify, Crit Immunity, Double Strike
+
+🗡️ Weapon Shop — Novice Rank (Tier 1–5)
+Tier 1 Weapons (Novice, Rank 1)
+Name
+Craftable
+Element
+Special Effect
+Stats (ATK/DEF/SPD/INT)
+Price (Gold)
+Iron Fang Sword
+Yes
+None
++5 ATK
+10/2/0/0
+500
+Wooden Cleaver
+No
+None
+None
+7/1/0/0
+250
+Bronze Dagger
+No
+None
+Critical +5%
+6/1/2/0
+300
+Oak Mace
+No
+None
+Stun chance 5%
+8/3/0/0
+350
+Short Spear
+No
+None
++2 SPD
+7/2/1/0
+275
+Rusty Axe
+No
+None
++2 ATK vs monsters
+8/2/0/0
+300
+Training Sword
+No
+None
++1 INT
+6/1/0/1
+250
+Novice Saber
+No
+None
++5 HP
+7/1/1/0
+275
+Basic Halberd
+No
+None
++1 DEF
+8/2/0/0
+325
+Wooden Rapier
+No
+None
+Critical +3%
+6/1/2/0
+260
+Craftable Weapon Highlight: Iron Fang Sword — strongest of Tier 1, weaker than Tier 2 weapons.
+Tier 2 Weapons (Novice, Rank 2)
+Name
+Craftable
+Element
+Special Effect
+Stats
+Price
+Flamewood Sword
+Yes
+Fire
++5 ATK, Burn chance
+12/3/0/0
+700
+Bronze Short Sword
+No
+None
++3 ATK
+10/2/0/0
+600
+Wooden Axe
+No
+None
++1 SPD
+11/2/0/0
+650
+Iron Dagger
+No
+None
+Critical +7%
+9/1/3/0
+600
+Novice Halberd
+No
+None
++2 DEF
+11/3/0/0
+675
+Ember Spear
+No
+Fire
++3 ATK vs monsters
+10/2/1/0
+700
+Apprentice Saber
+No
+None
++2 HP per hit
+10/2/1/0
+650
+Bronze Mace
+No
+None
+Stun 5%
+11/3/0/0
+675
+Wooden Rapier
+No
+None
++1 INT
+9/1/2/1
+600
+Short Sword of Valor
+No
+None
+Critical +5%
+10/2/0/0
+650
+Craftable Weapon Highlight: Flamewood Sword — strongest of Tier 2.
+Tier 3 Weapons (Novice, Rank 3)
+Name
+Craftable
+Element
+Special Effect
+Stats
+Price
+Frost Edge
+Yes
+Water
++5 ATK, Freeze chance
+14/4/0/0
+900
+Bronze Claymore
+No
+None
++3 ATK
+12/3/0/0
+850
+Oak Warhammer
+No
+None
+Stun 7%
+13/5/0/0
+875
+Silver Dagger
+No
+None
+Critical +10%
+11/2/4/0
+825
+Novice Pike
+No
+None
++2 SPD
+12/3/1/0
+850
+Flame Spear
+No
+Fire
++4 ATK vs monsters
+13/3/0/0
+900
+Apprentice Longsword
+No
+None
++3 HP per hit
+12/3/0/0
+875
+Bronze Saber
+No
+None
++2 DEF
+12/4/0/0
+850
+Oak Rapier
+No
+None
++2 INT
+11/2/2/1
+825
+Novice Halberd +1
+No
+None
+Critical +7%
+13/3/0/0
+875
+Craftable Weapon Highlight: Frost Edge — strongest Tier 3 weapon.
+Tier 4 Weapons (Novice, Rank 4)
+Name
+Craftable
+Element
+Special Effect
+Stats
+Price
+Ember Blade
+Yes
+Fire
++6 ATK, Burn chance
+16/5/0/0
+1100
+Bronze Longsword
+No
+None
++4 ATK
+14/4/0/0
+1050
+Oak Glaive
+No
+None
+Stun 8%
+15/6/0/0
+1075
+Iron Dagger +1
+No
+None
+Critical +12%
+13/3/5/0
+1025
+Flame Pike
+No
+Fire
++5 ATK vs monsters
+14/4/1/0
+1100
+Novice Claymore
+No
+None
++3 SPD
+15/5/0/0
+1075
+Apprentice Saber
+No
+None
++4 HP per hit
+14/4/0/0
+1075
+Bronze Warhammer
+No
+None
++3 DEF
+14/5/0/0
+1050
+Oak Longsword
+No
+None
++3 INT
+13/3/3/1
+1025
+Flame Rapier
+No
+Fire
+Critical +10%
+14/4/0/0
+1100
+Craftable Weapon Highlight: Ember Blade — strongest Tier 4.
+Tier 5 Weapons (Novice, Rank 5)
+Name
+Craftable
+Element
+Special Effect
+Stats
+Price
+Inferno Saber
+Yes
+Fire
++7 ATK, Burn & Life Steal
+18/6/0/0
+1300
+Bronze Longspear
+No
+None
++5 ATK
+16/5/0/0
+1250
+Oak Warblade
+No
+None
+Stun 10%
+17/7/0/0
+1275
+Iron Rapier
+No
+None
+Critical +15%
+15/4/6/0
+1225
+Flame Greatsword
+No
+Fire
++6 ATK vs monsters
+16/5/1/0
+1300
+Novice Halberd +2
+No
+None
++4 SPD
+17/6/0/0
+1275
+Apprentice Claymore
+No
+None
++5 HP per hit
+16/5/0/0
+1275
+Bronze Warblade
+No
+None
++4 DEF
+16/6/0/0
+1250
+Oak Longsword +1
+No
+None
++4 INT
+15/4/4/1
+1225
+Flame Shortblade
+No
+Fire
+Critical +12%
+16/5/0/0
+1300
+Craftable Weapon Highlight: Inferno Saber — strongest Tier 5 weapon.
+
+Craft remaining tiers in this way but stronger
+
+🛡️ Armor Shop — Novice Rank (Tier 1–5)
+Tier 1 Armors (Novice, Rank 1)
+Name
+Craftable
+Elemental Resist
+Special Effect
+Stats (DEF/HP/SPD/INT)
+Price (Gold)
+Iron Breastplate
+Yes
+None
++5 DEF
+10/50/0/0
+500
+Leather Vest
+No
+None
++2 DEF
+7/30/1/0
+250
+Wooden Guard
+No
+None
++1 SPD
+6/25/2/0
+300
+Bronze Plate
+No
+None
++5 HP
+8/40/0/0
+350
+Novice Chainmail
+No
+None
++1 INT
+7/35/0/1
+275
+Oak Armor
+No
+None
++3 DEF vs monsters
+8/40/0/0
+300
+Training Guard
+No
+None
+Critical damage reduction +2%
+6/30/0/0
+250
+Novice Robe
+No
+None
++2 INT
+7/30/0/2
+275
+Wooden Plate
+No
+None
++1 DEF
+8/35/0/0
+325
+Bronze Cuirass
+No
+None
++3 HP
+7/40/0/0
+260
+Craftable Armor Highlight: Iron Breastplate — strongest Tier 1 armor.
+Tier 2 Armors (Novice, Rank 2)
+Name
+Craftable
+Elemental Resist
+Special Effect
+Stats
+Price
+Flame Guard
+Yes
+Fire +5%
++6 DEF
+12/55/0/0
+700
+Bronze Chestplate
+No
+None
++4 DEF
+10/50/0/0
+600
+Leather Tunic
+No
+None
++2 SPD
+11/40/2/0
+650
+Iron Robe
+No
+None
++5 HP
+10/50/0/0
+700
+Novice Mail
+No
+None
++2 INT
+11/45/0/1
+675
+Ember Vest
+No
+Fire +3%
++3 DEF vs monsters
+10/50/0/0
+700
+Apprentice Guard
+No
+None
+Crit damage reduction +3%
+10/45/0/0
+650
+Bronze Robe
+No
+None
++3 INT
+10/45/0/2
+675
+Oak Chestplate
+No
+None
++4 HP
+11/50/0/0
+700
+Novice Armor +1
+No
+None
++2 SPD
+12/50/0/0
+675
+Craftable Armor Highlight: Flame Guard — strongest Tier 2 armor.
+Tier 3 Armors (Novice, Rank 3)
+Name
+Craftable
+Elemental Resist
+Special Effect
+Stats
+Price
+Frost Plate
+Yes
+Water +5%
++7 DEF
+14/60/0/0
+900
+Bronze Mail
+No
+None
++5 DEF
+12/55/0/0
+850
+Oak Tunic
+No
+None
++3 SPD
+13/50/2/0
+875
+Silver Robe
+No
+None
++6 HP
+12/60/0/0
+825
+Novice Hauberk
+No
+None
++3 INT
+13/55/0/1
+850
+Ice Vest
+No
+Water +3%
++4 DEF vs monsters
+12/60/0/0
+900
+Apprentice Guard +1
+No
+None
+Crit reduction +5%
+12/55/0/0
+875
+Bronze Chestplate +1
+No
+None
++4 HP
+12/60/0/0
+850
+Oak Armor +1
+No
+None
++3 INT
+13/55/0/1
+825
+Novice Plate
+No
+None
++3 SPD
+14/60/0/0
+875
+Craftable Armor Highlight: Frost Plate — strongest Tier 3 armor.
+Tier 4 Armors (Novice, Rank 4)
+Name
+Craftable
+Elemental Resist
+Special Effect
+Stats
+Price
+Ember Plate
+Yes
+Fire +7%
++8 DEF
+16/65/0/0
+1100
+Bronze Hauberk
+No
+None
++6 DEF
+14/60/0/0
+1050
+Oak Robe
+No
+None
++4 SPD
+15/55/2/0
+1075
+Iron Chestplate
+No
+None
++7 HP
+14/65/0/0
+1025
+Novice Mail +1
+No
+None
++4 INT
+15/60/0/1
+1050
+Flame Vest
+No
+Fire +5%
++5 DEF vs monsters
+14/65/0/0
+1100
+Apprentice Armor
+No
+None
+Crit reduction +6%
+14/60/0/0
+1075
+Bronze Plate +1
+No
+None
++5 HP
+14/65/0/0
+1050
+Oak Chestplate +1
+No
+None
++4 INT
+15/60/0/1
+1025
+Ember Robe
+No
+Fire +5%
++3 SPD
+16/65/0/0
+1100
+Craftable Armor Highlight: Ember Plate — strongest Tier 4 armor.
+Tier 5 Armors (Novice, Rank 5)
+Name
+Craftable
+Elemental Resist
+Special Effect
+Stats
+Price
+Inferno Guard
+Yes
+Fire +10%
++9 DEF, Burn Resistance
+18/70/0/0
+1300
+Bronze Plate +2
+No
+None
++7 DEF
+16/65/0/0
+1250
+Oak Mail
+No
+None
++5 SPD
+17/60/2/0
+1275
+Iron Armor +1
+No
+None
++8 HP
+16/70/0/0
+1225
+Novice Hauberk +1
+No
+None
++5 INT
+17/65/0/1
+1250
+Flame Chestplate
+No
+Fire +7%
++6 DEF vs monsters
+16/70/0/0
+1300
+Apprentice Robe +1
+No
+None
+Crit reduction +8%
+16/65/0/0
+1275
+Bronze Guard +1
+No
+None
++6 HP
+16/70/0/0
+1250
+Oak Plate +1
+No
+None
++5 INT
+17/65/0/1
+1225
+Inferno Plate
+No
+Fire +10%
++4 SPD
+18/70/0/0
+1300
+Craftable Armor Highlight: Inferno Guard — strongest Tier 5 armor.
+
+🐾 Pets System — LOV V2
+1. Acquisition
+Pet Shop: Purchase pets using Gold; locked by Rank and element type.
+Story Mode: Some pets are unlocked through completing story quests in zones.
+Breeding: Players can breed two owned pets (must be compatible elements) to create a new pet. Resulting pet inherits element traits from parents, may unlock rare abilities.
+2. Evolutions & Stats
+Stages: Baby → Teen → Adult → Elder → Legend → Immortal
+XP Gain: Pets gain XP from:
+Participating in battles (PvE or PvP)
+Story quests
+Feeding special foods (crafted or caught)
+Evolution Requirements:
+XP bar full
+Rank & story milestones met
+Unlocks new abilities, higher stats, and possibly new element affinities
+Stats by Stage:
+Attack: scales with stage + base stat of pet type
+Defense: scales with stage + base stat of pet type
+Speed: minor increase per stage
+Intelligence: increases spell effectiveness if applicable
+Health: separate HP bar, scales with stage
+Example:
+Stage
+Attack
+Defense
+Speed
+Int
+HP
+Notes
+Baby
+5
+3
+5
+1
+20
+Basic abilities only
+Teen
+10
+7
+7
+3
+35
+Unlock 1 special attack
+Adult
+15
+12
+8
+5
+50
+Unlock 2 abilities, stronger element effect
+Elder
+20
+17
+9
+7
+70
+Ability upgrades, passive buffs
+Legend
+25
+23
+10
+10
+95
+Powerful abilities, can counter more elements
+Immortal
+30
+30
+12
+12
+120
+Max evolution, strongest form, full abilities unlocked
+3. Elements & Counters
+Elements: Fire, Water, Air, Earth, Nature, Light, Dark, Plasma, Space, Cronos, Time, Aether, Soul, Mythical
+Pet Elemental Matrix:
+Fire > Nature > Air > Earth > Water > Fire
+Light > Dark, Dark > Light
+Plasma > Time, Time > Space, Space > Cronos, Cronos > Soul, Soul > Aether, Aether > Plasma
+Double elements for rare/legendary pets, can cause 5× damage if convergent with player element
+4. Combat & PvP / PvE
+Pets participate in battles alongside the player.
+Can attack or defend, passive buffs apply to owner.
+Separate HP bar visible on battle screen.
+Elemental counters apply in PvE and PvP.
+Pet skills may include:
+Elemental attack (matches pet element)
+Buff / debuff for player or enemies
+Passive HP regen / stat boost
+5. Pet Bonding System
+Bonding increases through:
+Time spent with pet (activity in base, travel, story)
+Gift giving: Soul Shards, Pet Food
+Bond Levels: Tiered bonuses for the player:
+Minor: +1-5% to stats
+Medium: +5-10% to stats + small passive effects
+Major: +10-20% to stats + unlock special abilities for pet
+6. Inventory & Carry Limits
+Max Equippable Pets: per previous definition (increases with rank)
+Excess pets: stored in permanent Pet Vault (cannot be reclaimed if dumped)
+Pet Food / Consumables: Rank-locked, needed for XP and bonding
+7. UI & Interaction
+Pet portrait always visible during battle and in home base interface
+Button-based interaction:
+Feed
+Check Stats / Evolution
+Send to battle / equip
+Evolution notification shows a “ready to evolve” prompt with option to evolve
+8. Rank & Rarity Restrictions
+Rare or high-tier pets locked behind rank
+Certain elements or abilities only available at mid or high ranks
+Legendary / Mythic pets can be obtained only via story, breeding, or $Valor / admin events
+
+🐦 Bird System — LOV V2
+1. Acquisition
+Bird Shop: Purchase birds using Beak Coins only.
+Beak Coins: Earned in Mystic Tower as floor rewards, PvE/PvP events, or admin gifts.
+Breeding / Story Unlocks: Optional later, currently shop only.
+2. Bird Stats & Role
+Birds are secondary companions that primarily focus on Defense and Speed buffs, but can also provide minor attack bonuses.
+Stats:
+Stat
+Notes
+Attack
+Minor, used in PvE or passive effects
+Defense
+Primary stat, reduces incoming damage for player
+Speed
+Primary stat, affects turn order in battle
+Health
+Minor, separate HP bar not mandatory
+Intelligence
+Optional, enhances certain spells or buffs
+Unique Abilities:
+Some birds have passive auras: e.g., +5% Speed to all party members, +10% Defense.
+Higher-tier birds may unlock active skills usable once per battle.
+3. Bird Upgrades
+Upgrading Mechanics:
+Use Focus Shards + Beak Coins.
+Focus Shards obtained in Mystic Tower or as guild/reward event prizes.
+Evolution / Tier System:
+Bird stages: Chick → Fledgling → Adult → Elder → Legendary
+Each stage increases Speed/Defense and unlocks special effects
+4. PvP & PvE Integration
+Birds contribute passive buffs during PvP and PvE.
+Example effects:
+Speed boost affects initiative (turn order)
+Defense boost mitigates damage
+Some rare birds can counter elements (e.g., Air bird reduces Fire damage)
+Active Skills: Some birds can heal pets or player once per battle depending on tier.
+5. Rank & Element Restrictions
+Birds are rank-locked: stronger birds require higher player ranks.
+Certain elemental birds only available at higher ranks (e.g., Aether, Time, Soul).
+Legendary / Mythic birds reserved for $Valor packs or admin gifts.
+6. UI & Interaction
+Birds have a portrait icon, visible in battle and home base.
+Menu options:
+Equip / Unequip
+Upgrade (Focus Shards + Beak Coins)
+View Stats / Abilities
+Can show active buffs via small icons during battle.
+7. Carry & Equip Limits
+Max 1 bird can be equipped at a time (buffs applied to player).
+Upgrade storage handled with player inventory or home base / guild vault.
+
+LOV V2 — Strict Build Rules & Admin Guide
+I. AI Story & NPC Rules
+Story Control:
+AI only manages Story Mode prompts, NPC interactions, and quest events.
+Players cannot override AI, request cheats, or gifts.
+AI cannot modify player stats, race, rank, or inventory beyond what is unlocked.
+Main story arcs (Acts I-IV) are unskippable.
+AI tracks player stats, rank, inventory, and only allows actions they are eligible for.
+NPC Rules:
+NPCs appear only when story mode triggers.
+NPC portraits are static images; if none exist, show all-black silhouette.
+NPCs in zones are interactive via buttons only.
+Backdrops & Visuals:
+Each zone has static, animated, interactive background reflecting its environment:
+Water zones → blue/calm visuals
+Forests → greens & wildlife
+Lava/mountain → reds/oranges, animated lava flow
+Mystic Tower → magical, arcane aesthetic
+Player portrait always visible bottom-left; target (enemy/NPC) bottom-right
+Button-Based Actions:
+Players use buttons for all interactions (fight, gather, craft, feed pet, use spell, etc.)
+Story commands appear via AI text prompts without overriding gameplay
+II. Core Gameplay Rules
+Races:
+14 unique races, 1 per account, permanent choice.
+Each race has: base stats, zone affinities, passive racial skill, elemental synergy.
+Ranks & Levels:
+15 ranks, 10 levels per rank → 150 levels total
+Rank unlocks zones, resources, abilities, spells, pets, birds, crafting items
+Stats & Potential:
+Base stat = race base + rank base + (Vitality × 8)
+Critical hit chance = Luck ÷ 5
+Critical multiplier = ×3
+Spell attacks can crit
+Inventory & Equipment Limits:
+Weapons: 1 equipped
+Armor: 1 equipped
+Amulets: 2 equipped
+Consumables: 3 equipped
+Pets: rank-based max
+Birds: 1 equipped
+Resources: rank-based carry limit
+Items/Resources can be dumped permanently
+Combat:
+Turn order = Speed stat
+PvP/PvE available in all zones except home base & capital city
+Player actions: Attack, Defend, Dodge, Use Spell
+Pets & Birds contribute: Pets attack/defend, Birds buff
+Spells:
+Only 1 spell equippable at a time
+Acquired via Auction or Research Lab only
+Intelligence stat applies to spell effectiveness
+III. Zones & Content
+Zone
+Content
+Unlock/Restriction
+Capital City
+Home Base, Guild Hall, Shops, Arena
+Starting zone, rank-independent
+Glorifac Cave
+Mining, PvE, PvP, Monsters
+Rank-locked resources, carry limit applies
+Whispering Forest
+Wild Pets, PvE, PvP, Monsters, NPCs
+Rank-locked resources, some rare monsters
+Lavic Town
+Fishing, Shops, Story, NPCs, Spell Auction
+Fishing requires rod, some items rank-locked
+Mystic Tower
+PvE floors 1–100, Levels 1–100 per floor
+Rank-lock floors & enemies
+Gandolf Research Lab
+Research, spell crafting, NPC interaction
+Rank-restricted recipes
+Hell Zone
+Battle Royale PvPvE, Mythic rewards
+Admin unlock only
+Zones locked until player meets rank, quest, or story conditions
+Visuals: animated interactive backgrounds
+IV. Items & Shops
+Weapons, Armor, Amulets:
+15 ranks × 5 tiers → 75 tiers of each
+10 items per tier (1 craftable per tier)
+Elemental effects unlock by rank
+Craftable = strongest of tier, weaker than next tier
+Shops:
+Weapon/Armor/Amulet Shops: Gold, Rubies, or $Valor (special packs)
+Resource Trade Shop: Converts common resources, rare resources non-convertible
+Pet Shop: Gold, rank-locked
+Bird Shop: Beak Coins, upgrades via Focus Shards
+$Valor Shop: Real-money packs with skins, exclusive pets, consumables
+Auction House:
+Gold-only for spells
+$Valor-only VIP auctions for exclusive items
+V. Pets & Birds
+Pets: Baby → Immortal, XP bar triggers evolution, separate HP bar, attack/defend, elements, bonding via time and gifts, rank & story locked
+Birds: Chick → Legendary, buff player stats (Speed/Defense), upgrade via Focus Shards + Beak Coins, 1 equipped max
+VI. Guild System
+Max members: 10 per guild
+Max guild level: 10
+Guild perks per level:
+Storage capacity
+Guild shop access
+Dungeon unlocks/limits
+Special rewards
+Guild Dungeons: 5 total, increasing difficulty, scale based on online members’ stats
+VII. Leaderboards & Achievements
+Leaderboards: Separate per zone, permanent rankings
+Achievements: Only rank titles and badges visible; cosmetics cannot be unlocked by achievements
+Titles: Max 3 equipable titles (player, guild, rank)
+VIII. Admin Interface
+Admin account completely separate:
+Can view all player stats, inventories, leaderboards
+Add/gift items, pets, birds, spells, $Valor
+Create quests and events
+Cannot play the game directly
+Admin panel includes:
+Player search & stats
+Inventory management
+Rank and guild management
+Event creation
+IX. Build Instructions for Replit TXT/Game File
+Folders & Files:
+Copy code
+
+/zones/
+    /capital_city.txt
+    /glorifac_cave.txt
+    /whispering_forest.txt
+    ...
+/items/
+    /weapons.txt
+    /armor.txt
+    /amulets.txt
+    /spells.txt
+    /consumables.txt
+/pets/
+    /pet_list.txt
+/birds/
+    /bird_list.txt
+/players/
+    /player_data/
+/admin/
+    /admin_interface.txt
+/story/
+    /act1.txt
+    /act2.txt
+    /act3.txt
+    /act4.txt
+/shops/
+    /weapon_shop.txt
+    /armor_shop.txt
+    /amulet_shop.txt
+    /pet_shop.txt
+    /bird_shop.txt
+    /valor_shop.txt
+/settings/
+    /rules.txt
+    /ai_rules.txt
+Populate each file with:
+Predefined items, pets, birds, weapons, spells, consumables
+Story prompts & AI rules
+Rank restrictions, resource requirements
+AI Rules (ai_rules.txt):
+Enforce unskippable story, no cheats, cannot change race or rank
+Only trigger story events in relevant zones
+Cannot override player stats or admin actions
+Link zones to items, pets, birds, and NPCs: each zone file contains:
+Zone name, visual backdrop, resources, enemies, story triggers, rank locks, PvP/PvE triggers
+UI Rules:
+Player portrait always bottom-left, interacting entity bottom-right
+Buttons for all actions (fight, gather, craft, feed, spell, challenge)
+Story mode overlay when AI event triggers, can opt-in
+
+LOV V2 — Races Build & Implementation Guide
+1️⃣ File Structure
+Copy code
+
+/races/
+    /race_list.txt           # Main list of all 14 races
+    /race_[name]_stats.txt   # Base stats and scaling per rank
+    /race_[name]_skills.txt  # Active and passive abilities per rank
+    /race_[name]_portraits/  # Folder for static portraits and skins
+        /default.png
+        /skin1.png
+        ...
+        /skin20.png
+2️⃣ Race Base Stats
+Each race has:
+Stat
+Description
+Strength
+Affects attack damage
+Defense
+Reduces damage taken
+Speed
+Determines turn order and dodge success
+Intelligence
+Affects spells and magic attacks
+Luck
+Crit chance, trick chance, loot outcomes
+Vitality
+Contributes to HP and resistances
+Scaling Formula per Rank:
+Copy code
+
+Stat at Rank = Base Stat + (Rank Level × Growth Factor) + (Vitality × 8)
+Rank Level = 1–150
+Growth Factor = customizable per race/stat
+Example: Titan Str = 10 Base + (Rank Level × 2)
+3️⃣ Race Abilities & Passives
+3a. Skill Tree Structure
+Each race has a skill tree unlocked progressively by rank
+1 active ability + 1 passive ability equipable at any time
+Abilities unlocked per rank milestone
+Abilities can be replaced or swapped at milestone unlock
+Skill Tree Example (Titan):
+Rank
+Unlock
+Active Ability
+Passive Ability
+Novice
+Level 1
+Power Strike
+Sturdy Defense
+Initiate
+Level 11
+Earthquake Smash
+Enduring Form
+Adept
+Level 21
+Titan Roar
+Resist Fire
+Vanguard
+Level 31
+Ground Slam
+Extra HP
+...
+...
+...
+...
+Mythical Legend
+Level 150
+Colossal Fury
+Ultimate Fortitude
+Repeat for all 14 races, modifying abilities and passives to match race flavor.
+3b. Ability Rules
+Active Abilities:
+Can be used in PvP or PvE
+Scale with player stats + pet buffs
+Damage / effect scales with rank & element synergy
+Passive Abilities:
+Apply constant bonuses to stats or combat outcomes
+Examples: +10% Crit Chance, +5% Speed, +15 HP, Reduce cooldowns
+4️⃣ Race Zone Affinity
+Each race has preferred zones for bonuses:
+Bonus XP, resource gathering, or element multiplier
+Example:
+Titan → Glorifac Cave (Mining bonus)
+Elf → Whispering Forest (Speed / PVE bonus)
+Fae → Lavic Town (Luck / Fishing bonus)
+Implement affinity multiplier in zone scripts:
+Copy code
+
+Bonus = Base Resource × Affinity Multiplier
+5️⃣ Portraits & Skins
+Default Portrait: always bottom-left in UI
+Skin Portraits: 20 per race
+Portrait updates when:
+Player changes skin (applied via $Valor pack or admin)
+Player evolves rank (optional cosmetic changes)
+Portrait files must match: /races/race_[name]_portraits/skinX.png
+6️⃣ Integration Rules
+Races → Stats → Pets / Weapons / Elements / Spells:
+Abilities and passives interact with pets and birds (e.g., element synergy)
+Player rank must be validated before using higher-tier abilities, spells, or resources
+AI Story Mode:
+Race affects story prompts and NPC interactions
+Only unlocked abilities and passives can appear as options in story or battle
+Strict Admin Rule:
+Admin account cannot play, only manage races, stats, abilities, skins, and unlocks
+
+LOV V2 — Full 14 Races (Corrected)
+#
+Race
+Focus/Flavor
+Base Stats Example (Novice / Rank 1)
+Zone Affinity
+Element
+1
+Titan
+Strength/Defense, Colossal Power
+Str 15, Def 12, Spd 5, Int 3, Luck 2, Vit 10
+Glorifac Cave
+Earth, Fire
+2
+Fae
+Luck/Speed, Nature
+Str 5, Def 5, Spd 12, Int 8, Luck 15, Vit 6
+Whispering Forest
+Nature, Air
+3
+Elf
+Speed/Intelligence
+Str 7, Def 6, Spd 12, Int 10, Luck 10, Vit 6
+Whispering Forest
+Air, Nature
+4
+Dwarf
+Strength/Defense
+Str 12, Def 14, Spd 4, Int 4, Luck 4, Vit 12
+Glorifac Cave
+Earth, Fire
+5
+Orc
+Strength/Vitality
+Str 14, Def 10, Spd 6, Int 3, Luck 3, Vit 12
+Glorifac Cave
+Fire, Earth
+6
+Human
+Balanced
+Str 8, Def 8, Spd 8, Int 8, Luck 8, Vit 8
+Capital City
+Balanced
+7
+Vampire
+Dark, Life Steal, Str/Luck Focus
+Str 12, Def 8, Spd 10, Int 6, Luck 12, Vit 8
+Whispering Forest
+Dark, Blood
+8
+Celestian
+Light & Magic, High Intelligence
+Str 4, Def 5, Spd 10, Int 14, Luck 8, Vit 6
+Lavic Town
+Light
+9
+Ghost
+Intangible, Speed/Luck, PvE Evasion
+Str 5, Def 4, Spd 14, Int 10, Luck 12, Vit 6
+Whispering Forest
+Shadow, Soul
+10
+Titanic
+Colossal Strength/Defense
+Str 15, Def 15, Spd 4, Int 3, Luck 3, Vit 14
+Glorifac Cave
+Earth
+11
+Seraph
+Flying, Light/Air, High Speed
+Str 6, Def 6, Spd 14, Int 10, Luck 8, Vit 6
+Lavic Town
+Light, Air
+12
+Necromancer
+Dark Magic, High Intelligence
+Str 5, Def 5, Spd 8, Int 14, Luck 10, Vit 6
+Gandolf Research Lab
+Dark
+13
+Chronos
+Time Element, Spd/Int, Medium Str
+Str 6, Def 6, Spd 14, Int 12, Luck 6, Vit 8
+Mystic Tower
+Time, Cronos
+14
+Aetherian
+Aether/Soul, Balanced Int/Vit
+Str 8, Def 8, Spd 8, Int 12, Luck 8, Vit 10
+Mystic Tower
+Aether, Soul
+
+1️⃣ Titan.txt
+Copy code
+
+[RACE: Titan]
+[DESCRIPTION: Colossal Strength and Defense, Earth & Fire affinity]
+[ZONE_AFFINITY: Glorifac Cave]
+[ELEMENTS: Earth, Fire]
+
+[BASE_STATS]
+Str=15
+Def=12
+Spd=5
+Int=3
+Luck=2
+Vit=10
+HP=100+(Str*5)+(Def*3)+(Level*10)+(Vit*8)
+
+[SCALING_PER_LEVEL]
+Str=+2
+Def=+1.5
+Spd=+0.3
+Int=+0.2
+Luck=+0.1
+Vit=+0.5
+
+[SKILLS]
+# Format: Rank, Active, Passive, Notes
+1, Power Strike, Sturdy Defense, Basic Strength attack & defense bonus
+2, Earthquake Smash, Enduring Form, AoE ground attack, +HP
+3, Titan Roar, Resist Fire, Stun 1 turn, Fire resistance
+...
+150, Colossal Fury, Ultimate Fortitude, Max damage + passive synergy
+
+[ELEMENTS]
+Earth=StrongAgainst:Fire,WeakAgainst:Water
+Fire=StrongAgainst:Air,WeakAgainst:Water
+Water=StrongAgainst:Fire,WeakAgainst:Earth
+Air=StrongAgainst:Earth,WeakAgainst:Fire
+Nature=StrongAgainst:Water,WeakAgainst:Fire
+Light=StrongAgainst:Dark,WeakAgainst:Shadow
+Dark=StrongAgainst:Light,WeakAgainst:Aether
+Plasma=StrongAgainst:Space,WeakAgainst:Cronos
+Space=StrongAgainst:Time,WeakAgainst:Plasma
+Time=StrongAgainst:Cronos,WeakAgainst:Space
+Cronos=StrongAgainst:Time,WeakAgainst:Plasma
+Aether=StrongAgainst:Dark,WeakAgainst:Void
+Soul=StrongAgainst:Shadow,WeakAgainst:Light
+Void=StrongAgainst:Aether,WeakAgainst:Celestial
+Celestial=StrongAgainst:Void,WeakAgainst:Soul
+Shadow=StrongAgainst:Light,WeakAgainst:Soul
+
+[ZONE_BONUSES]
+Glorifac Cave=+10% Mining Yield,+5% PvE Damage
+Whispering Forest=+5% Pet Bonding Chance
+Lavic Town=+3% Luck for Fishing
+Mystic Tower=+2% Strength Scaling on Floors
+
+[SKINS]
+Titan_Bronze=/races/titan_portraits/bronze.png
+Titan_Iron=/races/titan_portraits/iron.png
+Titan_Steel=/races/titan_portraits/steel.png
+Titan_Obsidian=/races/titan_portraits/obsidian.png
+Titan_Gold=/races/titan_portraits/gold.png
+Titan_Sapphire=/races/titan_portraits/sapphire.png
+Titan_Ruby=/races/titan_portraits/ruby.png
+Titan_Emerald=/races/titan_portraits/emerald.png
+Titan_Mythril=/races/titan_portraits/mythril.png
+Titan_Mythic=/races/titan_portraits/mythic.png
+... (remaining 10 for $Valor/Admin unlock)
+
+[PET_SYNERGY]
++10% Pet Damage if element matches
++5% Race damage if pet active
+Special Ability triggers if pet active & element matches
+
+[NOTES]
+- All abilities scale automatically per stats & rank
+- 1 active + 1 passive equipable
+- 20 skins per race: 10 unlockable via rank, 10 via $Valor/Admin
+- Carry and inventory limits scale per rank
+2️⃣ Fae.txt
+Copy code
+
+[RACE: Fae]
+[DESCRIPTION: Agile, Luck-focused, Nature & Air affinity]
+[ZONE_AFFINITY: Whispering Forest]
+[ELEMENTS: Nature, Air]
+
+[BASE_STATS]
+Str=5
+Def=5
+Spd=12
+Int=8
+Luck=15
+Vit=6
+HP=100+(Str*5)+(Def*3)+(Level*10)+(Vit*8)
+
+[SCALING_PER_LEVEL]
+Str=+0.5
+Def=+0.5
+Spd=+1.2
+Int=+0.7
+Luck=+1.0
+Vit=+0.3
+
+[SKILLS]
+1, Swift Strike, Lucky Charm, Basic attack with speed bonus
+2, Nature's Touch, Evasive Form, Minor heal + dodge bonus
+3, Wind Gust, Leaf Barrier, AoE attack + small defense buff
+...
+150, Elemental Convergence, Ultimate Agility, Max speed + passive synergy
+
+[ELEMENTS]
+# Same 16-element counter matrix as Titan
+
+[ZONE_BONUSES]
+Whispering Forest=+10% Pet Bonding Chance,+5% Gather Yield
+Glorifac Cave=+2% Mining Yield
+Lavic Town=+3% Luck for Fishing
+Mystic Tower=+2% Speed Scaling on Floors
+
+[SKINS]
+Fae_Wildwood=/races/fae_portraits/wildwood.png
+Fae_Moonlit=/races/fae_portraits/moonlit.png
+Fae_Sunshadow=/races/fae_portraits/sunshadow.png
+Fae_Starfall=/races/fae_portraits/starfall.png
+Fae_Elvenwood=/races/fae_portraits/elvenwood.png
+Fae_Mystic=/races/fae_portraits/mystic.png
+Fae_Forestlight=/races/fae_portraits/forestlight.png
+Fae_Breeze=/races/fae_portraits/breeze.png
+Fae_Aether=/races/fae_portraits/aether.png
+Fae_Mythic=/races/fae_portraits/mythic.png
+... (remaining 10 for $Valor/Admin unlock)
+
+[PET_SYNERGY]
++10% Pet Damage if element matches
++5% Race damage if pet active
+Special Ability triggers if pet active & element matches
+
+[NOTES]
+- All abilities scale automatically per stats & rank
+- 1 active + 1 passive equipable
+- 20 skins per race: 10 unlockable via rank, 10 via $Valor/Admin
+- Carry and inventory limits scale per rank
+3️⃣ Elf.txt
+Copy code
+
+[RACE: Elf]
+[DESCRIPTION: Agile, Intelligence-focused, Air & Nature affinity]
+[ZONE_AFFINITY: Whispering Forest]
+[ELEMENTS: Air, Nature]
+
+[BASE_STATS]
+Str=7
+Def=6
+Spd=12
+Int=10
+Luck=10
+Vit=6
+HP=100+(Str*5)+(Def*3)+(Level*10)+(Vit*8)
+
+[SCALING_PER_LEVEL]
+Str=+0.7
+Def=+0.6
+Spd=+1.2
+Int=+1.0
+Luck=+0.8
+Vit=+0.4
+
+[SKILLS]
+1, Quick Shot, Sharp Mind, Basic ranged attack + intelligence bonus
+2, Wind Arrow, Evasion Boost, Moderate damage + dodge bonus
+3, Nature's Call, Leaf Shield, AoE + minor heal
+...
+150, Archmage Convergence, Ultimate Precision, Max INT + passive synergy
+
+[ELEMENTS]
+# Same 16-element counter matrix as Titan
+
+[ZONE_BONUSES]
+Whispering Forest=+10% Pet Bonding Chance,+5% Gather Yield
+Glorifac Cave=+2% Mining Yield
+Lavic Town=+3% Luck for Fishing
+Mystic Tower=+2% Intelligence Scaling on Floors
+
+[SKINS]
+Elf_Wildwood=/races/elf_portraits/wildwood.png
+Elf_Moonlit=/races/elf_portraits/moonlit.png
+Elf_Sunshadow=/races/elf_portraits/sunshadow.png
+Elf_Starfall=/races/elf_portraits/starfall.png
+Elf_Elvenwood=/races/elf_portraits/elvenwood.png
+Elf_Mystic=/races/elf_portraits/mystic.png
+Elf_Forestlight=/races/elf_portraits/forestlight.png
+Elf_Breeze=/races/elf_portraits/breeze.png
+Elf_Aether=/races/elf_portraits/aether.png
+Elf_Mythic=/races/elf_portraits/mythic.png
+... (remaining 10 for $Valor/Admin unlock)
+
+[PET_SYNERGY]
++10% Pet Damage if element matches
++5% Race damage if pet active
+Special Ability triggers if pet active & element matches
+
+[NOTES]
+- All abilities scale automatically per stats & rank
+- 1 active + 1 passive equipable
+- 20 skins per race: 10 unlockable via rank, 10 via $Valor/Admin
+- Carry and inventory limits scale per rank
+
+4️⃣ Vampire.txt
+Id="vampire01"
+Copy code
+[RACE: Vampire]
+[DESCRIPTION: Night predators with Life Drain, Dark & Shadow affinity]
+[ZONE_AFFINITY: Whispering Forest]
+[ELEMENTS: Dark, Shadow]
+
+[BASE_STATS]
+Str=10
+Def=8
+Spd=12
+Int=10
+Luck=7
+Vit=8
+HP=100+(Str*5)+(Def*3)+(Level*10)+(Vit*8)
+
+[SCALING_PER_LEVEL]
+Str=+1.0
+Def=+0.8
+Spd=+1.0
+Int=+0.9
+Luck=+0.5
+Vit=+0.6
+
+[SKILLS]
+1, Blood Strike, Shadow Veil, Basic attack + minor stealth bonus
+2, Life Drain, Night’s Resilience, Damage enemy & heal self
+3, Dark Pulse, Shadow Guard, AoE dark attack + minor defense
+...
+150, Eternal Hunger, Shadow Mastery, Max damage + passive synergy
+
+[ELEMENTS]
+# Same 16-element counter matrix as Titan
+
+[ZONE_BONUSES]
+Whispering Forest=+10% Pet Bonding Chance,+5% PvP Damage
+Glorifac Cave=+2% Mining Yield
+Lavic Town=+2% Luck for Fishing
+Mystic Tower=+2% Shadow damage scaling
+
+[SKINS]
+Vampire_Nightfang=/races/vampire_portraits/nightfang.png
+Vampire_Bloodmoon=/races/vampire_portraits/bloodmoon.png
+Vampire_Shadowveil=/races/vampire_portraits/shadowveil.png
+Vampire_Eternal=/races/vampire_portraits/eternal.png
+Vampire_Crimson=/races/vampire_portraits/crimson.png
+Vampire_Midnight=/races/vampire_portraits/midnight.png
+Vampire_Nyx=/races/vampire_portraits/nyx.png
+Vampire_Raven=/races/vampire_portraits/raven.png
+Vampire_Abyss=/races/vampire_portraits/abyss.png
+Vampire_Mythic=/races/vampire_portraits/mythic.png
+... (remaining 10 for $Valor/Admin unlock)
+
+[PET_SYNERGY]
++10% Pet Damage if element matches
++5% Race damage if pet active
+Special Ability triggers if pet active & element matches
+
+[NOTES]
+- All abilities scale automatically per stats & rank
+- 1 active + 1 passive equipable
+- 20 skins per race: 10 unlockable via rank, 10 via $Valor/Admin
+- Carry and inventory limits scale per rank
+5️⃣ Ghost.txt
+Id="ghost01"
+Copy code
+[RACE: Ghost]
+[DESCRIPTION: Ethereal beings, high Spd & Int, Light & Soul affinity]
+[ZONE_AFFINITY: Mystic Tower]
+[ELEMENTS: Light, Soul]
+
+[BASE_STATS]
+Str=5
+Def=6
+Spd=15
+Int=12
+Luck=10
+Vit=5
+HP=100+(Str*5)+(Def*3)+(Level*10)+(Vit*8)
+
+[SCALING_PER_LEVEL]
+Str=+0.5
+Def=+0.6
+Spd=+1.3
+Int=+1.0
+Luck=+0.7
+Vit=+0.3
+
+[SKILLS]
+1, Ethereal Strike, Phantom Shield, Basic attack + dodge bonus
+2, Soul Drain, Spirit Barrier, Drain health & small defense boost
+3, Light Burst, Soul Guard, AoE magic + minor protection
+...
+150, Spectral Convergence, Ultimate Agility, Max INT + passive synergy
+
+[ELEMENTS]
+# Same 16-element counter matrix as Titan
+
+[ZONE_BONUSES]
+Mystic Tower=+5% Floor Combat Bonus,+5% PvE Damage
+Glorifac Cave=+2% Mining Yield
+Whispering Forest=+2% Pet Bonding
+Lavic Town=+2% Luck for Fishing
+
+[SKINS]
+Ghost_Wraith=/races/ghost_portraits/wraith.png
+Ghost_Spectral=/races/ghost_portraits/spectral.png
+Ghost_Pale=/races/ghost_portraits/pale.png
+Ghost_Moonlight=/races/ghost_portraits/moonlight.png
+Ghost_Fade=/races/ghost_portraits/fade.png
+Ghost_Shadow=/races/ghost_portraits/shadow.png
+Ghost_Celestial=/races/ghost_portraits/celestial.png
+Ghost_Aether=/races/ghost_portraits/aether.png
+Ghost_Ethereal=/races/ghost_portraits/ethereal.png
+Ghost_Mythic=/races/ghost_portraits/mythic.png
+... (remaining 10 for $Valor/Admin unlock)
+
+[PET_SYNERGY]
++10% Pet Damage if element matches
++5% Race damage if pet active
+Special Ability triggers if pet active & element matches
+
+[NOTES]
+- All abilities scale automatically per stats & rank
+- 1 active + 1 passive equipable
+- 20 skins per race: 10 unlockable via rank, 10 via $Valor/Admin
+- Carry and inventory limits scale per rank
+6️⃣ Dwarf.txt
+Id="dwarf01"
+Copy code
+[RACE: Dwarf]
+[DESCRIPTION: Tough miners & smiths, high Def & Str, Earth & Fire affinity]
+[ZONE_AFFINITY: Glorifac Cave]
+[ELEMENTS: Earth, Fire]
+
+[BASE_STATS]
+Str=12
+Def=14
+Spd=5
+Int=6
+Luck=5
+Vit=12
+HP=100+(Str*5)+(Def*3)+(Level*10)+(Vit*8)
+
+[SCALING_PER_LEVEL]
+Str=+1.5
+Def=+1.7
+Spd=+0.3
+Int=+0.5
+Luck=+0.2
+Vit=+0.6
+
+[SKILLS]
+1, Hammer Strike, Sturdy Form, Basic attack + defense boost
+2, Rock Throw, Enduring Stance, Moderate damage + HP buff
+3, Forge Mastery, Iron Skin, Weapon buff + defense
+...
+150, Earth Titan, Ultimate Forge, Max damage + passive synergy
+
+[ELEMENTS]
+# Same 16-element counter matrix as Titan
+
+[ZONE_BONUSES]
+Glorifac Cave=+10% Mining Yield,+5% PvE Damage
+Whispering Forest=+2% Pet Bonding
+Lavic Town=+2% Luck for Fishing
+Mystic Tower=+2% Strength Scaling
+
+[SKINS]
+Dwarf_Stone=/races/dwarf_portraits/stone.png
+Dwarf_Iron=/races/dwarf_portraits/iron.png
+Dwarf_Steel=/races/dwarf_portraits/steel.png
+Dwarf_Gold=/races/dwarf_portraits/gold.png
+Dwarf_Copper=/races/dwarf_portraits/copper.png
+Dwarf_Silver=/races/dwarf_portraits/silver.png
+Dwarf_Bronze=/races/dwarf_portraits/bronze.png
+Dwarf_Mithril=/races/dwarf_portraits/mithril.png
+Dwarf_Adamant=/races/dwarf_portraits/adamant.png
+Dwarf_Mythic=/races/dwarf_portraits/mythic.png
+... (remaining 10 for $Valor/Admin unlock)
+
+[PET_SYNERGY]
++10% Pet Damage if element matches
++5% Race damage if pet active
+Special Ability triggers if pet active & element matches
+
+[NOTES]
+- All abilities scale automatically per stats & rank
+- 1 active + 1 passive equipable
+- 20 skins per race: 10 unlockable via rank, 10 via $Valor/Admin
+- Carry and inventory limits scale per rank
+7️⃣ Human.txt
+Id="human01"
+Copy code
+[RACE: Human]
+[DESCRIPTION: Balanced race, versatile in all stats, flexible in all zones]
+[ZONE_AFFINITY: Capital City]
+[ELEMENTS: Light, Air]
+
+[BASE_STATS]
+Str=8
+Def=8
+Spd=8
+Int=8
+Luck=8
+Vit=8
+HP=100+(Str*5)+(Def*3)+(Level*10)+(Vit*8)
+
+[SCALING_PER_LEVEL]
+Str=+1
+Def=+1
+Spd=+1
+Int=+1
+Luck=+1
+Vit=+0.5
+
+[SKILLS]
+1, Balanced Strike, Enduring Form, Basic all-round attack + defense
+2, Tactical Advance, Lucky Form, Moderate attack + dodge bonus
+3, Adaptive Flow, Guard Stance, AoE + minor resistance
+...
+150, Master of All, Ultimate Adaptation, Max all stats + passive synergy
+
+[ELEMENTS]
+# Same 16-element counter matrix as Titan
+
+[ZONE_BONUSES]
+Capital City=+5% Gold Gain,+5% PvE Damage
+Glorifac Cave=+2% Mining Yield
+Whispering Forest=+2% Pet Bonding
+Lavic Town=+2% Luck for Fishing
+Mystic Tower=+2% All stat scaling
+
+[SKINS]
+Human_Noble=/races/human_portraits/noble.png
+Human_Warrior=/races/human_portraits/warrior.png
+Human_Ranger=/races/human_portraits/ranger.png
+Human_Mage=/races/human_portraits/mage.png
+Human_Rogue=/races/human_portraits/rogue.png
+Human_Knight=/races/human_portraits/knight.png
+Human_Berserker=/races/human_portraits/berserker.png
+Human_Paladin=/races/human_portraits/paladin.png
+Human_Champion=/races/human_portraits/champion.png
+Human_Mythic=/races/human_portraits/mythic.png
+... (remaining 10 for $Valor/Admin unlock)
+
+[PET_SYNERGY]
++10% Pet Damage if element matches
++5% Race damage if pet active
+Special Ability triggers if pet active & element matches
+
+[NOTES]
+- All abilities scale automatically per stats & rank
+- 1 active + 1 passive equipable
+- 20 skins per race: 10 unlockable via rank, 10 via $Valor/Admin
+- Carry and inventory limits scale per rank
+
+1️⃣ Spell Mechanics Overview
+Spell Categories
+AoE (Area of Effect) Spells
+Target: All enemies in the battle (PvP can target multiple opponents in same arena; PvE hits all monsters in group)
+Effect: Deal magic damage based on caster’s Intelligence stat
+Scaling: Damage = (Int × Spell Power) × Rank Multiplier × Elemental Synergy
+Can trigger critical hit (crit = ×3)
+Example: “Flame Wave” → Fire element, deals AoE damage, chance to burn for 2 turns
+CC (Crowd Control) Spells
+Target: One or more enemies
+Effect: Disable enemy actions temporarily (Stun, Freeze, Silence, Slow)
+Duration: Based on Int stat and Spell Rank
+PvP rules: Enemy can resist based on Luck and Int comparison (higher Int = higher success chance)
+Example: “Ice Bind” → Freeze enemy 1 turn, damage = 0, Int influences success
+Buff Spells
+Target: Self, ally, or entire party
+Effect: Increase stats temporarily (Str, Def, Spd, Int, Luck, Vit)
+Duration: Fixed per spell or scaling with Int
+Example: “Blessing of Might” → +10% Str for 3 turns, scales with caster Int
+2️⃣ Combat Integration
+Turn System
+Turn order = (Spd * 2) + random(Luck/10)
+Spell uses 1 action per turn (player or NPC)
+Players can equip 1 spell at a time
+Actions per Turn
+Attack (physical)
+Defend
+Dodge
+Use Spell (replaces previous Trick action)
+Damage Calculation
+Physical attack:
+Damage = Attack Stat × Element Multiplier - Enemy Def
+Spell attack:
+Damage = Int × Spell Power × Element Multiplier
+CC or Buff effects apply in addition to damage
+Elemental Interaction
+Spells respect elemental matrix:
+Fire → Strong vs Nature, Weak vs Water
+Water → Strong vs Fire, Weak vs Nature
+Light → Strong vs Dark, etc.
+Multiple synergy types (2× or 5×) if race or pet element matches spell element
+AoE Rules
+In PvE: Hits all enemies
+In PvP: Hits all enemies in zone, applies individually per player stats
+CC Rules
+Success chance = Caster Int / (Target Int + Target Luck)
+Maximum 1 CC per target per turn to avoid overstacking
+Buff Rules
+Buffs last 3 turns by default, can stack with max 2 buffs of same type
+Buffs scale with Int and player rank
+3️⃣ Spell Unlocking & Progression
+Source: Auction House, Research Lab (cannot be obtained in standard item shop)
+Rank Restriction: Only spells corresponding to player rank or lower can be equipped
+Scaling: Spell Power increases with player Int and rank
+Critical Spells: All spells can crit (×3)
+Story Integration: Some spells unlocked automatically through AI story events
+4️⃣ Spell Example Set (per category)
+Name
+Type
+Element
+Base Power
+Rank Unlock
+Special Effect
+Flame Wave
+AoE
+Fire
+100
+Novice
+10% burn chance 2 turns
+Earthquake
+AoE
+Earth
+150
+Elite
+Chance to slow all enemies 1 turn
+Ice Bind
+CC
+Water
+0
+Adept
+Freeze 1 enemy, 1 turn
+Shadow Snare
+CC
+Dark
+0
+Champion
+Stun 1 enemy, 1 turn
+Blessing of Might
+Buff
+Light
+0
+Initiate
++10% Str, 3 turns
+Arcane Shield
+Buff
+Aether
+0
+Paragon
++15% Def, 3 turns
+Total spells per rank = 5-7 spells, cumulative scaling
+Admin can manually add $Valor exclusive spells
+5️⃣ UI & Gameplay Implementation
+Spell button appears on battle screen alongside Attack, Defend, Dodge
+AoE damage shows separate floating damage numbers for each target
+CC displays icon on target (stun/freeze/etc)
+Buff displays buff icon + remaining turns
+Animation reflects spell element (Fire → red flames, Water → blue waves)
+Cooldown optional depending on balance
+
+LEGENDS OF VALOR V2 – SPELL CREATION INSTRUCTION GUIDE
+Purpose: Generate all spells in the game, fully categorized, rank-locked, and placed for Replit import, with mechanics fully integrated into combat.
+1️⃣ Spell Categories & Mechanics
+Categories:
+AoE (Area of Effect)
+Hits all enemies in target group
+Damage = Caster Int × Spell Power × Rank Multiplier × Elemental Synergy
+Can crit: ×3 multiplier
+Can include elemental status effects (burn, freeze, poison, etc)
+PvP: Affects multiple players in same zone
+CC (Crowd Control)
+Stuns, freezes, silences, slows
+Target = 1 or more enemies
+Success chance = Caster Int / (Target Int + Target Luck)
+PvP: CC limited to 1 per target per turn
+No damage unless effect includes it
+Buff
+Increases stats temporarily (Str, Def, Spd, Int, Luck, Vit)
+Target = Self, ally, or party
+Duration: 3 turns default, max 2 same-type stacks
+Scaling = Int + Rank multiplier
+2️⃣ Spell Properties
+Each spell must have:
+Name → Unique, themed to element and effect
+Type → AoE, CC, Buff
+Element → One of: Water, Fire, Air, Earth, Nature, Light, Dark, Plasma, Space, Cronos, Time, Aether, Soul, Mythical1, Mythical2, Mythical3
+Base Power → Numeric value; scales with Int and Rank
+Rank Unlock → Which player rank can equip
+Effect → Burn, Freeze, Stun, Buff type, etc
+Critical Multiplier → ×3
+Optional (for flavor/UI):
+Animation / Visual effect → Reflect element (Fire → Red Flames, Water → Blue Waves)
+Tooltip Description → Short description for player
+3️⃣ Quantity & Distribution
+Spells per rank: 5–7
+Ranks: 15 (Novice → Mythical Legend)
+Total spells = ~90–105 core spells
+$Valor/Admin Exclusive Spells: 10–20, unlocked only manually via admin or packs
+Spell Types per Rank: Balanced across AoE, CC, Buff
+4️⃣ Placement & File Structure (Replit TXT Ready)
+Folder Structure Example:
+Copy code
+
+/spells
+  /novice
+    spell_001.txt
+    spell_002.txt
+    ...
+  /initiate
+    spell_001.txt
+    ...
+  ...
+  /mythical_legend
+    spell_001.txt
+    ...
+  /valor_exclusive
+    spell_v001.txt
+TXT File Format (example):
+Copy code
+
+[NAME: Flame Wave]
+[TYPE: AoE]
+[ELEMENT: Fire]
+[BASE_POWER: 100]
+[RANK_UNLOCK: Novice]
+[EFFECT: 10% Burn chance, 2 turns]
+[CRIT: x3]
+[DESCRIPTION: Deals fire damage to all enemies, may burn them for 2 turns]
+[ANIMATION: /animations/fire_wave.gif]
+Each spell gets a separate TXT file
+Admin-exclusive spells go in /valor_exclusive/
+5️⃣ Combat Integration
+Spell button replaces “Trick” action on battle screen
+AoE → Floating damage numbers for each target
+CC → Status icons above enemies with duration
+Buff → Buff icon + remaining turns above target
+Elemental synergy automatically applied per player element + pet element
+6️⃣ AI Rules for Spell Creation
+Generate unique names for each spell based on element + effect
+Ensure balance per rank (Novice < Initiate < Adept … < Mythical Legend)
+Generate power values, effects, crit chance, and rank unlock for each spell
+Ensure all elements have representation across all categories
+Do not generate spells beyond player abilities or rank
+Critical and elemental bonuses must be included for every spell
+Ensure $Valor/Admin spells are not accessible via rank or story
+7️⃣ Admin Control
+Admin can view all spells, edit stats/effects, or assign manually
+Only admin can add $Valor exclusive spells to player accounts
+Admin cannot override player combat directly
+
+LEGENDS OF VALOR V2 – STRICT BUILD COMMAND
+Objective: Build a fully functional Legends of Valor v2 game on Replit, incorporating all previously defined mechanics, systems, items, zones, AI interactions, combat, and admin controls. Fill gaps using logical, consistent, and balanced decisions. All features must be functional and ready for integration into a web/mobile interface.
+1️⃣ Core Character & Race Systems
+Implement 14 races (Titan, Fae, Dwarf, Elf, Human, Orc, Vampire, Ghost, Angel, Demon, Beastkin, Dragonborn, Mermaid, and a Mythical race) with:
+Static portrait for each race (20 unique skin portraits per race)
+Base stats and stat growth per rank
+Race-specific passive abilities
+Race-specific active abilities/unlockable at specific ranks
+Rank scaling system: 15 ranks × 10 levels per rank
+Evolution system for pets: Baby → Teen → Adult → Elder → Legend → Immortal
+Elemental synergies and counters fully defined (create matrix)
+Players cannot change race
+2️⃣ Rank System
+15 ranks (Novice → Mythical Legend)
+Rank progression conditional on:
+Tower/Mystic Tower levels reached
+Number of PvP victories
+Specific actions per rank
+Rank unlocks titles, inventory/slot expansions, spell access, resource access, crafting unlocks
+Titles equipped based on rank and/or guild rank
+Rank rewards fully implemented (stats, inventory, access, perks)
+3️⃣ Stats & Potential
+Base stats per race + per rank + Vitality × 8 formula for HP
+Include Strength, Defense, Speed, Intelligence, Luck, Vitality, and potential multiplier
+Crit chance = Luck ÷ X, crit multiplier ×3
+Inventory, equipment, and pet slot limits scale per rank
+4️⃣ Combat System
+Turn-based, speed determines order (Spd*2 + random(Luck/10))
+Actions: Attack, Defend, Dodge, Use Spell
+Spell mechanics:
+AoE, CC, Buff types
+Damage scales with Intelligence + Rank + Elemental Synergy
+Crits possible ×3
+Only 1 spell equipable at a time
+PvP:
+Arena system with casual and ranked battles
+Ranked affects leaderboard
+Players can challenge anyone in the zone or via arena
+PvE:
+Target monsters individually or in groups
+AI story events integrate with battles
+5️⃣ Pets & Birds
+Pets:
+Can attack, defend, and provide passive bonuses
+Separated HP bar
+Elemental types and counters
+Evolution unlocks new abilities and stats
+Bonding system: time-based + gifting
+Acquire via story mode, breeding, or admin/$Valor events
+Birds:
+Defensive and speed buffs
+Upgraded with Beak Coins and Focus Shards
+Obtainable in Mystic Tower and shops
+6️⃣ Zones & World Map
+Zones:
+Capital City → Home base, shops, guild hall, arena, AI interactions
+Glorifac Cave → Mining, PvE, PvP, monsters
+Whispering Forest → Wild pets, PvE, PvP, NPCs
+Lavic Town → Fishing, shops, auction house, story NPCs, spell usage
+Mystic Tower → 100 floors × 100 levels, PvE challenge
+Gandolf Research Lab → Crafting/Spell research
+Hell Zone → Battle royale, unlocked by admin only
+Interactive, tap-based exploration
+Player portrait always visible bottom-left; interacting target bottom-right
+Backgrounds static/animated per zone
+NPCs appear only when triggered by story
+7️⃣ Resources, Crafting & Shops
+Resources:
+15+ new resources, rank-locked
+Some rare resources zone-specific
+Mining/fishing/gathering systems
+Carry limits scale with stats, rank, pets
+Crafting:
+Weapons (10 per tier), 1 craftable per tier (strongest in tier)
+Armor and Amulets (10 per tier), effects unlock by rank
+Shops:
+Weapon, Armor, Amulet shops (gold/rubies)
+Resource conversion shop (common → common, rare non-convertible)
+Guild shop (Unity Coins currency)
+$Valor shop (packs, skins, exclusive pets)
+Pet/Bird shop (gold, Beak Coins, rank-locked)
+Item shop (potions, revive tokens, fishing rods)
+8️⃣ Guild System
+Guilds:
+Max members: 10
+Guild levels: 10 → unlock perks (storage cap, dungeon restrictions, shop access)
+Guild dungeons: 5 total, progressively harder, stat-scaled based on online members
+Guild storage split: resources separate from weapons
+Unity Coins currency
+9️⃣ Auction & Leaderboard
+Auction house:
+Players bid using gold for spells, $Valor for VIP exclusive items
+Rank-limited item access
+Leaderboards:
+Per zone and overall
+PvP wins contribute
+Guild performance integrated
+🔟 AI Story & NPC System
+AI manages story mode & NPC interactions only
+Players can choose story prompts or ignore to play normally
+AI respects:
+No race change
+No cheats or gifts
+Cannot override admin
+Cannot allow actions beyond player rank/power
+AI generates personalized quests, story events, NPC dialogue
+NPCs assigned to zones with appropriate portraits
+1️⃣1️⃣ Fishing System
+Certain fish usable as crafting materials
+Fishing success scales with rank & Luck
+Fish and items stored in inventory, rank-limited
+1️⃣2️⃣ Spells
+Generate all spells per rank (Novice → Mythical Legend)
+Include AoE, CC, Buff types
+Apply element and rank unlock
+Generate effects, power, crit chance ×3, duration where relevant
+Admin/$Valor spells separate, manually added
+1️⃣3️⃣ Inventory & Equipment
+Player limits scale with rank & pets
+Equipment:
+Weapon: 1
+Armor: 1
+Amulet: 2
+Consumables: 3
+Pets: per rank slot limits
+Dump system: permanent discard
+1️⃣4️⃣ Admin Account
+Completely separate interface
+Cannot play the game
+Functions:
+View all players, stats, equipment, inventory
+Gift items, pets, $Valor packs
+Add quests & events
+View/add leaderboards
+Manage AI story, add spells
+1️⃣5️⃣ Visuals & UI
+All zones have static backgrounds with animations for combat/fishing/interaction
+Player portrait visible bottom-left, interacting entity bottom-right
+Battle screen: show HP, pet HP, action buttons (Attack, Defend, Dodge, Spell)
+Elemental colors reflected in UI (Water → Blue, Fire → Red, etc.)
+Story mode flagged with AI logo + optional tap
+1️⃣6️⃣ Data & Persistence
+PostgreSQL/Drizzle database
+Real-time updates via SSE
+Allow players to download game data and re-import
+Offline progression cached locally, sync on reconnect
+✅ AI BUILD INSTRUCTION SUMMARY
+Command:
+"Generate all game systems and features for Legends of Valor v2. Include:
+14 races with stats, abilities, skill trees, 20 unique skins each
+15 ranks with 10 levels per rank, rank scaling for stats, inventory, pets, spells, titles
+All spells per rank (AoE, CC, Buff), element, power, effects, crit chance, unlock rank
+Pets & Birds with evolution, HP, bonding, abilities, and elementals
+Weapons, Armors, Amulets, crafting, tier scaling, elemental effects
+Shops: Weapon, Armor, Amulet, Pet/Bird, $Valor, Resource, Guild
+Resources: mining, fishing, gathering, rank-locked
+Zones: interactive, animated, rank-locked, NPCs per story
+Combat system integrated: PvE, PvP, turn-based, actions, spell mechanics
+Guild system: members, levels, perks, dungeons, Unity Coins
+Auction house & leaderboards
+Fishing system, crafting materials, pets
+AI story & NPC system: fully controlled, cannot allow cheats, follows main storyline
+Admin interface: full control, no gameplay access
+UI: player portrait, target portrait, animations, buttons, colors per element
+Data persistence, offline save/load, sync, SSE updates
+Generate TXT-ready files for spells, pets, items, skins, backdrops, etc.
+Fill gaps with logical, balanced, common-sense decisions. Ensure all features are functional, integrate all previously defined mechanics, and maintain consistency for Replit deployment."
+
+ENSURE EVERYTHING MENTIONED EXISTS AND WORKS, IF NOT DESCRIBED, CREATE AND YOU HAVE PERMISSION TO NAVIGATE HOW IT WILL WORK YOURSELF
+
+BELOW ARE THINGS I WANT ADDED BUT HAVE NOT DESCRIBED, CREATE THEM AND ADD TO THE GAME
+
+• ​JWT-Based Auth Flow (Login/Register/Session)
+• ​Race/Element/Egg Selection (Integrated into Account Creation)
+• ​Server-Side Anti-Exploit Validation
+• ​Duplicate Login Protection (Session Kick)
+• ​Data Versioning & Migration System
+• ​Initiative/Turn-Order Formula
+• ​Diminishing Returns Damage Reduction
+• ​Dynamic Inventory Weight Restrictions
+• ​Status Effect (CC) Duration & Rules (Stun, Freeze, Silence)
+• ​AOE Damage Falloff Logic
+• ​Buff Stacking & Cap Rules
+• ​Death Penalty System (Gold loss & Durability)
+• ​Capital City Auto-Revive & Weakness Debuff
+• ​Gold Sinks (Repair costs & Auction taxes)
+• ​Action Stamina/Energy System
+• ​2D Layering & Z-Indexing (Background/Interactable/Sprite/UI)
+• ​4-Direction Sprite Animation Rules
+• ​2D Combat "Juice" (Sprite shake & floating damage)
+• ​Safe-Logout Timer (Anti-combat logging)
+• ​Dynamic Day/Night Cycle Overlays
+• ​Weather-Based Spawn Modifiers
+• ​Pet Fainting & Revival Rules
+• ​Safe P2P Trading Window
+• ​Guild Roles & Permissions (Leader/Officer/Member)
+• ​Guild Vault Logs
+• ​Unity Group Quests
+• ​Battle Royale (Hell Zone) "The Collapse" Mechanic
+• ​Valorpedia (Discovery/Collection Log)
+• ​Admin Live-Player Teleport & Force-End Match
+• ​Persistent Global Navigation Hub
+• ​Offline Training Progress (Home Base)
+
+• ​Pot Mutation (Trait evolution)
+• ​Pet Cooking (Temporary 4th Element)
+• ​Server-Wide Siege (World Bosses)
+• ​Asynchronous Base Raiding (Passive Gold risk)
+• ​AI Bounty System (Player-run hit list)
+• ​Resource Exhaustion (Dynamic scarcity)
+• ​Tournament Betting (Spectator economy)
+• ​Heritage Rebirth (Player-level permanent buffs)
+• ​Gem Socketing (Utility-based gear customization)
+• ​Pet Mercenary System (Passive pet income)
+
+• ​AI Persona Memory (Reputation-based shop unlocks)
+• ​Elemental Resonance (Combining elements for new status effects)
+• ​Dynamic Market Economy (Supply/Demand price scaling)
+• ​Soul-Linking (Stat-sharing for duos)
+• ​Zone Conquest (Guild-owned territories and taxes)
+• ​The Black Market (High-risk, high-reward "illegal" items)
+• ​Weather-Exclusive Bosses (Bosses that only appear during "Thunderstorms")
+• ​Player-Run Bounties (Spending Gold to put a hit on a rival)
+• ​Relic Archaeology (Non-combat minigame to find "Lore Fragments")
+• ​Custom Skill Naming (At Max Rank, rename your signature spell for prestige)
+Create a dungeon in each zone and a guild buff

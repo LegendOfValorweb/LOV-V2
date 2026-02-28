@@ -1,0 +1,72 @@
+Legends of Valor: The Ultimate Comprehensive Encyclopedia
+This summary details every mechanical layer, world element, and background system currently existing in the game.
+1. Core Character Infrastructure
+• Race System (14 Variants): Permanent choice at creation. Modifiers apply to base stats (Str, Def, Spd, Int, Luck).
+• Examples: Titans have massive Str/Def but 0.8x Spd. Fae have 1.2x Luck but low survivability.
+• Rank System (15 Tiers): Scales from Novice (1-10k power) to Mythical Legend (Max rank). Ranks gatekeep zones and equipment tiers.
+• Stat Mechanics:
+• Potential (Pot): Hidden growth multiplier that increases damage and defense efficiency.
+• Health (HP): Calculated as 100 + (Str * 5) + (Def * 3) + (Level * 10).
+• Death & Permadeath:
+• Ghost State: Occurs at 0 HP. Prevents all actions until respawn.
+• Respawn: Free return to Base.
+• Revive Tokens: Consumable for instant revival.
+• Pet Sacrifice: A "Loyal Bond" mechanic where you can delete an equipped pet to come back to life instantly.
+2. World Zones & Activity Layers
+The World Map features 12 interactive zones, each with unique sub-systems:
+• Capital City:
+• Item Shop: Buy Weapons, Armor, and Accessories gated by Rank.
+• Trading: Secure P2P window with multi-item lock-in.
+• Guild Hall: Create/manage guilds and access the shared Guild Bank.
+• Mystic Tower:
+• Progression: 50 Floors, each with 100 Levels (Total 5,000 levels).
+• Scaling: Enemy stats increase exponentially per floor.
+• The Base (Personal Fortress):
+• Upgrade Tiers: Camp → Lodge → Keep → Manor → Castle.
+• Room Systems:
+• Storage: Expands inventory.
+• Rest: Passive HP regeneration.
+• Crafting: Unlocks high-tier equipment recipes.
+• Training: Converts time into passive Stat XP.
+• Vault: Generates interest on stored Gold and protects it from PvP loss.
+• Defenses: Upgradable traps (Arrow Traps, Magic Wards) to defend against random raids.
+• Resource & Gathering Zones:
+• Crystal Lake: Fishing mechanic where caught fish can be fed to pets for stat transfers.
+• Ruby Mines: High-risk PvP zone where you mine for rare Rubies.
+• Enchanted Forest: Gathering materials for the base's Crafting Workshop.
+• Hell Zone: Endgame PvPvE area. Highest rewards, but death penalties are maximized.
+3. Companion Systems
+• Pets:
+• Evolution (6 Stages): Egg → Baby → Teen → Adult → Legend → Mythic.
+• Elemental Convergence: Pets can have up to 3 elements. Matching your pet's element to your race/weapon provides a 5x damage multiplier.
+• Bonding: Spending time/currency with a pet increases "Bond Level," providing flat stat bonuses to the player.
+• Rebirth: Reset a Mythic pet to Level 1 for permanent "Rebirth Multipliers" on stats.
+• Skins: Cosmetic overrides for pet appearances (e.g., Shadow Stalker or Celestial Flame).
+• Birds:
+• Secondary companions that focus on Defense and Speed buffs.
+• Upgraded using Focus Shards and Beak Coins.
+4. Tactical Combat Engine (V2)
+• Initiative: (Spd * 2) + random(Luck / 10). Determines who strikes first.
+• Defense Reduction: Uses a diminishing returns formula: 1 - min(Def / (Def + 100), 0.75). Defense never reaches 100% reduction.
+• Critical Hits: Capped at 25% chance. Multiplier: 1.5 + (Luck / 500).
+• Elemental Multipliers:
+• Neutral: 1.0x
+• Resisted: 0.5x
+• Strong: 1.25x
+• Double Synergy: 2.0x
+• Triple Synergy (Convergence): 5.0x
+• Actions:
+• Trick: Successful trick (Luck-based) deals 1.5x damage and can Stun (skip enemy turn).
+• Dodge: Uses Speed difference to attempt a 100% damage avoidance.
+5. Economic & Event Systems
+• Skill Auction: Real-time global events where players bid Valor Tokens ($Valor) on unique skills. Only one of each skill exists per server.
+• Global Events:
+• Mandatory Events: Players must register or face world-debuffs.
+• Tournament Grounds: Structured PvP brackets with specialized rewards like Soul Gins or Mythic Shards.
+• AI Game Master:
+• Personalized Quests: AI analyzes your inventory and progress to write unique quest objectives.
+• Lore Integration: Context-aware dialogue based on the 4-act story (Awakening → Fractured Realms → Hell Zone → Convergence War).
+6. Technical Persistence
+• Database: PostgreSQL/Drizzle saves every action (inventory, quest state, pet bonding).
+• Real-time Updates: SSE (Server-Sent Events) push global notifications (new players, auction bids, guild chat) without refreshing the page.
+• State Management: React Query manages the cache for smooth transitions between world zones.
