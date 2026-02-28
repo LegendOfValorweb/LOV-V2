@@ -258,29 +258,125 @@
 }
 
 
-.map-landmark-btn {
-  width: 28px;
-  height: 28px;
-  padding: 4px;
-  border-radius: 4px;
-  border: 1.5px solid hsl(45 60% 40% / 0.8);
-  background: hsl(240 10% 10% / 0.85);
+/* ── World Map Zone Pins ──────────────────────────────────────── */
+.map-zone-pin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.8));
+}
+
+.map-zone-pin:hover {
+  transform: scale(1.08) translateY(-2px);
+  filter: drop-shadow(0 4px 12px rgba(255,191,0,0.5));
+}
+
+.map-zone-pin-active .map-pin-card {
+  border-color: hsl(45 90% 55%);
+  background: hsl(45 80% 15% / 0.95);
+  box-shadow: 0 0 14px hsl(45 80% 50% / 0.5);
+}
+
+.map-pin-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: rgba(10,10,20,0.88);
+  border: 1.5px solid rgba(255,191,0,0.45);
+  border-radius: 8px;
+  padding: 5px 7px;
+  min-width: 64px;
+  max-width: 110px;
+  backdrop-filter: blur(4px);
+}
+
+.map-zone-pin-locked .map-pin-card {
+  border-color: rgba(100,100,120,0.5);
+  background: rgba(10,10,20,0.75);
+  opacity: 0.7;
+}
+
+.map-pin-icon-row {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
-  box-shadow: 0 0 8px rgba(0,0,0,0.5);
+  gap: 4px;
 }
 
-.map-landmark-btn:hover {
-  transform: scale(1.1);
-  border-color: hsl(45 90% 55%);
-  box-shadow: 0 0 12px hsl(45 80% 50% / 0.4);
+.map-pin-name {
+  font-size: 0.56rem;
+  font-weight: 800;
+  color: #fff;
+  text-align: center;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 98px;
+  display: block;
 }
 
-.map-landmark-active {
-  background: hsl(45 80% 25% / 0.9);
-  border-color: hsl(45 90% 55%);
+.map-pin-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  justify-content: center;
+  margin-top: 1px;
+}
+
+.map-pin-feature-tag {
+  font-size: 0.45rem;
+  font-weight: 600;
+  color: rgba(255,220,100,0.85);
+  background: rgba(255,191,0,0.1);
+  border: 1px solid rgba(255,191,0,0.2);
+  border-radius: 3px;
+  padding: 0px 3px;
+  white-space: nowrap;
+  line-height: 1.5;
+}
+
+.map-pin-rank-badge {
+  font-size: 0.42rem;
+  font-weight: 700;
+  color: #f87171;
+  background: rgba(239,68,68,0.15);
+  border: 1px solid rgba(239,68,68,0.3);
+  border-radius: 3px;
+  padding: 0px 4px;
+  line-height: 1.6;
+}
+
+.map-pin-pvp-badge {
+  font-size: 0.42rem;
+  font-weight: 700;
+  color: #fb923c;
+  background: rgba(251,146,60,0.15);
+  border: 1px solid rgba(251,146,60,0.3);
+  border-radius: 3px;
+  padding: 0px 4px;
+  line-height: 1.6;
+}
+
+@media (max-width: 480px) {
+  .map-pin-card {
+    min-width: 50px;
+    max-width: 80px;
+    padding: 3px 5px;
+  }
+  .map-pin-name {
+    font-size: 0.48rem;
+  }
+  .map-pin-feature-tag,
+  .map-pin-rank-badge,
+  .map-pin-pvp-badge {
+    font-size: 0.38rem;
+  }
 }
 
 

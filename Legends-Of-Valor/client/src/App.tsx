@@ -40,6 +40,21 @@ import { MobileLandscapePrompt } from "@/components/mobile-landscape-prompt";
 import { AppLoadingWrapper } from "@/components/app-loading-wrapper";
 import { GameViewport } from "@/components/game-viewport";
 import { WeatherOverlay } from "@/components/weather-overlay";
+import { TutorialOverlay } from "@/components/tutorial-overlay";
+import { useGame } from "@/lib/game-context";
+import { useState } from "react";
+
+function TutorialGate({ children }: { children: React.ReactNode }) {
+  const { account } = useGame();
+  const [dismissed, setDismissed] = useState(false);
+  const showTutorial = !!account && account.tutorialCompleted === false && !dismissed;
+  return (
+    <>
+      {children}
+      {showTutorial && <TutorialOverlay onComplete={() => setDismissed(true)} />}
+    </>
+  );
+}
 
 function Router() {
   return (
