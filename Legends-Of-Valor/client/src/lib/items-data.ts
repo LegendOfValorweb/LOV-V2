@@ -377,3 +377,29 @@ export const ALL_ITEMS: Item[] = [
   ...generateItems(eliteItems, "elite"),
   ...generateItems(mythicalLegendItems, "mythical_legend"),
 ];
+
+export const TIER_LABELS: Record<string, string> = {
+  normal: "Normal",
+  super_rare: "Super Rare",
+  x_tier: "X-Tier",
+  umr: "UMR",
+  ssumr: "SSUMR",
+  divine: "Divine",
+  initiate: "Initiate",
+  journeyman: "Journeyman",
+  adept: "Adept",
+  expert: "Expert",
+  master: "Master",
+  grandmaster: "Grandmaster",
+  champion: "Champion",
+  overlord: "Overlord",
+  sovereign: "Sovereign",
+  ascendant: "Ascendant",
+  legend: "Legend",
+  elite: "Elite",
+  mythical_legend: "Mythical Legend",
+};
+
+export function getItemById(id: string): Item | undefined {
+  return ALL_ITEMS.find((item) => item.id === id);
+}
