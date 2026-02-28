@@ -763,6 +763,17 @@ export default function Admin() {
     enabled: !!account,
   });
 
+  const { data: rankRequirementsData } = useQuery<{ rankRequirements: any[]; eligiblePlayers: any[] }>({
+    queryKey: ["/api/admin/rank-requirements", account?.id],
+    queryFn: async () => {
+      if (!account) return { rankRequirements: [], eligiblePlayers: [] };
+      const res = await fetch(`/api/admin/rank-requirements?adminId=${account.id}`);
+      if (!res.ok) throw new Error("Failed to fetch rank requirements");
+      return res.json();
+    },
+    enabled: !!account,
+  });
+
   const [disbandGuildDialog, setDisbandGuildDialog] = useState<GuildWithDetails | null>(null);
   const [guildSearchQuery, setGuildSearchQuery] = useState("");
   const [grantValorUsername, setGrantValorUsername] = useState("");
@@ -3309,6 +3320,59 @@ export default function Admin() {
                   >
                     {setStatsMutation.isPending ? "Updating..." : "Apply Stats"}
                   </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-primary">
+                    <Crown className="w-5 h-5" />
+                    Rank Progression Requirements
+                    {(rankRequirementsData?.eligiblePlayers?.length ?? 0) > 0 && (
+                      <Badge className="ml-2 bg-green-600">{rankRequirementsData!.eligiblePlayers.length} eligible</Badge>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {(rankRequirementsData?.eligiblePlayers?.length ?? 0) > 0 && (
+                    <div className="bg-green-500/10 border border-green-500/30 rounded-md p-3 mb-4">
+                      <div className="font-semibold text-green-400 mb-2">Players Eligible for Promotion</div>
+                      <div className="space-y-1">
+                        {rankRequirementsData!.eligiblePlayers.map((p: any) => (
+                          <div key={p.id} className="flex items-center justify-between text-sm">
+                            <span className="text-white font-medium">{p.username}</span>
+                            <span className="text-muted-foreground">{p.currentRank} →</span>
+                            <Badge className="bg-green-600 text-white">{p.eligibleForRank}</Badge>
+                            <span className="text-xs text-muted-foreground">{p.wins}W / Floor {p.floor}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border text-muted-foreground text-xs">
+                          <th className="text-left py-2 pr-4">#</th>
+                          <th className="text-left py-2 pr-4">Rank</th>
+                          <th className="text-right py-2 pr-4">Wins Required</th>
+                          <th className="text-right py-2 pr-4">Floor Required</th>
+                          <th className="text-left py-2">Description</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(rankRequirementsData?.rankRequirements || []).map((r: any) => (
+                          <tr key={r.rank} className="border-b border-border/40 hover:bg-muted/20">
+                            <td className="py-1.5 pr-4 text-muted-foreground">{r.index + 1}</td>
+                            <td className="py-1.5 pr-4 font-medium text-yellow-400">{r.rank}</td>
+                            <td className="py-1.5 pr-4 text-right font-mono">{r.winsRequired.toLocaleString()}</td>
+                            <td className="py-1.5 pr-4 text-right font-mono">{r.floorRequired}</td>
+                            <td className="py-1.5 text-muted-foreground text-xs">{r.description}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </CardContent>
               </Card>
             </div>

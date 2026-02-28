@@ -4483,10 +4483,6 @@ export async function registerRoutes(
       if (!adminId) {
         return res.status(401).json({ error: "Admin ID required" });
       }
-      // Verify admin has an active session
-      if (!activeSessions.has(adminId)) {
-        return res.status(401).json({ error: "No active session" });
-      }
       const admin = await storage.getAccount(adminId);
       if (!admin || admin.role !== "admin") {
         return res.status(403).json({ error: "Admin access required" });
@@ -10199,6 +10195,63 @@ export async function registerRoutes(
     }
   });
 
+  // Rank requirements + eligibility notifications
+  app.get("/api/admin/rank-requirements", async (req, res) => {
+    try {
+      const adminId = req.query.adminId as string;
+      const admin = await storage.getAccount(adminId);
+      if (!admin || admin.role !== "admin") return res.status(403).json({ error: "Admin access required" });
+
+      const RANK_REQUIREMENTS = [
+        { rank: "Novice",         index: 0,  winsRequired: 0,      floorRequired: 1,   description: "Starting rank" },
+        { rank: "Apprentice",     index: 1,  winsRequired: 5,      floorRequired: 1,   description: "First PvP victories" },
+        { rank: "Initiate",       index: 2,  winsRequired: 15,     floorRequired: 3,   description: "Proven combatant" },
+        { rank: "Journeyman",     index: 3,  winsRequired: 30,     floorRequired: 5,   description: "Seasoned warrior" },
+        { rank: "Adept",          index: 4,  winsRequired: 60,     floorRequired: 10,  description: "Skilled fighter" },
+        { rank: "Expert",         index: 5,  winsRequired: 120,    floorRequired: 15,  description: "Elite combatant" },
+        { rank: "Master",         index: 6,  winsRequired: 250,    floorRequired: 20,  description: "Master of combat" },
+        { rank: "Grandmaster",    index: 7,  winsRequired: 500,    floorRequired: 30,  description: "Grandmaster warrior" },
+        { rank: "Champion",       index: 8,  winsRequired: 1000,   floorRequired: 40,  description: "Champion of the realm" },
+        { rank: "Overlord",       index: 9,  winsRequired: 2000,   floorRequired: 50,  description: "Overlord of battles" },
+        { rank: "Sovereign",      index: 10, winsRequired: 5000,   floorRequired: 50,  description: "Sovereign ruler" },
+        { rank: "Ascendant",      index: 11, winsRequired: 10000,  floorRequired: 50,  description: "Ascendant legend" },
+        { rank: "Legend",         index: 12, winsRequired: 25000,  floorRequired: 50,  description: "Living legend" },
+        { rank: "Mythic",         index: 13, winsRequired: 50000,  floorRequired: 50,  description: "Mythic powerhouse" },
+        { rank: "Mythical Legend",index: 14, winsRequired: 100000, floorRequired: 50,  description: "The ultimate rank" },
+      ];
+
+      const allAccounts = await storage.getAllAccounts();
+      const players = allAccounts.filter(a => a.role === "player");
+
+      const eligiblePlayers = players.map(p => {
+        const currentRankIndex = playerRanks.indexOf(p.rank as any) ?? 0;
+        const nextRankIndex = currentRankIndex + 1;
+        if (nextRankIndex >= playerRanks.length) return null;
+        const nextReq = RANK_REQUIREMENTS[nextRankIndex];
+        const wins = p.wins || 0;
+        const floor = p.npcFloor || 1;
+        const winsOk = wins >= nextReq.winsRequired;
+        const floorOk = floor >= nextReq.floorRequired;
+        if (winsOk && floorOk) {
+          return {
+            id: p.id,
+            username: p.username,
+            currentRank: p.rank,
+            eligibleForRank: nextReq.rank,
+            wins,
+            floor,
+          };
+        }
+        return null;
+      }).filter(Boolean);
+
+      res.json({ rankRequirements: RANK_REQUIREMENTS, eligiblePlayers });
+    } catch (error) {
+      console.error("Rank requirements error:", error);
+      res.status(500).json({ error: "Failed to load rank requirements" });
+    }
+  });
+
   app.post("/api/admin/set-story-progress", async (req, res) => {
     try {
       const schema = z.object({
@@ -14504,15 +14557,6 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to attack world boss" });
-    }
-  });
-
-  app.post("/api/admin/world-boss/spawn", async (req, res) => {
-    try {
-      const boss = await spawnWorldBoss(true);
-      res.json(boss);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to spawn world boss" });
     }
   });
 
