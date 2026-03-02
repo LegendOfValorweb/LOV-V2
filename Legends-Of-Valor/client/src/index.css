@@ -187,7 +187,8 @@
     @apply font-sans antialiased;
     margin: 0;
     padding: 0;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
     width: 100%;
     height: 100%;
     height: 100dvh;
@@ -198,7 +199,8 @@
     width: 100%;
     height: 100%;
     height: 100dvh;
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 
   h1, h2, h3 {
@@ -602,7 +604,8 @@
 .game-viewport .game-page {
   position: absolute;
   inset: 0;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
 }

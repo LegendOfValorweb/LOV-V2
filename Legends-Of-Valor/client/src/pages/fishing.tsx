@@ -248,7 +248,7 @@ export default function Fishing() {
         },
       ]}
     >
-      <div className="h-full flex flex-col p-3">
+      <div className="h-full flex flex-col p-3 overflow-y-auto">
         <div className="flex-shrink-0 mb-3">
           <div className="rpg-panel px-3 py-1.5 inline-flex items-center gap-2">
             <Fish className="w-5 h-5 text-blue-400" />

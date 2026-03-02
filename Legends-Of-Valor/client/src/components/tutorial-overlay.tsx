@@ -15,6 +15,7 @@ const TUTORIAL_STEPS = [
       "Thou hast chosen a path of glory in this realm of legend.",
       "Legends of Valor is a browser RPG with 14 races, 15 ranks, turn-based combat, pets, guilds, fishing, crafting, and much more.",
       "This brief guide shall prepare thee for adventure.",
+      "Thy AI guide will now begin thy story. Listen closely to its words.",
     ],
     highlight: null,
   },
@@ -114,6 +115,7 @@ interface TutorialOverlayProps {
 
 export default function TutorialOverlay({ onComplete }: TutorialOverlayProps) {
   const { account } = useGame();
+  const [, navigate] = useLocation();
   const [step, setStep] = useState(0);
   const [isCompleting, setIsCompleting] = useState(false);
 
@@ -135,10 +137,16 @@ export default function TutorialOverlay({ onComplete }: TutorialOverlayProps) {
     try {
       if (account?.id) {
         await apiRequest("POST", `/api/ai/tutorial/${account.id}/complete`, {});
+        // Trigger AI story start
+        await apiRequest("POST", "/api/ai/chat", {
+          accountId: account.id,
+          message: "I have finished the tutorial. Please start my story and tell me where to go.",
+        });
       }
     } catch (e) {
     } finally {
       onComplete();
+      navigate("/ai-chat");
     }
   };
 

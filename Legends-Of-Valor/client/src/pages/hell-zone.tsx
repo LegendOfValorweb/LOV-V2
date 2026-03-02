@@ -364,8 +364,8 @@ export default function HellZone() {
       ambientClass="zone-ambient-hell"
       overlayOpacity={0.5}
     >
-      <div className="h-full flex flex-col">
-        <header className="border-b border-red-500/50 bg-black/70 backdrop-blur-sm">
+      <div className="h-full flex flex-col overflow-y-auto">
+        <header className="border-b border-red-500/50 bg-black/70 backdrop-blur-sm sticky top-0 z-50">
           <div className="container mx-auto px-4 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">

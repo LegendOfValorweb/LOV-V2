@@ -258,7 +258,7 @@ export default function NpcBattle() {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8 overflow-y-auto flex-1">
+      <main className="container mx-auto px-4 py-8 overflow-y-auto flex-1 sticky-container">
         <div className="max-w-4xl mx-auto">
           <div className="grid gap-6 md:grid-cols-2 mb-6">
             <Card>

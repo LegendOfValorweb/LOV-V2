@@ -804,7 +804,7 @@ export default function Pets() {
       ambientClass="zone-ambient-forest"
       overlayOpacity={0.4}
     >
-      <div className="h-full flex flex-col">
+      <div className="h-full flex flex-col overflow-y-auto p-4">
       <header className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between gap-4 flex-wrap">

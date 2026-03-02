@@ -28,11 +28,14 @@ export function WeatherOverlay() {
           const data = await res.json();
           setWorldTime(data);
         }
-      } catch {}
+      } catch (err) {
+        console.error("Weather fetch error:", err);
+      }
+    };
     };
 
     fetchTime();
-    const interval = setInterval(fetchTime, 15000);
+    const interval = setInterval(fetchTime, 30000);
     return () => clearInterval(interval);
   }, []);
 
