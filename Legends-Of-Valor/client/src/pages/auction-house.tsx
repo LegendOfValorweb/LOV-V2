@@ -98,7 +98,7 @@ export default function AuctionHouse() {
   if (!account) return null;
 
   return (
-    <div className="h-full relative overflow-hidden bg-slate-950 text-slate-100">
+    <div className="h-full relative overflow-y-auto bg-slate-950 text-slate-100">
       <div 
         className="absolute inset-0 bg-cover bg-center opacity-30"
         style={{ backgroundImage: "url('/backdrops/shop.png')" }}

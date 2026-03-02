@@ -349,7 +349,7 @@ export default function Inventory() {
   const emptySlotCount = Math.max(0, 24 - filteredInventoryItems.length);
 
   return (
-    <div className="game-page-scroll" style={{ background: "hsl(240 10% 6%)" }}>
+    <div className="game-page-scroll overflow-y-auto" style={{ background: "hsl(240 10% 6%)", minHeight: "100vh" }}>
       <div style={{ padding: "8px 12px", maxWidth: 900, margin: "0 auto" }}>
         <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 12, minHeight: "calc(100vh - 60px)" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

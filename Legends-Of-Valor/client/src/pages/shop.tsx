@@ -183,7 +183,7 @@ export default function Shop() {
   }, [marketPrices]);
 
   return (
-    <div className="game-page-scroll" style={{ background: "hsl(240 10% 6%)" }}>
+    <div className="game-page-scroll overflow-y-auto" style={{ background: "hsl(240 10% 6%)", minHeight: "100vh" }}>
       <div
         className="absolute inset-0 bg-cover bg-center"
         style={{ backgroundImage: "url('/backdrops/shop.png')", opacity: 0.15 }}

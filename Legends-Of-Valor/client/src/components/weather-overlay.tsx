@@ -32,7 +32,6 @@ export function WeatherOverlay() {
         console.error("Weather fetch error:", err);
       }
     };
-    };
 
     fetchTime();
     const interval = setInterval(fetchTime, 30000);
