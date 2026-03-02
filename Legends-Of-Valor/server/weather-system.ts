@@ -23,7 +23,7 @@ export interface WorldTimeInfo {
   weather: Record<string, WeatherState>;
 }
 
-const REAL_MS_PER_GAME_DAY = 30 * 60 * 1000;
+const REAL_MS_PER_GAME_DAY = 5 * 60 * 1000;
 const REAL_MS_PER_GAME_HOUR = REAL_MS_PER_GAME_DAY / 24;
 
 const serverStartTime = Date.now();
@@ -38,7 +38,7 @@ const WEATHER_WEIGHTS: Record<WeatherType, number> = {
   blizzard: 10,
 };
 
-const WEATHER_DURATION_RANGE = { min: 300000, max: 900000 };
+const WEATHER_DURATION_RANGE = { min: 60000, max: 180000 };
 
 const ALL_ZONES = [
   "capital_city", "mountain_caverns", "ancient_ruins", "enchanted_forest",

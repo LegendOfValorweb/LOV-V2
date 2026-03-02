@@ -67,7 +67,7 @@ export function WeatherOverlay() {
   const hasThunderstorm = weatherTypes.includes("thunderstorm");
 
   return (
-    <div className="weather-overlay-container">
+    <div className="weather-overlay-container pointer-events-none">
       {}
       <div
         className={`weather-night-overlay weather-time-${dayNight.timeOfDay}`}
