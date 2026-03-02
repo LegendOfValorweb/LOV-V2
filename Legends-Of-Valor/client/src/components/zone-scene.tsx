@@ -219,8 +219,10 @@ export function ZoneScene({
         </div>
       )}
 
-      <div className="zone-layer zone-layer-ui">
-        {children}
+      <div className="zone-layer zone-layer-ui pointer-events-none">
+        <div className="pointer-events-auto w-full h-full">
+          {children}
+        </div>
       </div>
     </div>
   );
