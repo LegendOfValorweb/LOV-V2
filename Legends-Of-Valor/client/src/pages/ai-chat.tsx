@@ -65,12 +65,14 @@ export default function AIChat() {
     
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.95;
-    utterance.pitch = 1.0;
+    utterance.rate = 0.85;
+    utterance.pitch = 0.9;
     utterance.volume = 0.8;
     
     const voices = window.speechSynthesis.getVoices();
-    const preferredVoice = voices.find(v => v.name.includes('English') && v.name.includes('Female'))
+    const preferredVoice = voices.find(v => (v.name.toLowerCase().includes('deep') || v.name.toLowerCase().includes('bass')) && v.lang.startsWith('en'))
+      || voices.find(v => (v.name.toLowerCase().includes('david') || v.name.toLowerCase().includes('daniel') || v.name.toLowerCase().includes('alex') || v.name.toLowerCase().includes('mark') || v.name.toLowerCase().includes('james')) && v.lang.startsWith('en'))
+      || voices.find(v => v.name.includes('Male') && v.lang.startsWith('en'))
       || voices.find(v => v.lang.startsWith('en'))
       || voices[0];
     if (preferredVoice) {
