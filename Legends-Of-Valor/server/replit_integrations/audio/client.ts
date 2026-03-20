@@ -127,9 +127,19 @@ export async function voiceChatStream(
   })();
 }
 
+const GAME_MASTER_VOICE_PROMPT = `You are the Voice of Fate — an ancient, omniscient Game Master who has witnessed the rise and fall of empires. Deliver the following text exactly as written, word for word, but speak it with the full weight of a master storyteller:
+
+- Speak slowly and with gravitas. Let silence breathe between sentences.
+- Your voice carries centuries of wisdom and danger. Every word matters.
+- On phrases describing power, victory, or consequence — let your voice deepen and resonate with intensity.
+- On phrases describing mystery or the unknown — soften slightly, as if sharing a dangerous secret.
+- On names, titles, or dramatic revelations — pause just before them, then deliver them with deliberate force.
+- Never rush. You are timeless. The world waits on your words.
+- Speak as though the very air in the room has grown still to listen.`;
+
 /**
- * Text-to-Speech: Converts text to speech verbatim.
- * Uses gpt-audio-mini model via Replit AI Integrations.
+ * Text-to-Speech: Converts text to speech verbatim with dramatic fantasy delivery.
+ * Uses gpt-audio model via Replit AI Integrations.
  */
 export async function textToSpeech(
   text: string,
@@ -137,12 +147,12 @@ export async function textToSpeech(
   format: "wav" | "mp3" | "flac" | "opus" | "pcm16" = "wav"
 ): Promise<Buffer> {
   const response = await openai.chat.completions.create({
-    model: "gpt-audio-mini",
+    model: "gpt-audio",
     modalities: ["text", "audio"],
     audio: { voice, format },
     messages: [
-      { role: "system", content: "You are an assistant that performs text-to-speech." },
-      { role: "user", content: `Repeat the following text verbatim: ${text}` },
+      { role: "system", content: GAME_MASTER_VOICE_PROMPT },
+      { role: "user", content: text },
     ],
   });
   const audioData = (response.choices[0]?.message as any)?.audio?.data ?? "";
@@ -150,8 +160,8 @@ export async function textToSpeech(
 }
 
 /**
- * Streaming Text-to-Speech: Converts text to speech with real-time streaming.
- * Uses gpt-audio-mini model via Replit AI Integrations.
+ * Streaming Text-to-Speech: Converts text to speech with real-time streaming and dramatic delivery.
+ * Uses gpt-audio model via Replit AI Integrations.
  * Note: Streaming only supports pcm16 output format.
  */
 export async function textToSpeechStream(
@@ -159,12 +169,12 @@ export async function textToSpeechStream(
   voice: "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer" = "alloy"
 ): Promise<AsyncIterable<string>> {
   const stream = await openai.chat.completions.create({
-    model: "gpt-audio-mini",
+    model: "gpt-audio",
     modalities: ["text", "audio"],
     audio: { voice, format: "pcm16" },
     messages: [
-      { role: "system", content: "You are an assistant that performs text-to-speech." },
-      { role: "user", content: `Repeat the following text verbatim: ${text}` },
+      { role: "system", content: GAME_MASTER_VOICE_PROMPT },
+      { role: "user", content: text },
     ],
     stream: true,
   });

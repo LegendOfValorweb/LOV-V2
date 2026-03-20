@@ -439,13 +439,21 @@ export async function getPlayerAIRequests(accountId: string) {
 export async function generateVoiceResponse(text: string): Promise<Buffer | null> {
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-audio-mini",
+      model: "gpt-audio",
       modalities: ["text", "audio"],
       audio: { voice: "onyx", format: "mp3" },
       messages: [
         {
           role: "system",
-          content: "You are a deep, authoritative fantasy Game Master. Repeat the user's text verbatim with dramatic gravitas.",
+          content: `You are the Voice of Fate — an ancient, omniscient Game Master who has witnessed the rise and fall of empires. Deliver the following text exactly as written, word for word, but speak it with the full weight of a master storyteller:
+
+- Speak slowly and with gravitas. Let silence breathe between sentences.
+- Your voice carries centuries of wisdom and danger. Every word matters.
+- On phrases describing power, victory, or consequence — let your voice deepen and resonate with intensity.
+- On phrases describing mystery or the unknown — soften slightly, as if sharing a dangerous secret.
+- On names, titles, or dramatic revelations — pause just before them, then deliver them with deliberate force.
+- Never rush. You are timeless. The world waits on your words.
+- Speak as though the very air in the room has grown still to listen.`,
         },
         { role: "user", content: text.slice(0, 4096) },
       ],
