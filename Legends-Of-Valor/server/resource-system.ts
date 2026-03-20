@@ -60,11 +60,36 @@ export const ZONE_RESOURCES: ZoneResourceConfig[] = [
     zoneId: "enchanted_forest",
     zoneName: "Whispering Forest",
     resources: [
+      // Meadow Edge (Rank 0 - Novice) - common herbs and basics
       { id: "wood", name: "Wood", rarity: "common", baseChance: 0.70, minAmount: 2, maxAmount: 8, rankRequired: 0, weight: 1, sellPrice: 10 },
       { id: "fiber", name: "Fiber", rarity: "common", baseChance: 0.60, minAmount: 2, maxAmount: 6, rankRequired: 0, weight: 1, sellPrice: 12 },
+      { id: "healing_herb", name: "Healing Herb", rarity: "common", baseChance: 0.65, minAmount: 1, maxAmount: 5, rankRequired: 0, weight: 1, sellPrice: 18 },
+      { id: "wildflower_petal", name: "Wildflower Petal", rarity: "common", baseChance: 0.55, minAmount: 2, maxAmount: 6, rankRequired: 0, weight: 1, sellPrice: 14 },
+      { id: "meadow_moss", name: "Meadow Moss", rarity: "common", baseChance: 0.50, minAmount: 1, maxAmount: 4, rankRequired: 0, weight: 1, sellPrice: 16 },
+      // Faerie Grove (Rank 3 - Journeyman) - faerie materials
+      { id: "faerie_dust", name: "Faerie Dust", rarity: "uncommon", baseChance: 0.40, minAmount: 1, maxAmount: 3, rankRequired: 3, weight: 1, sellPrice: 55 },
       { id: "beast_hide", name: "Beast Hide", rarity: "uncommon", baseChance: 0.35, minAmount: 1, maxAmount: 3, rankRequired: 3, weight: 1, sellPrice: 45 },
-      { id: "nature_essence", name: "Nature Essence", rarity: "rare", baseChance: 0.15, minAmount: 1, maxAmount: 2, rankRequired: 5, weight: 2, sellPrice: 150 },
-      { id: "soul_shard_resource", name: "Soul Shard", rarity: "epic", baseChance: 0.06, minAmount: 1, maxAmount: 1, rankRequired: 8, weight: 3, sellPrice: 800 },
+      { id: "glowing_mushroom", name: "Glowing Mushroom", rarity: "uncommon", baseChance: 0.38, minAmount: 1, maxAmount: 3, rankRequired: 3, weight: 1, sellPrice: 50 },
+      { id: "luminous_crystal", name: "Luminous Crystal", rarity: "uncommon", baseChance: 0.30, minAmount: 1, maxAmount: 2, rankRequired: 3, weight: 1, sellPrice: 65 },
+      { id: "pixie_wing_dust", name: "Pixie Wing Dust", rarity: "uncommon", baseChance: 0.25, minAmount: 1, maxAmount: 2, rankRequired: 3, weight: 1, sellPrice: 70 },
+      // Spirit Wood (Rank 5 - Expert) - spirit-infused materials
+      { id: "nature_essence", name: "Nature Essence", rarity: "rare", baseChance: 0.22, minAmount: 1, maxAmount: 2, rankRequired: 5, weight: 2, sellPrice: 150 },
+      { id: "spirit_bark", name: "Spirit Bark", rarity: "rare", baseChance: 0.20, minAmount: 1, maxAmount: 2, rankRequired: 5, weight: 2, sellPrice: 130 },
+      { id: "elder_wood_sap", name: "Elder Wood Sap", rarity: "rare", baseChance: 0.18, minAmount: 1, maxAmount: 2, rankRequired: 5, weight: 2, sellPrice: 140 },
+      { id: "forest_spirit_essence", name: "Forest Spirit Essence", rarity: "rare", baseChance: 0.15, minAmount: 1, maxAmount: 1, rankRequired: 5, weight: 2, sellPrice: 180 },
+      { id: "ancient_leaf", name: "Ancient Leaf", rarity: "rare", baseChance: 0.17, minAmount: 1, maxAmount: 2, rankRequired: 5, weight: 2, sellPrice: 160 },
+      // Creature Den (Rank 9 - Overlord) - rare creature parts
+      { id: "creature_fang", name: "Creature Fang", rarity: "epic", baseChance: 0.12, minAmount: 1, maxAmount: 2, rankRequired: 9, weight: 3, sellPrice: 400 },
+      { id: "mythic_beast_hide", name: "Mythic Beast Hide", rarity: "epic", baseChance: 0.10, minAmount: 1, maxAmount: 1, rankRequired: 9, weight: 3, sellPrice: 500 },
+      { id: "void_crystal", name: "Void Crystal", rarity: "epic", baseChance: 0.08, minAmount: 1, maxAmount: 1, rankRequired: 9, weight: 3, sellPrice: 600 },
+      { id: "rare_pet_fragment", name: "Rare Pet Fragment", rarity: "epic", baseChance: 0.06, minAmount: 1, maxAmount: 1, rankRequired: 9, weight: 3, sellPrice: 800 },
+      { id: "soul_shard_resource", name: "Soul Shard", rarity: "epic", baseChance: 0.06, minAmount: 1, maxAmount: 1, rankRequired: 9, weight: 3, sellPrice: 800 },
+      // Heartwood (Rank 11 - Ascendant) - mythic heart of the forest
+      { id: "heartwood_crystal", name: "Heartwood Crystal", rarity: "mythic", baseChance: 0.08, minAmount: 1, maxAmount: 1, rankRequired: 11, weight: 5, sellPrice: 2500 },
+      { id: "world_tree_sap", name: "World Tree Sap", rarity: "mythic", baseChance: 0.06, minAmount: 1, maxAmount: 1, rankRequired: 11, weight: 5, sellPrice: 3000 },
+      { id: "primordial_seed", name: "Primordial Seed", rarity: "mythic", baseChance: 0.05, minAmount: 1, maxAmount: 1, rankRequired: 11, weight: 5, sellPrice: 3500 },
+      { id: "essence_of_life", name: "Essence of Life", rarity: "mythic", baseChance: 0.04, minAmount: 1, maxAmount: 1, rankRequired: 11, weight: 5, sellPrice: 4000 },
+      { id: "genesis_fragment", name: "Genesis Fragment", rarity: "mythic", baseChance: 0.03, minAmount: 1, maxAmount: 1, rankRequired: 11, weight: 5, sellPrice: 5000 },
     ],
   },
   {

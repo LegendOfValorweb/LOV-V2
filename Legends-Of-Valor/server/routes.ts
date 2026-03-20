@@ -337,39 +337,73 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
-  // Helper: Calculate player strength (used for challenges and guild battles)
-  const calculatePlayerStrength = async (accountId: string): Promise<number> => {
+  // Unified helper: compute full stat object including equipped items and pet bonuses
+  const getPlayerTotalStats = async (accountId: string): Promise<{
+    Str: number; Def: number; Spd: number; Int: number; Luck: number; Pot: number;
+  }> => {
     const account = await storage.getAccount(accountId);
-    if (!account) return 0;
-    
-    const playerStats = account.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 };
-    let strength = Number(playerStats.Str || 0) + Number(playerStats.Spd || 0) + Number(playerStats.Int || 0) + Number(playerStats.Luck || 0) + Number(playerStats.Pot || 0);
-    
-    // Add equipped item stats (including boosts)
-    const inventory = await storage.getInventoryByAccount(account.id);
-    const equipped = account.equipped;
-    
-    for (const slot of ["weapon", "armor", "accessory1", "accessory2"] as const) {
-      const inventoryId = equipped[slot];
-      if (inventoryId) {
-        const invItem = inventory.find(i => i.id === inventoryId);
-        if (invItem && invItem.stats) {
-          const stats = invItem.stats as any;
-          // Use Number() to handle potential string stats from database
-          strength += (Number(stats.Str) || 0) + (Number(stats.Int) || 0) + (Number(stats.Spd) || 0) + (Number(stats.Luck) || 0) + (Number(stats.Pot) || 0);
+    if (!account) return { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 };
+
+    const base = account.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 };
+    const total = {
+      Str: Number(base.Str) || 10,
+      Def: Number(base.Def) || 10,
+      Spd: Number(base.Spd) || 10,
+      Int: Number(base.Int) || 10,
+      Luck: Number(base.Luck) || 10,
+      Pot: Number(base.Pot) || 0,
+    };
+
+    const inventory = await storage.getInventoryByAccount(accountId);
+    const equipped = (account.equipped || {}) as Record<string, string | null | undefined>;
+
+    const usedInventoryIds = new Set<string>();
+    for (const slot of ["weapon", "armor", "accessory1", "accessory2"]) {
+      const equippedItemId = equipped[slot];
+      if (!equippedItemId) continue;
+      const invItem = inventory.find(i => i.itemId === equippedItemId && !usedInventoryIds.has(i.id));
+      if (invItem) {
+        usedInventoryIds.add(invItem.id);
+        if (invItem.stats) {
+          const s = invItem.stats as Record<string, unknown>;
+          total.Str += Number(s.Str) || 0;
+          total.Def += Number(s.Def) || 0;
+          total.Spd += Number(s.Spd) || 0;
+          total.Int += Number(s.Int) || 0;
+          total.Luck += Number(s.Luck) || 0;
+          total.Pot += Number(s.Pot) || 0;
         }
       }
     }
-    
-    // Add equipped pet stats
-    if ((account as any).equippedPetId) {
-      const pet = await storage.getPet((account as any).equippedPetId);
-      if (pet) {
-        const petStats = pet.stats as any;
-        strength += (Number(petStats.Str) || 0) + (Number(petStats.Spd) || 0) + (Number(petStats.Luck) || 0) + (Number(petStats.ElementalPower) || 0);
+
+    if (account.equippedPetId) {
+      const pet = await storage.getPet(account.equippedPetId);
+      if (pet && pet.stats) {
+        const ps = pet.stats as Record<string, unknown>;
+        total.Str += Number(ps.Str) || 0;
+        total.Def += Number(ps.Def) || 0;
+        total.Spd += Number(ps.Spd) || 0;
+        total.Luck += Number(ps.Luck) || 0;
       }
     }
-    
+
+    return total;
+  };
+
+  // Helper: Calculate player strength (used for challenges and guild battles)
+  const calculatePlayerStrength = async (accountId: string): Promise<number> => {
+    const total = await getPlayerTotalStats(accountId);
+    let strength = total.Str + total.Spd + total.Int + total.Luck + total.Pot;
+
+    // Add equipped pet elemental power (ElementalPower is not included in base stat totals)
+    const account = await storage.getAccount(accountId);
+    if (account?.equippedPetId) {
+      const pet = await storage.getPet(account.equippedPetId);
+      if (pet && pet.stats) {
+        strength += Number((pet.stats as Record<string, unknown>).ElementalPower) || 0;
+      }
+    }
+
     return Math.floor(strength);
   };
 
@@ -1679,9 +1713,9 @@ export async function registerRoutes(
         return res.status(403).json({ error: "This item doesn't belong to you" });
       }
 
-      // Check if item is equipped
-      const equipped = account.equipped as any || {};
-      if (Object.values(equipped).includes(inventoryItem.id)) {
+      // Check if item is equipped — equipped slots store itemId (e.g. "normal-0"), not inventory UUID
+      const equippedSlots = Object.values(account.equipped || {}) as (string | null | undefined)[];
+      if (equippedSlots.includes(inventoryItem.itemId)) {
         return res.status(400).json({ error: "Cannot sell an equipped item. Unequip it first." });
       }
 
@@ -3662,51 +3696,20 @@ export async function registerRoutes(
         }
       }
       
-      // V2 Combat Engine: Build player combatant
-      // Note: Account stats already have race modifiers applied at registration, so don't re-apply
-      const basePlayerStats = account.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 };
-      const playerCombatStats: CombatStats = {
-        Str: basePlayerStats.Str || 10,
-        Def: basePlayerStats.Def || 10,
-        Spd: basePlayerStats.Spd || 10,
-        Int: basePlayerStats.Int || 10,
-        Luck: basePlayerStats.Luck || 10,
-        Pot: basePlayerStats.Pot || 0,
-      };
+      // V2 Combat Engine: Build player combatant using unified stat helper
+      const totalStats = await getPlayerTotalStats(account.id);
+      const playerCombatStats: CombatStats = { ...totalStats };
       
-      // Add equipped item stats
-      const inventory = await storage.getInventoryByAccount(account.id);
-      const equipped = account.equipped;
-      
-      for (const slot of ["weapon", "armor", "accessory1", "accessory2"] as const) {
-        const inventoryId = equipped[slot];
-        if (inventoryId) {
-          const invItem = inventory.find(i => i.id === inventoryId);
-          if (invItem) {
-            const stats = invItem.stats as any || {};
-            playerCombatStats.Str += Number(stats.Str) || 0;
-            playerCombatStats.Def += Number(stats.Def) || 0;
-            playerCombatStats.Spd += Number(stats.Spd) || 0;
-            playerCombatStats.Int += Number(stats.Int) || 0;
-            playerCombatStats.Luck += Number(stats.Luck) || 0;
-            playerCombatStats.Pot += Number(stats.Pot) || 0;
-          }
-        }
-      }
-      
-      // Add pet stats and elements
+      // Pet elements and elemental power (not covered by getPlayerTotalStats)
       let petElements: string[] = [];
       let petElementalPower = 0;
       let equippedPet = null;
       
-      if ((account as any).equippedPetId) {
-        equippedPet = await storage.getPet((account as any).equippedPetId);
+      if (account.equippedPetId) {
+        equippedPet = await storage.getPet(account.equippedPetId);
         if (equippedPet) {
-          const petStats = equippedPet.stats as any;
-          playerCombatStats.Str += Number(petStats.Str) || 0;
-          playerCombatStats.Spd += Number(petStats.Spd) || 0;
-          playerCombatStats.Luck += Number(petStats.Luck) || 0;
-          petElementalPower = petStats.ElementalPower || 0;
+          const petStats = equippedPet.stats as Record<string, unknown>;
+          petElementalPower = Number(petStats.ElementalPower) || 0;
           petElements = equippedPet.elements && equippedPet.elements.length > 0 
             ? equippedPet.elements 
             : equippedPet.element ? [equippedPet.element] : [];
@@ -3918,29 +3921,16 @@ export async function registerRoutes(
       const power = getNpcPower(floor, level);
       const immunities = getNpcImmuneElements(globalLevel);
       
-      // Calculate real player power including gear and boosts
-      const playerStats = account.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 };
-      let playerPower = Number(playerStats.Str || 0) + Number(playerStats.Spd || 0) + Number(playerStats.Int || 0) + Number(playerStats.Luck || 0) + Number(playerStats.Pot || 0);
-      
-      const inventory = await storage.getInventoryByAccount(account.id);
-      const equipped = account.equipped;
-      for (const slot of ["weapon", "armor", "accessory1", "accessory2"] as const) {
-        const inventoryId = equipped[slot];
-        if (inventoryId) {
-          const invItem = inventory.find(i => i.id === inventoryId);
-          if (invItem) {
-            const stats = invItem.stats as any || {};
-            playerPower += (Number(stats.Str) || 0) + (Number(stats.Int) || 0) + (Number(stats.Spd) || 0) + (Number(stats.Luck) || 0) + (Number(stats.Pot) || 0);
-          }
-        }
-      }
+      // Calculate real player power including gear and boosts via unified stat helper
+      const currentNpcTotalStats = await getPlayerTotalStats(account.id);
+      let playerPower = currentNpcTotalStats.Str + currentNpcTotalStats.Spd + currentNpcTotalStats.Int + currentNpcTotalStats.Luck + currentNpcTotalStats.Pot;
 
       // Get equipped pet info
       let equippedPet = null;
-      if ((account as any).equippedPetId) {
-        const pet = await storage.getPet((account as any).equippedPetId);
+      if (account.equippedPetId) {
+        const pet = await storage.getPet(account.equippedPetId);
         if (pet) {
-          const petStats = pet.stats as any || {};
+          const petStats = (pet.stats || {}) as Record<string, unknown>;
           const petBasePower = (Number(petStats.Str) || 0) + (Number(petStats.Spd) || 0) + (Number(petStats.Luck) || 0);
           const petElemPower = Number(petStats.ElementalPower) || 0;
           const petElements = pet.elements && pet.elements.length > 0 ? pet.elements : [pet.element];
@@ -14100,10 +14090,26 @@ export async function registerRoutes(
     }
   });
 
+  const FOREST_AREA_RANK_GATES: Record<string, { minRankIndex: number; minRank: string }> = {
+    meadow_edge: { minRankIndex: 0, minRank: "Novice" },
+    faerie_grove: { minRankIndex: 3, minRank: "Journeyman" },
+    spirit_wood: { minRankIndex: 5, minRank: "Expert" },
+    creature_den: { minRankIndex: 9, minRank: "Overlord" },
+    heartwood: { minRankIndex: 11, minRank: "Ascendant" },
+  };
+
+  const FOREST_AREA_RESOURCES: Record<string, string[]> = {
+    meadow_edge: ["wood", "fiber", "healing_herb", "wildflower_petal", "meadow_moss"],
+    faerie_grove: ["faerie_dust", "beast_hide", "glowing_mushroom", "luminous_crystal", "pixie_wing_dust"],
+    spirit_wood: ["nature_essence", "spirit_bark", "elder_wood_sap", "forest_spirit_essence", "ancient_leaf"],
+    creature_den: ["creature_fang", "mythic_beast_hide", "void_crystal", "rare_pet_fragment", "soul_shard_resource"],
+    heartwood: ["heartwood_crystal", "world_tree_sap", "primordial_seed", "essence_of_life", "genesis_fragment"],
+  };
+
   app.post("/api/accounts/:id/gather", async (req, res) => {
     try {
       const accountId = req.params.id;
-      const { zoneId } = z.object({ zoneId: z.string() }).parse(req.body);
+      const { zoneId, areaId } = z.object({ zoneId: z.string(), areaId: z.string().optional() }).parse(req.body);
 
       const account = await storage.getAccount(accountId);
       if (!account) {
@@ -14112,6 +14118,19 @@ export async function registerRoutes(
 
       if (account.isDead || account.ghostState) {
         return res.status(400).json({ error: "Cannot gather while in ghost state" });
+      }
+
+      if (zoneId === "enchanted_forest" && areaId) {
+        const areaGate = FOREST_AREA_RANK_GATES[areaId];
+        if (areaGate) {
+          const playerRankIndex = playerRanks.indexOf(account.rank as any);
+          if (playerRankIndex < areaGate.minRankIndex) {
+            return res.status(403).json({
+              error: `Area locked. Requires ${areaGate.minRank} rank to gather here.`,
+              requiredRank: areaGate.minRank,
+            });
+          }
+        }
       }
 
       const carryInfo = await getPlayerCarryInfo(accountId);
@@ -14145,13 +14164,31 @@ export async function registerRoutes(
         birdResourceLuck = (bestBird.stats as any)?.resourceLuck || 0;
       }
 
-      const gathered = gatherResources(zoneId, account.rank || "Novice", playerLuck, birdResourceLuck);
+      const allGathered = gatherResources(zoneId, account.rank || "Novice", playerLuck, birdResourceLuck);
+
+      const allowedResources = (zoneId === "enchanted_forest" && areaId && FOREST_AREA_RESOURCES[areaId])
+        ? FOREST_AREA_RESOURCES[areaId]
+        : null;
+      const gathered = allowedResources
+        ? allGathered.filter(g => allowedResources.includes(g.resourceId))
+        : allGathered;
 
       let totalWeight = 0;
       let totalGoldValue = 0;
+
+      const { inventoryItems: invItemsTable } = await import("@shared/schema");
       for (const g of gathered) {
         totalWeight += g.weight;
         totalGoldValue += g.sellPrice;
+        for (let i = 0; i < g.amount; i++) {
+          await db.insert(invItemsTable).values({
+            accountId,
+            itemId: g.resourceId,
+            stats: {},
+            sockets: 0,
+            gems: [],
+          });
+        }
       }
 
       if (totalGoldValue > 0) {

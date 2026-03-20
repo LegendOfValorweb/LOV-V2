@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useGame } from "@/lib/game-context";
 import { ZoneScene } from "@/components/zone-scene";
@@ -8,8 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Leaf, TreePine, Sparkles, Star, Heart, Zap } from "lucide-react";
+import { Leaf, TreePine, Sparkles, Star, Heart, Zap, Lock } from "lucide-react";
 import ZoneNPCPanel from "@/components/zone-npc-panel";
+import { playerRanks } from "@shared/schema";
 
 const FOREST_AREAS = [
   {
@@ -22,6 +23,9 @@ const FOREST_AREAS = [
     specialChance: 0.2,
     specialItem: "Healing Herb",
     icon: "🌸",
+    minRank: "Novice",
+    minRankIndex: 0,
+    items: ["Wood", "Fiber", "Healing Herb", "Wildflower Petal", "Meadow Moss"],
   },
   {
     id: "faerie_grove",
@@ -33,6 +37,9 @@ const FOREST_AREAS = [
     specialChance: 0.4,
     specialItem: "Faerie Dust",
     icon: "🧚",
+    minRank: "Journeyman",
+    minRankIndex: 3,
+    items: ["Faerie Dust", "Beast Hide", "Glowing Mushroom", "Luminous Crystal", "Pixie Wing Dust"],
   },
   {
     id: "spirit_wood",
@@ -44,6 +51,9 @@ const FOREST_AREAS = [
     specialChance: 0.5,
     specialItem: "Spirit Essence",
     icon: "🌲",
+    minRank: "Expert",
+    minRankIndex: 5,
+    items: ["Nature Essence", "Spirit Bark", "Elder Wood Sap", "Forest Spirit Essence", "Ancient Leaf"],
   },
   {
     id: "creature_den",
@@ -56,6 +66,9 @@ const FOREST_AREAS = [
     specialItem: "Rare Pet Fragment",
     icon: "🦊",
     pvpRisk: true,
+    minRank: "Overlord",
+    minRankIndex: 9,
+    items: ["Creature Fang", "Mythic Beast Hide", "Void Crystal", "Rare Pet Fragment", "Soul Shard"],
   },
   {
     id: "heartwood",
@@ -68,6 +81,9 @@ const FOREST_AREAS = [
     specialItem: "Heartwood Crystal",
     pvpRisk: true,
     icon: "🌳",
+    minRank: "Ascendant",
+    minRankIndex: 11,
+    items: ["Heartwood Crystal", "World Tree Sap", "Primordial Seed", "Essence of Life", "Genesis Fragment"],
   },
 ];
 
@@ -87,18 +103,32 @@ export default function EnchantedForest() {
   const [gatherProgress, setGatherProgress] = useState(0);
   const [spiritMessage, setSpiritMessage] = useState<string | null>(null);
 
-  if (!account || account.role !== "player") {
-    navigate("/");
-    return null;
-  }
+  useEffect(() => {
+    if (!account || account.role !== "player") {
+      navigate("/");
+    }
+  }, [account, navigate]);
+
+  if (!account || account.role !== "player") return null;
+
+  const playerRankIndex = playerRanks.indexOf(account.rank as any);
 
   const handleGather = async (areaId: string) => {
+    const area = FOREST_AREAS.find(a => a.id === areaId);
+    if (!area) return;
+
+    if (playerRankIndex < area.minRankIndex) {
+      toast({
+        title: "Area Locked",
+        description: `You need ${area.minRank} rank to gather here.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsGathering(areaId);
     setGatherProgress(0);
     setSpiritMessage(null);
-
-    const area = FOREST_AREAS.find(a => a.id === areaId);
-    if (!area) return;
 
     const duration = 1800 + area.difficulty * 500;
     const interval = setInterval(() => {
@@ -120,11 +150,9 @@ export default function EnchantedForest() {
       }
 
       try {
-        await apiRequest("POST", "/api/mining/mine", {
-          accountId: account.id,
-          nodeId: `forest_${areaId}`,
-          goldOverride: area.goldReward,
-          expOverride: area.expReward,
+        await apiRequest("POST", `/api/accounts/${account.id}/gather`, {
+          zoneId: "enchanted_forest",
+          areaId,
         });
       } catch {}
 
@@ -164,6 +192,10 @@ export default function EnchantedForest() {
               <span>{(account.gold ?? 0).toLocaleString()}</span>
             </div>
           </div>
+          <div className="text-xs text-green-400/70 mb-2 flex items-center gap-1">
+            <Star className="w-3 h-3" />
+            Your Rank: <span className="font-semibold text-green-300 ml-1">{account.rank}</span>
+          </div>
           {spiritMessage && (
             <Card className="bg-green-900/30 border-green-500/40 mb-3">
               <CardContent className="p-3">
@@ -181,30 +213,55 @@ export default function EnchantedForest() {
           {FOREST_AREAS.map(area => {
             const isActive = isGathering === area.id;
             const anyGathering = isGathering !== null;
+            const isLocked = playerRankIndex < area.minRankIndex;
             return (
-              <Card key={area.id} className="bg-black/60 border-green-900/40">
+              <Card key={area.id} className={`border-green-900/40 ${isLocked ? "bg-black/40 opacity-75" : "bg-black/60"}`}>
                 <CardContent className="p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-3 flex-1 min-w-0">
-                      <span className="text-2xl shrink-0">{area.icon}</span>
+                      <span className="text-2xl shrink-0">{isLocked ? "🔒" : area.icon}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="text-sm font-semibold text-white">{area.name}</h3>
-                          {area.pvpRisk && <Badge variant="destructive" className="text-[10px] h-4">PvP</Badge>}
+                          <h3 className={`text-sm font-semibold ${isLocked ? "text-gray-400" : "text-white"}`}>{area.name}</h3>
+                          {area.pvpRisk && !isLocked && <Badge variant="destructive" className="text-[10px] h-4">PvP</Badge>}
+                          {isLocked && (
+                            <Badge className="text-[10px] h-4 bg-orange-900/60 text-orange-300 border-orange-700/40">
+                              <Lock className="w-2.5 h-2.5 mr-0.5" />
+                              Requires {area.minRank}
+                            </Badge>
+                          )}
+                          {!isLocked && area.minRankIndex > 0 && (
+                            <Badge className="text-[10px] h-4 bg-green-900/40 text-green-400 border-green-700/30">
+                              {area.minRank}+
+                            </Badge>
+                          )}
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{area.description}</p>
-                        <div className="flex items-center gap-3 mt-1.5 text-xs">
-                          <span className="text-yellow-400">💰 {area.goldReward.toLocaleString()}</span>
-                          <span className="text-blue-400">⚡ {area.expReward} TP</span>
-                          <span className="text-green-400 flex items-center gap-1">
-                            <Star className="w-3 h-3" />
-                            {Math.round(area.specialChance * 100)}% rare
-                          </span>
-                        </div>
-                        {area.specialItem && (
-                          <p className="text-xs text-purple-400 mt-0.5 flex items-center gap-1">
-                            <Sparkles className="w-3 h-3" />
-                            May find: {area.specialItem}
+                        {!isLocked && (
+                          <>
+                            <div className="flex items-center gap-3 mt-1.5 text-xs">
+                              <span className="text-yellow-400">💰 {area.goldReward.toLocaleString()}</span>
+                              <span className="text-blue-400">⚡ {area.expReward} TP</span>
+                              <span className="text-green-400 flex items-center gap-1">
+                                <Star className="w-3 h-3" />
+                                {Math.round(area.specialChance * 100)}% rare
+                              </span>
+                            </div>
+                            {area.items && (
+                              <div className="flex flex-wrap gap-1 mt-1.5">
+                                {area.items.map(item => (
+                                  <span key={item} className="text-[9px] bg-green-900/30 text-green-400/80 px-1 py-0.5 rounded border border-green-800/30">
+                                    {item}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        )}
+                        {isLocked && (
+                          <p className="text-xs text-orange-400/70 mt-1 flex items-center gap-1">
+                            <Lock className="w-3 h-3" />
+                            Reach {area.minRank} rank to unlock this area
                           </p>
                         )}
                       </div>
@@ -212,10 +269,12 @@ export default function EnchantedForest() {
                     <Button
                       size="sm"
                       onClick={() => handleGather(area.id)}
-                      disabled={anyGathering}
-                      className="shrink-0 text-xs h-8 bg-green-800 hover:bg-green-700 border border-green-600/40 text-green-100"
+                      disabled={anyGathering || isLocked}
+                      className={`shrink-0 text-xs h-8 border ${isLocked ? "bg-gray-800/50 border-gray-700/40 text-gray-500 cursor-not-allowed" : "bg-green-800 hover:bg-green-700 border-green-600/40 text-green-100"}`}
                     >
-                      {isActive ? "Gathering..." : "Gather"}
+                      {isLocked ? (
+                        <><Lock className="w-3 h-3 mr-1" />Locked</>
+                      ) : isActive ? "Gathering..." : "Gather"}
                     </Button>
                   </div>
                   {isActive && (

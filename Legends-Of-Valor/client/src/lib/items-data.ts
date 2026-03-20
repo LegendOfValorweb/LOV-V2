@@ -171,6 +171,24 @@ const mythicalLegendItems: Omit<Item, "id" | "tier">[] = [
   {"name": "Mythical Titan's Last Stand", "type": "armor", "stats": {"Str": 11000, "Spd": 11000, "Int": 8000}, "price": 2700000000},
 ];
 
+const forestWeaponItems: Omit<Item, "id" | "tier">[] = [
+  {"name": "Novice Meadow Stick", "type": "weapon", "stats": {"Str": 15, "Luck": 5}, "special": "Nature's Touch", "price": 200},
+  {"name": "Apprentice Faerie Wand", "type": "weapon", "stats": {"Int": 35, "Luck": 10}, "special": "Pixie Dust", "price": 550},
+  {"name": "Initiate Spirit Blade", "type": "weapon", "stats": {"Str": 55, "Spd": 15}, "special": "Spirit Strike", "price": 900},
+  {"name": "Journeyman Grove Bow", "type": "weapon", "stats": {"Spd": 95, "Luck": 25}, "special": "Nature's Arrow", "price": 1800},
+  {"name": "Adept Elder Branch", "type": "weapon", "stats": {"Int": 175, "Str": 50}, "special": "Elder Wisdom", "price": 3500},
+  {"name": "Expert Forest Fang", "type": "weapon", "stats": {"Str": 350, "Spd": 80}, "special": "Creature's Bite", "price": 8000},
+  {"name": "Master Heartwood Staff", "type": "weapon", "stats": {"Int": 700, "Luck": 150}, "special": "Heart of the Forest", "price": 20000},
+  {"name": "Grandmaster Void Leaf", "type": "weapon", "stats": {"Str": 1400, "Int": 500}, "special": "Void Thorns", "price": 55000},
+  {"name": "Champion World Tree Spear", "type": "weapon", "stats": {"Str": 2800, "Spd": 800}, "special": "World Tree's Fury", "price": 130000},
+  {"name": "Overlord Genesis Blade", "type": "weapon", "stats": {"Str": 5500, "Luck": 1200}, "special": "Genesis Slash", "price": 300000},
+  {"name": "Sovereign Primordial Bow", "type": "weapon", "stats": {"Spd": 11000, "Luck": 2500}, "special": "Primordial Shot", "price": 900000},
+  {"name": "Ascendant Essence Scythe", "type": "weapon", "stats": {"Str": 27000, "Int": 8000}, "special": "Life's Harvest", "price": 2500000},
+  {"name": "Legend's Heartwood Ragnarok", "type": "weapon", "stats": {"Str": 80000, "Int": 20000}, "special": "Forest Ragnarok", "price": 12000000},
+  {"name": "Mythic Forest Obliterator", "type": "weapon", "stats": {"Str": 200000, "Spd": 80000, "Luck": 50000}, "special": "Mythic Overgrowth", "price": 60000000},
+  {"name": "Mythical Legend's World-Root", "type": "weapon", "stats": {"Str": 12000, "Int": 8000, "Luck": 6000}, "special": "Root of Creation", "price": 2100000000},
+];
+
 function generateItems(items: Omit<Item, "id" | "tier">[], tier: ItemTier): Item[] {
   return items.map((item, index) => ({
     ...item,
@@ -178,6 +196,18 @@ function generateItems(items: Omit<Item, "id" | "tier">[], tier: ItemTier): Item
     tier,
   }));
 }
+
+const FOREST_WEAPON_RANKS: ItemTier[] = [
+  "initiate", "initiate", "initiate", "journeyman", "adept",
+  "expert", "master", "grandmaster", "champion", "overlord",
+  "sovereign", "ascendant", "legend", "elite", "mythical_legend",
+];
+
+export const FOREST_WEAPONS: Item[] = forestWeaponItems.map((item, index) => ({
+  ...item,
+  id: `forest_weapon-${index}`,
+  tier: FOREST_WEAPON_RANKS[index],
+}));
 
 export const ALL_ITEMS: Item[] = [
   ...generateItems(tier1Items, "normal"),
@@ -199,6 +229,7 @@ export const ALL_ITEMS: Item[] = [
   ...generateItems(legendItems, "legend"),
   ...generateItems(eliteItems, "elite"),
   ...generateItems(mythicalLegendItems, "mythical_legend"),
+  ...FOREST_WEAPONS,
 ];
 
 export const TIER_LABELS: Record<string, string> = {
