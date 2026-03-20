@@ -10,7 +10,7 @@ export function registerAudioRoutes(app: Express): void {
   app.post("/api/voice/conversations/:id/messages", async (req: Request, res: Response) => {
     try {
       const conversationId = req.params.id;
-      const { audio, voice = "alloy", inputFormat = "wav" } = req.body;
+      const { audio, voice = "onyx", inputFormat = "wav" } = req.body;
 
       if (!audio) {
         return res.status(400).json({ error: "Audio data (base64) is required" });
@@ -82,7 +82,7 @@ export function registerAudioRoutes(app: Express): void {
   app.post("/api/voice/conversations/:id/voice-stream", async (req: Request, res: Response) => {
     try {
       const conversationId = req.params.id;
-      const { audio, voice = "alloy", inputFormat = "wav", locale = "en" } = req.body;
+      const { audio, voice = "onyx", inputFormat = "wav", locale = "en" } = req.body;
 
       if (!audio) {
         return res.status(400).json({ error: "Audio data (base64) is required" });

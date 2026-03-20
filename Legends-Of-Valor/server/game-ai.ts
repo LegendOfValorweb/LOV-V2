@@ -439,9 +439,9 @@ export async function getPlayerAIRequests(accountId: string) {
 export async function generateVoiceResponse(text: string): Promise<Buffer | null> {
   try {
     const response = await openai.audio.speech.create({
-      model: "tts-1",
-      voice: "fable",
-      speed: 0.88,
+      model: "tts-1-hd",
+      voice: "onyx",
+      speed: 0.92,
       input: text.slice(0, 4096),
     });
     
