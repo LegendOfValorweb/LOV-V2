@@ -311,18 +311,35 @@ export async function getTutorialContent(accountId: string, topic: string): Prom
 }
 
 // Main chat function
+// In-character fallback responses when the AI service is unavailable
+const FALLBACK_RESPONSES = [
+  "The threads of fate grow tangled tonight, and my sight dims. Yet hear me — your journey is far from over. Press forward, {name}. The tower does not wait for hesitation.",
+  "There are moments when even I, who have witnessed the birth of this world, must hold my tongue. The omens speak in riddles. Trust your instincts, {name}, and the path will reveal itself.",
+  "A veil has fallen between us — ancient magic stirs and clouds my vision. Seek your answers in battle, {name}. Combat reveals what prophecy cannot.",
+  "The stars fall silent sometimes. But your deeds speak louder than any oracle. {name}, what you have already accomplished is proof enough of your potential.",
+  "I sense a disturbance in the weave of fate. Speak with me again shortly — for now, let your sword and your wits guide you. They have not failed you yet.",
+  "Even the Game Master must sometimes retreat into silence to observe, to weigh, to calculate. Continue your ascent, {name}. Every floor you climb writes your legend.",
+  "The Void whispers strange things tonight, {name}. My counsel is clouded. But this I know: warriors are forged not by guidance alone, but by choosing to rise when no one is watching.",
+];
+
+function getFallbackResponse(playerName: string): string {
+  const template = FALLBACK_RESPONSES[Math.floor(Math.random() * FALLBACK_RESPONSES.length)];
+  return template.replace(/{name}/g, playerName);
+}
+
 export async function chatWithGameAI(
   accountId: string,
   playerMessage: string
 ): Promise<AIResponse> {
+  const account = await storage.getAccount(accountId);
+  if (!account) {
+    throw new Error("Account not found");
+  }
+
+  const storyline = await getPlayerStoryline(accountId);
+  const conversationHistory = storyline.conversationHistory as ChatMessage[];
+
   try {
-    const account = await storage.getAccount(accountId);
-    if (!account) {
-      throw new Error("Account not found");
-    }
-    
-    const storyline = await getPlayerStoryline(accountId);
-    const conversationHistory = storyline.conversationHistory as ChatMessage[];
     const personality = PERSONALITY_MODIFIERS[storyline.guidePersonality || "friendly"];
     const storyAct = getStoryAct(account.npcFloor);
     
@@ -356,7 +373,7 @@ ${personality}
       max_tokens: 500,
     });
     
-    const aiMessage = response.choices[0]?.message?.content || "I apologize, but I cannot respond right now.";
+    const aiMessage = response.choices[0]?.message?.content || getFallbackResponse(account.username);
     const parsed = parseAIResponse(aiMessage);
     
     // Update conversation history
@@ -364,7 +381,7 @@ ${personality}
       ...conversationHistory,
       { role: "user" as const, content: playerMessage },
       { role: "assistant" as const, content: parsed.message },
-    ].slice(-50); // Keep last 50 messages
+    ].slice(-50);
     
     await updatePlayerStoryline(accountId, { conversationHistory: newHistory });
     
@@ -378,7 +395,6 @@ ${personality}
         metadata: reward,
       });
       
-      // Add to pending rewards
       const pendingRewards = (storyline.pendingRewards as Array<{ type: string; amount: number; reason: string }>) || [];
       pendingRewards.push(reward);
       await updatePlayerStoryline(accountId, { pendingRewards });
@@ -399,17 +415,33 @@ ${personality}
     console.error("ChatGPT Error:", error);
     
     // Log error for admin
-    await db.insert(aiAdminRequests).values({
-      accountId,
-      requestType: "error",
-      message: `AI Error: ${error instanceof Error ? error.message : "Unknown error"}`,
-      metadata: { originalMessage: playerMessage },
-    });
+    try {
+      await db.insert(aiAdminRequests).values({
+        accountId,
+        requestType: "error",
+        message: `AI Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+        metadata: { originalMessage: playerMessage },
+      });
+    } catch (_) {}
+    
+    // Use in-character fallback so the conversation still feels alive
+    const fallbackMessage = getFallbackResponse(account.username);
+    
+    // ALWAYS save to conversation history so the frontend can display it
+    const newHistory = [
+      ...conversationHistory,
+      { role: "user" as const, content: playerMessage },
+      { role: "assistant" as const, content: fallbackMessage },
+    ].slice(-50);
+    
+    try {
+      await updatePlayerStoryline(accountId, { conversationHistory: newHistory });
+    } catch (_) {}
     
     return {
-      message: "I apologize, but I'm having trouble responding right now. An admin has been notified.",
+      message: fallbackMessage,
       rewardRequests: [],
-      adminRequests: [{ type: "error", message: String(error) }],
+      adminRequests: [],
     };
   }
 }
