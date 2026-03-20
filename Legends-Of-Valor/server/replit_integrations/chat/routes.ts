@@ -2,12 +2,9 @@ import type { Express, Request, Response } from "express";
 import OpenAI from "openai";
 import { chatStorage } from "./storage";
 
-const integrationKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-const usingIntegration = integrationKey && integrationKey !== "_DUMMY_API_KEY_";
-
 const openai = new OpenAI({
-  apiKey: usingIntegration ? integrationKey : (process.env.OPENAI_API_KEY || "no-key-configured"),
-  ...(usingIntegration ? { baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL } : {}),
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
 export function registerChatRoutes(app: Express): void {
@@ -85,7 +82,7 @@ export function registerChatRoutes(app: Express): void {
 
       // Stream response from OpenAI
       const stream = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "gpt-5-mini",
         messages: chatMessages,
         stream: true,
         max_completion_tokens: 2048,

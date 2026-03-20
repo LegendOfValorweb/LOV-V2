@@ -324,7 +324,7 @@ export async function* voiceChatWithTextModel(
     inputFormat = "wav",
     systemPrompt = "You are a helpful assistant.",
     chatHistory = [],
-    textModel = "gpt-4o-mini",
+    textModel = "gpt-5-mini",
     locale = "en",
   } = options;
 
