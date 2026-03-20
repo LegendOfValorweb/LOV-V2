@@ -148,9 +148,9 @@ export default function EnchantedForest() {
       ambientClass="zone-ambient-forest"
       loreText="A mystical woodland alive with ancient magic. Faeries, spirits, and rare creatures call this place home..."
       interactables={[
-        { id: "herb", type: "resource", label: "Rare Herbs", icon: "🌿", x: 20, y: 55, onClick: () => handleGather("meadow_edge") },
-        { id: "faerie", type: "npc", label: "Faerie Queen", icon: "🧚", x: 65, y: 38, onClick: () => {} },
-        { id: "tree", type: "resource", label: "Spirit Tree", icon: "🌲", x: 45, y: 30, onClick: () => handleGather("spirit_wood") },
+        { id: "herb", type: "resource", name: "Rare Herbs", emoji: "🌿", position: { x: 20, y: 55 }, onClick: () => handleGather("meadow_edge") },
+        { id: "faerie", type: "npc", name: "Faerie Queen", emoji: "🧚", position: { x: 65, y: 38 }, onClick: () => {} },
+        { id: "tree", type: "resource", name: "Spirit Tree", emoji: "🌲", position: { x: 45, y: 30 }, onClick: () => handleGather("spirit_wood") },
       ]}
     >
       <div className="flex flex-col h-full">

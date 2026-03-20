@@ -154,8 +154,8 @@ export default function AncientRuins() {
       ambientClass="zone-ambient-mystical"
       loreText="Crumbling temples of a forgotten age. Artifacts of immense power lie buried beneath the stone..."
       interactables={[
-        { id: "scroll", type: "resource", label: "Lore Scroll", icon: "📜", x: 20, y: 40, onClick: () => {} },
-        { id: "boss", type: "npc", label: "Ancient Boss", icon: "☠️", x: 78, y: 30, onClick: () => {} },
+        { id: "scroll", type: "resource", name: "Lore Scroll", emoji: "📜", position: { x: 20, y: 40 }, onClick: () => {} },
+        { id: "boss", type: "npc", name: "Ancient Boss", emoji: "☠️", position: { x: 78, y: 30 }, onClick: () => {} },
       ]}
     >
       <div className="flex flex-col h-full">

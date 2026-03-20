@@ -203,8 +203,8 @@ export default function ResearchLab() {
       ambientClass="zone-ambient-arcane"
       loreText="Where scholars unlock the secrets of the arcane arts. Craft, enchant, and research to grow stronger..."
       interactables={[
-        { id: "lab", type: "shop", label: "Alchemy Bench", icon: "⚗️", x: 25, y: 45, onClick: () => setActiveTab("crafting") },
-        { id: "rune", type: "resource", label: "Rune Table", icon: "✨", x: 72, y: 38, onClick: () => setActiveTab("enchanting") },
+        { id: "lab", type: "shop", name: "Alchemy Bench", emoji: "⚗️", position: { x: 25, y: 45 }, onClick: () => setActiveTab("crafting") },
+        { id: "rune", type: "resource", name: "Rune Table", emoji: "✨", position: { x: 72, y: 38 }, onClick: () => setActiveTab("enchanting") },
       ]}
     >
       <div className="flex flex-col h-full">
