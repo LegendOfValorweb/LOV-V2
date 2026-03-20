@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useGame } from "@/lib/game-context";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";

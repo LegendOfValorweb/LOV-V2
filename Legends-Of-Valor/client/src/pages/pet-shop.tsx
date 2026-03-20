@@ -179,7 +179,7 @@ export default function PetShop() {
       />
       <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/60 to-black/80" />
       
-      <div className="relative z-10">
+      <div className="absolute inset-0 z-10 overflow-y-auto">
         <header className="border-b border-border/50 bg-black/50 backdrop-blur-sm">
           <div className="container mx-auto px-4 py-4">
             <div className="flex items-center justify-between">

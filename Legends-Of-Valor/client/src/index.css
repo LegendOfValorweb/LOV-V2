@@ -1238,7 +1238,7 @@
 }
 
 .zone-layer-midground {
-  pointer-events: auto;
+  pointer-events: none;
   z-index: 5;
 }
 
@@ -1375,6 +1375,7 @@
   padding: 4px;
   transition: transform 0.2s ease, filter 0.2s ease;
   z-index: 10;
+  pointer-events: auto;
 }
 
 .zone-interactable:hover {

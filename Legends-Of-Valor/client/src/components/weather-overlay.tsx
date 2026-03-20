@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 
 type WeatherType = "clear" | "rain" | "thunderstorm" | "fog" | "blizzard";
 type TimeOfDay = "dawn" | "day" | "dusk" | "night";
@@ -16,7 +17,40 @@ interface WorldTimeData {
   weather: Record<string, { type: WeatherType }>;
 }
 
+const ROUTE_TO_ZONE: Record<string, string> = {
+  "/fishing": "crystal_lake",
+  "/hell-zone": "hell_zone",
+  "/mining": "mountain_caverns",
+  "/ruby-mines": "ruby_mines",
+  "/pets": "pet_training",
+  "/npc-battle": "mystic_tower",
+  "/guild": "guild_hall",
+  "/base": "capital_city",
+  "/shop": "capital_city",
+  "/birds": "enchanted_forest",
+  "/enchanted-forest": "enchanted_forest",
+  "/ancient-ruins": "ancient_ruins",
+  "/research-lab": "research_lab",
+  "/challenges": "battle_arena",
+  "/tournaments": "capital_city",
+  "/pet-arena": "pet_training",
+  "/pet-shop": "capital_city",
+  "/valor-shop": "capital_city",
+  "/cosmetics-shop": "capital_city",
+  "/black-market": "capital_city",
+  "/auction-house": "capital_city",
+  "/trading": "capital_city",
+  "/quests": "capital_city",
+  "/skills": "research_lab",
+  "/leaderboard": "capital_city",
+  "/inventory": "capital_city",
+  "/achievements": "capital_city",
+  "/valorpedia": "capital_city",
+  "/reputation": "capital_city",
+};
+
 export function WeatherOverlay() {
+  const [location] = useLocation();
   const [worldTime, setWorldTime] = useState<WorldTimeData | null>(null);
   const [lightning, setLightning] = useState(false);
 
@@ -38,10 +72,12 @@ export function WeatherOverlay() {
     return () => clearInterval(interval);
   }, []);
 
+  const currentZoneId = ROUTE_TO_ZONE[location] || "capital-city";
+
   useEffect(() => {
     if (!worldTime) return;
-    const weatherTypes = Object.values(worldTime.weather).map(w => w.type);
-    const hasThunderstorm = weatherTypes.includes("thunderstorm");
+    const zoneWeather = worldTime.weather[currentZoneId];
+    const hasThunderstorm = zoneWeather?.type === "thunderstorm";
     if (!hasThunderstorm) return;
 
     const triggerLightning = () => {
@@ -54,17 +90,18 @@ export function WeatherOverlay() {
     }, 4000);
 
     return () => clearInterval(interval);
-  }, [worldTime]);
+  }, [worldTime, currentZoneId]);
 
   if (!worldTime) return null;
 
   const { dayNight, weather } = worldTime;
-  const weatherTypes = Object.values(weather).map(w => w.type);
+  const zoneWeather = weather[currentZoneId] || weather["capital-city"] || { type: "clear" };
+  const weatherType = zoneWeather.type;
 
-  const hasRain = weatherTypes.includes("rain") || weatherTypes.includes("thunderstorm");
-  const hasFog = weatherTypes.includes("fog");
-  const hasBlizzard = weatherTypes.includes("blizzard");
-  const hasThunderstorm = weatherTypes.includes("thunderstorm");
+  const hasRain = weatherType === "rain" || weatherType === "thunderstorm";
+  const hasFog = weatherType === "fog";
+  const hasBlizzard = weatherType === "blizzard";
+  const hasThunderstorm = weatherType === "thunderstorm";
 
   return (
     <div className="weather-overlay-container pointer-events-none">

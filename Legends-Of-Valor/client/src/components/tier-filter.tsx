@@ -17,16 +17,27 @@ const tierButtonStyles: Record<ItemTier | "all", string> = {
   umr: "data-[state=on]:bg-tier-umr/20 data-[state=on]:text-tier-umr data-[state=on]:border-tier-umr",
   ssumr: "data-[state=on]:bg-tier-ssumr/20 data-[state=on]:text-tier-ssumr data-[state=on]:border-tier-ssumr",
   divine: "data-[state=on]:bg-tier-divine/20 data-[state=on]:text-tier-divine data-[state=on]:border-tier-divine",
+  initiate: "data-[state=on]:bg-slate-500/20 data-[state=on]:text-slate-400 data-[state=on]:border-slate-500",
   journeyman: "data-[state=on]:bg-tier-journeyman/20 data-[state=on]:text-tier-journeyman data-[state=on]:border-tier-journeyman",
+  adept: "data-[state=on]:bg-emerald-500/20 data-[state=on]:text-emerald-400 data-[state=on]:border-emerald-500",
   expert: "data-[state=on]:bg-tier-expert/20 data-[state=on]:text-tier-expert data-[state=on]:border-tier-expert",
   master: "data-[state=on]:bg-tier-master/20 data-[state=on]:text-tier-master data-[state=on]:border-tier-master",
   grandmaster: "data-[state=on]:bg-tier-grandmaster/20 data-[state=on]:text-tier-grandmaster data-[state=on]:border-tier-grandmaster",
+  champion: "data-[state=on]:bg-rose-500/20 data-[state=on]:text-rose-400 data-[state=on]:border-rose-500",
+  overlord: "data-[state=on]:bg-slate-700/20 data-[state=on]:text-slate-300 data-[state=on]:border-slate-700",
+  sovereign: "data-[state=on]:bg-amber-600/20 data-[state=on]:text-amber-500 data-[state=on]:border-amber-600",
+  ascendant: "data-[state=on]:bg-sky-500/20 data-[state=on]:text-sky-400 data-[state=on]:border-sky-500",
   legend: "data-[state=on]:bg-tier-legend/20 data-[state=on]:text-tier-legend data-[state=on]:border-tier-legend",
   elite: "data-[state=on]:bg-tier-elite/20 data-[state=on]:text-tier-elite data-[state=on]:border-tier-elite",
+  mythical_legend: "data-[state=on]:bg-pink-600/20 data-[state=on]:text-pink-400 data-[state=on]:border-pink-600",
 };
 
 export function TierFilter({ selectedTier, onSelectTier, excludeTiers = [] }: TierFilterProps) {
-  const allTiers: (ItemTier | "all")[] = ["all", "normal", "super_rare", "x_tier", "umr", "ssumr", "divine", "journeyman", "expert", "master", "grandmaster", "legend", "elite"];
+  const allTiers: (ItemTier | "all")[] = [
+    "all", "normal", "super_rare", "x_tier", "umr", "ssumr", "divine",
+    "initiate", "journeyman", "adept", "expert", "master", "grandmaster",
+    "champion", "overlord", "sovereign", "ascendant", "legend", "elite", "mythical_legend"
+  ];
   const tiers = allTiers.filter(t => t === "all" || !excludeTiers.includes(t as ItemTier));
 
   return (

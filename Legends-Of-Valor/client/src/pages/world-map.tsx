@@ -98,7 +98,7 @@ const zones: Zone[] = [
     pvpEnabled: true,
     activities: ["Exploration", "Artifact Hunting", "Boss Encounters"],
     coordinates: { x: 18, y: 28 },
-    route: "/quests",
+    route: "/ancient-ruins",
   },
   {
     id: "research-lab",
@@ -109,7 +109,7 @@ const zones: Zone[] = [
     pvpEnabled: false,
     activities: ["Crafting", "Enchanting", "Skill Research"],
     coordinates: { x: 35, y: 72 },
-    route: "/skills",
+    route: "/research-lab",
   },
   {
     id: "pet-training",
@@ -155,7 +155,7 @@ const zones: Zone[] = [
     pvpEnabled: false,
     activities: ["Gathering", "Pet Capture", "Quests"],
     coordinates: { x: 12, y: 55 },
-    route: "/birds",
+    route: "/enchanted-forest",
   },
   {
     id: "battle-arena",
@@ -166,7 +166,7 @@ const zones: Zone[] = [
     pvpEnabled: true,
     activities: ["PvP Duels", "Rankings"],
     coordinates: { x: 65, y: 33 },
-    route: "/leaderboard",
+    route: "/challenges",
   },
   {
     id: "tournament-grounds",

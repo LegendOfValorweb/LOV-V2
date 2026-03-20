@@ -303,7 +303,7 @@ export default function ValorShop() {
       />
       <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-black/70" />
       
-      <div className="relative z-10">
+      <div className="absolute inset-0 z-10 overflow-y-auto">
         <header className="sticky top-0 z-50 border-b border-red-500/30 bg-black/80 backdrop-blur">
           <div className="container mx-auto px-4 py-4">
             <div className="flex items-center justify-between">

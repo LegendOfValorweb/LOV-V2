@@ -38,6 +38,9 @@ import HellZone from "@/pages/hell-zone";
 import Valorpedia from "@/pages/valorpedia";
 import Reputation from "@/pages/reputation";
 import BlackMarket from "@/pages/black-market";
+import AncientRuins from "@/pages/ancient-ruins";
+import ResearchLab from "@/pages/research-lab";
+import EnchantedForest from "@/pages/enchanted-forest";
 import NotFound from "@/pages/not-found";
 import { MobileLandscapePrompt } from "@/components/mobile-landscape-prompt";
 import { AppLoadingWrapper } from "@/components/app-loading-wrapper";
@@ -77,6 +80,9 @@ function Router() {
       <Route path="/valorpedia" component={Valorpedia} />
       <Route path="/reputation" component={Reputation} />
       <Route path="/black-market" component={BlackMarket} />
+      <Route path="/ancient-ruins" component={AncientRuins} />
+      <Route path="/research-lab" component={ResearchLab} />
+      <Route path="/enchanted-forest" component={EnchantedForest} />
       <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>
