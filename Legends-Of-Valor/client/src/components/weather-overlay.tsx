@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 
 type WeatherType = "clear" | "rain" | "thunderstorm" | "fog" | "blizzard";
@@ -72,7 +72,7 @@ export function WeatherOverlay() {
     return () => clearInterval(interval);
   }, []);
 
-  const currentZoneId = ROUTE_TO_ZONE[location] || "capital-city";
+  const currentZoneId = ROUTE_TO_ZONE[location] || "capital_city";
 
   useEffect(() => {
     if (!worldTime) return;
@@ -92,11 +92,34 @@ export function WeatherOverlay() {
     return () => clearInterval(interval);
   }, [worldTime, currentZoneId]);
 
+  const weatherType: WeatherType = worldTime
+    ? (worldTime.weather[currentZoneId] || worldTime.weather["capital_city"] || { type: "clear" }).type
+    : "clear";
+
+  const rainParticles = useMemo(() =>
+    Array.from({ length: 60 }, (_, i) => ({
+      id: i,
+      left: Math.random() * 100,
+      delay: Math.random() * 2,
+      duration: 0.5 + Math.random() * 0.5,
+    })),
+    [weatherType]
+  );
+
+  const snowParticles = useMemo(() =>
+    Array.from({ length: 40 }, (_, i) => ({
+      id: i,
+      left: Math.random() * 100,
+      delay: Math.random() * 4,
+      duration: 3 + Math.random() * 3,
+      fontSize: 4 + Math.random() * 6,
+    })),
+    [weatherType]
+  );
+
   if (!worldTime) return null;
 
-  const { dayNight, weather } = worldTime;
-  const zoneWeather = weather[currentZoneId] || weather["capital-city"] || { type: "clear" };
-  const weatherType = zoneWeather.type;
+  const { dayNight } = worldTime;
 
   const hasRain = weatherType === "rain" || weatherType === "thunderstorm";
   const hasFog = weatherType === "fog";
@@ -113,14 +136,14 @@ export function WeatherOverlay() {
       {}
       {hasRain && (
         <div className="weather-rain-layer">
-          {Array.from({ length: 60 }).map((_, i) => (
+          {rainParticles.map((p) => (
             <div
-              key={i}
+              key={p.id}
               className="weather-raindrop"
               style={{
-                left: `${Math.random() * 100}%`,
-                animationDelay: `${Math.random() * 2}s`,
-                animationDuration: `${0.5 + Math.random() * 0.5}s`,
+                left: `${p.left}%`,
+                animationDelay: `${p.delay}s`,
+                animationDuration: `${p.duration}s`,
               }}
             />
           ))}
@@ -130,15 +153,15 @@ export function WeatherOverlay() {
       {}
       {hasBlizzard && (
         <div className="weather-snow-layer">
-          {Array.from({ length: 40 }).map((_, i) => (
+          {snowParticles.map((p) => (
             <div
-              key={i}
+              key={p.id}
               className="weather-snowflake"
               style={{
-                left: `${Math.random() * 100}%`,
-                animationDelay: `${Math.random() * 4}s`,
-                animationDuration: `${3 + Math.random() * 3}s`,
-                fontSize: `${4 + Math.random() * 6}px`,
+                left: `${p.left}%`,
+                animationDelay: `${p.delay}s`,
+                animationDuration: `${p.duration}s`,
+                fontSize: `${p.fontSize}px`,
               }}
             />
           ))}
