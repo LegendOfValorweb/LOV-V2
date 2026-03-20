@@ -45,3 +45,7 @@ AI_INTEGRATIONS_OPENAI_API_KEY = "_DUMMY_API_KEY_"
 deploymentTarget = "autoscale"
 run = ["npm", "run", "start"]
 build = ["npm", "run", "build"]
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 120000
