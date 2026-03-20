@@ -4,9 +4,14 @@ import { db } from "./db";
 import { playerStorylines, aiAdminRequests } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
+const integrationKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+const usingIntegration = integrationKey && integrationKey !== "_DUMMY_API_KEY_";
+const directKey = process.env.OPENAI_API_KEY;
+const aiAvailable = usingIntegration || !!directKey;
+
 const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  apiKey: usingIntegration ? integrationKey : (directKey || "no-key-configured"),
+  ...(usingIntegration ? { baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL } : {}),
 });
 
 const PERSONALITY_MODIFIERS: Record<string, string> = {
@@ -438,15 +443,32 @@ export async function getPlayerAIRequests(accountId: string) {
 // Text-to-Speech voice response
 export async function generateVoiceResponse(text: string): Promise<Buffer | null> {
   try {
-    const response = await openai.audio.speech.create({
-      model: "tts-1-hd",
-      voice: "onyx",
-      speed: 0.92,
-      input: text.slice(0, 4096),
-    });
-    
-    const arrayBuffer = await response.arrayBuffer();
-    return Buffer.from(arrayBuffer);
+    if (usingIntegration) {
+      const response = await openai.chat.completions.create({
+        model: "gpt-audio-mini",
+        modalities: ["text", "audio"],
+        audio: { voice: "onyx", format: "mp3" },
+        messages: [
+          {
+            role: "system",
+            content: "You are a deep, authoritative fantasy Game Master. Repeat the user's text verbatim with dramatic gravitas.",
+          },
+          { role: "user", content: text.slice(0, 4096) },
+        ],
+      });
+      const audioData = (response.choices[0]?.message as any)?.audio?.data ?? "";
+      if (!audioData) return null;
+      return Buffer.from(audioData, "base64");
+    } else {
+      const response = await openai.audio.speech.create({
+        model: "tts-1-hd",
+        voice: "onyx",
+        speed: 0.92,
+        input: text.slice(0, 4096),
+      });
+      const arrayBuffer = await response.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    }
   } catch (error) {
     console.error("TTS Error:", error);
     return null;

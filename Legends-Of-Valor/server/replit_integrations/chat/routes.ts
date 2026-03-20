@@ -2,9 +2,12 @@ import type { Express, Request, Response } from "express";
 import OpenAI from "openai";
 import { chatStorage } from "./storage";
 
+const integrationKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+const usingIntegration = integrationKey && integrationKey !== "_DUMMY_API_KEY_";
+
 const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  apiKey: usingIntegration ? integrationKey : (process.env.OPENAI_API_KEY || "no-key-configured"),
+  ...(usingIntegration ? { baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL } : {}),
 });
 
 export function registerChatRoutes(app: Express): void {
