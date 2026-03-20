@@ -17,6 +17,7 @@ import {
   Sparkles,
   Timer
 } from "lucide-react";
+import ZoneNPCPanel from "@/components/zone-npc-panel";
 
 const MINING_NODES = [
   { id: "copper", name: "Copper Vein", goldReward: 100, expReward: 5, difficulty: 1, color: "text-orange-400" },
@@ -115,7 +116,8 @@ export default function Mining() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-3 pt-0">
+        <div className="flex-1 overflow-y-auto p-3 pt-0 space-y-3">
+          <ZoneNPCPanel zoneId="mountain-caverns" />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {MINING_NODES.map((node) => (
               <div key={node.id} className="rpg-card p-3 space-y-3">

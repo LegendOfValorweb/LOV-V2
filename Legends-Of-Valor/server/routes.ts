@@ -3,7 +3,8 @@ import { createServer, type Server } from "http";
 import { getWorldTimeInfo, getDayNightState } from "./weather-system";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties } from "@shared/schema";
+import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress } from "@shared/schema";
+import { ZONE_NPCS, getZoneNPC, calculateNPCStats, calculateNPCRewards } from "@shared/zone-npcs";
 import { z } from "zod";
 import type { Account, Event, Challenge, PlayerRace, PlayerGender } from "@shared/schema";
 import {
@@ -13774,6 +13775,200 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Monster history error:", error);
       res.status(500).json({ error: "Failed to get monster history" });
+    }
+  });
+
+  // ================ ZONE NPC SYSTEM ================
+
+  app.get("/api/zone-npcs", (_req, res) => {
+    res.json(ZONE_NPCS.map(n => ({
+      id: n.id,
+      zoneId: n.zoneId,
+      name: n.name,
+      race: n.race,
+      element: n.element,
+      personality: n.personality,
+      lore: n.lore,
+      dialogue: n.dialogue,
+      emoji: n.emoji,
+      portrait: n.portrait,
+    })));
+  });
+
+  app.get("/api/zones/:zoneId/npc", async (req, res) => {
+    try {
+      const zoneId = req.params.zoneId;
+      const accountId = req.query.accountId as string;
+      const npc = getZoneNPC(zoneId);
+      if (!npc) return res.status(404).json({ error: "No NPC in this zone" });
+
+      let defeatCount = 0;
+      if (accountId) {
+        const [progress] = await db.select().from(zoneNpcProgress)
+          .where(and(eq(zoneNpcProgress.accountId, accountId), eq(zoneNpcProgress.npcId, npc.id)))
+          .limit(1);
+        defeatCount = progress?.defeatCount ?? 0;
+      }
+
+      const account = accountId ? await storage.getAccount(accountId) : null;
+      const playerRankIndex = account ? playerRanks.indexOf(account.rank as any) : 0;
+      const scaledStats = calculateNPCStats(npc, Math.max(0, playerRankIndex), defeatCount);
+      const rewards = calculateNPCRewards(npc, Math.max(0, playerRankIndex), defeatCount);
+
+      res.json({
+        id: npc.id,
+        zoneId: npc.zoneId,
+        name: npc.name,
+        race: npc.race,
+        element: npc.element,
+        personality: npc.personality,
+        lore: npc.lore,
+        dialogue: npc.dialogue,
+        emoji: npc.emoji,
+        portrait: npc.portrait,
+        growthRate: npc.growthRate,
+        scaledStats,
+        rewards,
+        defeatCount,
+      });
+    } catch (error) {
+      console.error("Zone NPC fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch zone NPC" });
+    }
+  });
+
+  app.post("/api/zones/:zoneId/npc/fight", async (req, res) => {
+    try {
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      const zoneId = req.params.zoneId;
+
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+      if (account.isDead || account.ghostState) return res.status(403).json({ error: "Cannot fight in Ghost State" });
+
+      const npc = getZoneNPC(zoneId);
+      if (!npc) return res.status(404).json({ error: "No NPC in this zone" });
+
+      const [progressRow] = await db.select().from(zoneNpcProgress)
+        .where(and(eq(zoneNpcProgress.accountId, accountId), eq(zoneNpcProgress.npcId, npc.id)))
+        .limit(1);
+      const defeatCount = progressRow?.defeatCount ?? 0;
+
+      const playerRankIndex = Math.max(0, playerRanks.indexOf(account.rank as any));
+      const npcScaled = calculateNPCStats(npc, playerRankIndex, defeatCount);
+      const rewards = calculateNPCRewards(npc, playerRankIndex, defeatCount);
+
+      const playerStats = account.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 };
+
+      let npcFightSpell: any = null;
+      const npcEquippedSkill = await storage.getEquippedSkill(accountId);
+      if (npcEquippedSkill) {
+        const { getSkillById, RANK_MULTIPLIER } = await import("@shared/skills-data");
+        const skillDef = getSkillById(npcEquippedSkill.skillId);
+        if (skillDef) {
+          const rankMult = RANK_MULTIPLIER[account.rank || "Novice"] || 1.0;
+          npcFightSpell = {
+            name: skillDef.name,
+            multiplier: skillDef.spellPower || 1.5,
+            element: skillDef.element,
+            isAoE: skillDef.spellCategory === "aoe",
+            spellCategory: skillDef.spellCategory || "damage",
+            spellPower: skillDef.spellPower || 1.5,
+            ccType: skillDef.ccType,
+            ccDuration: skillDef.ccDuration,
+            buffStat: skillDef.buffStat,
+            buffAmount: skillDef.buffAmount,
+            rankMultiplier: rankMult,
+          };
+        }
+      }
+
+      const playerCombatant: Combatant = {
+        id: accountId,
+        name: account.username,
+        stats: {
+          Str: Number(playerStats.Str) || 10,
+          Def: Number(playerStats.Def) || 10,
+          Spd: Number(playerStats.Spd) || 10,
+          Int: Number(playerStats.Int) || 10,
+          Luck: Number(playerStats.Luck) || 10,
+          Pot: Number(playerStats.Pot) || 0,
+        },
+        race: account.race,
+        rank: account.rank,
+        level: playerRankIndex + 1,
+        isPlayer: true,
+        spell: npcFightSpell,
+      };
+
+      const npcCombatant: Combatant = {
+        id: npc.id,
+        name: npc.name,
+        stats: {
+          Str: npcScaled.Str,
+          Def: npcScaled.Def,
+          Spd: npcScaled.Spd,
+          Int: npcScaled.Int,
+          Luck: npcScaled.Luck,
+          Pot: 0,
+          HP: npcScaled.hp,
+          maxHP: npcScaled.hp,
+        },
+        race: npc.race,
+        rank: null,
+        elements: { elements: [npc.element], elementalPower: playerRankIndex + 1 },
+        level: playerRankIndex + 1,
+        isPlayer: false,
+      };
+
+      const result = await runAutoCombat(playerCombatant, npcCombatant, 20);
+      const playerWon = result.winner === accountId;
+
+      if (playerWon) {
+        await db.update(accounts).set({
+          gold: (account.gold || 0) + rewards.gold,
+          trainingPoints: (account.trainingPoints || 0) + rewards.trainingPoints,
+          soulShards: (account.soulShards || 0) + rewards.soulShards,
+          rubies: (account.rubies || 0) + rewards.rubies,
+          lastCombatTime: new Date(),
+        }).where(eq(accounts.id, accountId));
+
+        const newDefeatCount = defeatCount + 1;
+        await db.insert(zoneNpcProgress).values({
+          accountId,
+          npcId: npc.id,
+          defeatCount: newDefeatCount,
+          lastDefeatedAt: new Date(),
+        }).onConflictDoUpdate({
+          target: [zoneNpcProgress.accountId, zoneNpcProgress.npcId],
+          set: {
+            defeatCount: newDefeatCount,
+            lastDefeatedAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+      } else {
+        await db.update(accounts).set({
+          lastCombatTime: new Date(),
+        }).where(eq(accounts.id, accountId));
+      }
+
+      res.json({
+        success: true,
+        playerWon,
+        combat: result,
+        rewards: playerWon ? rewards : null,
+        npc: {
+          id: npc.id,
+          name: npc.name,
+          element: npc.element,
+          defeatCount: playerWon ? defeatCount + 1 : defeatCount,
+          dialogue: playerWon ? npc.dialogue.onDefeat : npc.dialogue.onPlayerDefeat,
+        },
+      });
+    } catch (error) {
+      console.error("Zone NPC fight error:", error);
+      res.status(500).json({ error: "Failed to fight zone NPC" });
     }
   });
 

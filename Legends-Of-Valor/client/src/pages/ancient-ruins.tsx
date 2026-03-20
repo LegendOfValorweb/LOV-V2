@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ScrollText, Gem, Swords, Star, Package, ArrowLeft, Search, Sparkles, Skull } from "lucide-react";
+import ZoneNPCPanel from "@/components/zone-npc-panel";
 
 const EXPLORATION_SITES = [
   {
@@ -186,6 +187,7 @@ export default function AncientRuins() {
         </div>
 
         <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-2">
+          <ZoneNPCPanel zoneId="ancient-ruins" />
           {EXPLORATION_SITES.map(site => {
             const isActive = isExploring === site.id;
             const anyExploring = isExploring !== null;

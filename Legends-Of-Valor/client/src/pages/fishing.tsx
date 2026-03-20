@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Fish, Loader2, Sparkles, Zap, Flame, Droplet, Weight, Coins, Anchor } from "lucide-react";
+import ZoneNPCPanel from "@/components/zone-npc-panel";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ZoneScene } from "@/components/zone-scene";
 import {
@@ -252,8 +253,12 @@ export default function Fishing() {
         <div className="flex-shrink-0 mb-3">
           <div className="rpg-panel px-3 py-1.5 inline-flex items-center gap-2">
             <Fish className="w-5 h-5 text-blue-400" />
-            <span className="rpg-heading text-sm">Lavic Lake</span>
+            <span className="rpg-heading text-sm">Crystal Lake</span>
           </div>
+        </div>
+
+        <div className="mb-4">
+          <ZoneNPCPanel zoneId="crystal-lake" />
         </div>
 
         <div className="grid lg:grid-cols-2 gap-6">

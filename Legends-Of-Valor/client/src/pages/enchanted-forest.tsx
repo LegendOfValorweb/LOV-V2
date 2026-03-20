@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Leaf, TreePine, Sparkles, Star, Heart, Zap } from "lucide-react";
+import ZoneNPCPanel from "@/components/zone-npc-panel";
 
 const FOREST_AREAS = [
   {
@@ -176,6 +177,7 @@ export default function EnchantedForest() {
         </div>
 
         <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-2">
+          <ZoneNPCPanel zoneId="enchanted-forest" />
           {FOREST_AREAS.map(area => {
             const isActive = isGathering === area.id;
             const anyGathering = isGathering !== null;

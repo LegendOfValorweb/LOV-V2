@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import ZoneNPCPanel from "@/components/zone-npc-panel";
 import { 
   Gem, 
   ArrowLeft,
@@ -133,6 +134,9 @@ export default function RubyMines() {
         </header>
 
         <main className="container mx-auto px-4 py-8">
+          <div className="max-w-sm mb-6">
+            <ZoneNPCPanel zoneId="ruby-mines" />
+          </div>
           <div className="text-center mb-8">
             <h2 className="text-lg text-red-200">
               Extract precious rubies from dangerous mines

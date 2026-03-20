@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useGame } from "@/lib/game-context";
 import { ZoneScene } from "@/components/zone-scene";
+import ZoneNPCPanel from "@/components/zone-npc-panel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -405,6 +406,9 @@ export default function HellZone() {
         </header>
 
         <main className="container mx-auto px-4 py-8">
+          <div className="max-w-sm mb-6">
+            <ZoneNPCPanel zoneId="hell-zone" />
+          </div>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 bg-black/50 border border-red-500/30">
               <TabsTrigger value="challenges" className="data-[state=active]:bg-red-600">

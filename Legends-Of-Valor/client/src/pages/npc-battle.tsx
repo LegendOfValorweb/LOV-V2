@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { ZoneScene } from "@/components/zone-scene";
+import ZoneNPCPanel from "@/components/zone-npc-panel";
 import { Sword, Shield, Crown, LogOut, ChevronRight, Target, Trophy, Skull, Sparkles, Cat, Check, ArrowLeftRight, Play, Square, Zap } from "lucide-react";
 
 const elementColors: Record<string, string> = {
@@ -260,6 +261,9 @@ export default function NpcBattle() {
 
       <main className="container mx-auto px-4 py-8 overflow-y-auto flex-1 sticky-container">
         <div className="max-w-4xl mx-auto">
+          <div className="max-w-sm mb-6">
+            <ZoneNPCPanel zoneId="mystic-tower" />
+          </div>
           <div className="grid gap-6 md:grid-cols-2 mb-6">
             <Card>
               <CardHeader>

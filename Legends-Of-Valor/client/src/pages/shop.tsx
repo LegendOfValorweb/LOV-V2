@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
+import ZoneNPCPanel from "@/components/zone-npc-panel";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import type { Item, ItemTier, ItemType } from "@shared/schema";
@@ -191,6 +192,7 @@ export default function Shop() {
       <div style={{ position: "relative", zIndex: 1, padding: "8px 12px", maxWidth: 1000, margin: "0 auto" }}>
         <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 12, minHeight: "calc(100vh - 60px)" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <ZoneNPCPanel zoneId="capital-city" />
             <div className="rpg-inv-panel">
               <div className="rpg-inv-panel-header">
                 📈 Market Trends

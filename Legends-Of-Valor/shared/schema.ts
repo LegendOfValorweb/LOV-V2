@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, bigint, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, bigint, timestamp, jsonb, boolean, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -2340,3 +2340,24 @@ export const bounties = pgTable("bounties", {
 });
 
 export type Bounty = typeof bounties.$inferSelect;
+
+export const zoneNpcProgress = pgTable("zone_npc_progress", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  accountId: varchar("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
+  npcId: text("npc_id").notNull(),
+  defeatCount: integer("defeat_count").notNull().default(0),
+  lastDefeatedAt: timestamp("last_defeated_at"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => ({
+  uniq: uniqueIndex("zone_npc_progress_account_npc_idx").on(t.accountId, t.npcId),
+}));
+
+export const zoneNpcProgressRelations = relations(zoneNpcProgress, ({ one }) => ({
+  account: one(accounts, {
+    fields: [zoneNpcProgress.accountId],
+    references: [accounts.id],
+  }),
+}));
+
+export const insertZoneNpcProgressSchema = createInsertSchema(zoneNpcProgress).omit({ id: true, updatedAt: true });
+export type ZoneNpcProgress = typeof zoneNpcProgress.$inferSelect;
