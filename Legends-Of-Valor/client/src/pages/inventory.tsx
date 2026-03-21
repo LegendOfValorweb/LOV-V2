@@ -142,6 +142,16 @@ export default function Inventory() {
     refetchInterval: 30000,
   });
 
+  const { data: accountPets } = useQuery<any[]>({
+    queryKey: ["/api/accounts", account?.id, "pets"],
+    queryFn: async () => {
+      if (!account?.id) return [];
+      const res = await fetch(`/api/accounts/${account.id}/pets`);
+      return res.json();
+    },
+    enabled: !!account?.id,
+  });
+
   const SELL_RANKS = ["Journeyman", "Expert", "Master", "Grandmaster", "Legend", "Elite"];
   const canSell = account ? SELL_RANKS.includes(account.rank) : false;
 
@@ -196,6 +206,16 @@ export default function Inventory() {
         }
       }
     });
+    if (account?.equippedPetId && accountPets) {
+      const equippedPet = accountPets.find((p: any) => p.id === account.equippedPetId);
+      if (equippedPet?.stats) {
+        const ps = equippedPet.stats as Record<string, unknown>;
+        bonus.Str += Number(ps.Str) || 0;
+        bonus.Def += Number(ps.Def) || 0;
+        bonus.Spd += Number(ps.Spd) || 0;
+        bonus.Luck += Number(ps.Luck) || 0;
+      }
+    }
     return {
       Str: (base as any).Str + bonus.Str,
       Def: (base as any).Def + bonus.Def,
@@ -204,7 +224,7 @@ export default function Inventory() {
       Luck: (base as any).Luck + bonus.Luck,
       Pot: (base as any).Pot + bonus.Pot,
     };
-  }, [account, equippedItems]);
+  }, [account, equippedItems, accountPets]);
 
   const getPortraitPath = useCallback(() => {
     if (!account) return '/portraits/human_male.png';

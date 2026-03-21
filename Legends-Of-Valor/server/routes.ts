@@ -11432,8 +11432,8 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Account not found" });
       }
       
-      const playerPower = (account.stats?.Str || 10) + (account.stats?.Def || 10) + 
-                          (account.stats?.Spd || 10) + (account.stats?.Int || 10);
+      const totalStats = await getPlayerTotalStats(accountId);
+      const playerPower = totalStats.Str + totalStats.Def + totalStats.Spd + totalStats.Int;
       const playerRankIndex = playerRanks.indexOf(account.rank);
       
       // Check if player meets minimum rank for zone
@@ -11476,8 +11476,8 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Cannot battle while dead" });
       }
       
-      const playerPower = (account.stats?.Str || 10) + (account.stats?.Def || 10) + 
-                          (account.stats?.Spd || 10) + (account.stats?.Int || 10);
+      const totalStats = await getPlayerTotalStats(accountId);
+      const playerPower = totalStats.Str + totalStats.Def + totalStats.Spd + totalStats.Int;
       const playerRankIndex = playerRanks.indexOf(account.rank);
       
       // Rank check - same as generate-enemy
@@ -11497,9 +11497,9 @@ export async function registerRoutes(
       const enemy = generateZoneEnemy(zoneId, playerPower, playerRankIndex, zoneWeatherQuick?.type);
       
       // Simple battle simulation
-      const playerAttack = (account.stats?.Str || 10) + Math.floor(Math.random() * 20);
+      const playerAttack = totalStats.Str + Math.floor(Math.random() * 20);
       const enemyAttack = enemy.stats.Str + Math.floor(Math.random() * 10);
-      const playerDefense = (account.stats?.Def || 10);
+      const playerDefense = totalStats.Def;
       const enemyDefense = enemy.stats.Def;
       
       const damageToEnemy = Math.max(1, playerAttack - enemyDefense * 0.5);
@@ -15079,13 +15079,26 @@ export async function registerRoutes(
 
   app.post("/api/world-boss/attack", async (req, res) => {
     try {
-      const { accountId, damage } = req.body;
+      const { accountId } = req.body;
       const boss = await getActiveWorldBoss();
       if (!boss) return res.status(404).json({ error: "No active world boss" });
 
+      const totalStats = await getPlayerTotalStats(accountId);
+      const baseDamage = totalStats.Str + totalStats.Spd + totalStats.Int + totalStats.Luck + totalStats.Pot;
+      const damage = Math.max(1, Math.floor(baseDamage * (0.8 + Math.random() * 0.4)));
+
       await recordBossDamage(boss.id, accountId, damage);
-      res.json({ success: true });
+
+      const updatedBoss = await db.select().from(worldBosses).where(eq(worldBosses.id, boss.id)).limit(1);
+
+      res.json({
+        success: true,
+        damage,
+        currentHp: updatedBoss[0]?.hp || 0,
+        isDefeated: updatedBoss[0]?.status === "defeated",
+      });
     } catch (error) {
+      console.error("Error attacking world boss:", error);
       res.status(500).json({ error: "Failed to attack world boss" });
     }
   });
@@ -15334,30 +15347,6 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error getting world boss state:", error);
       res.status(500).json({ error: "Failed to get world boss state" });
-    }
-  });
-
-  app.post("/api/world-boss/attack", async (req, res) => {
-    try {
-      const { accountId, damage } = req.body;
-      const boss = await getActiveWorldBoss();
-      
-      if (!boss) {
-        return res.status(404).json({ error: "No active world boss" });
-      }
-
-      await recordBossDamage(boss.id, accountId, damage);
-      
-      const updatedBoss = await db.select().from(worldBosses).where(eq(worldBosses.id, boss.id)).limit(1);
-      
-      res.json({ 
-        success: true, 
-        currentHp: updatedBoss[0]?.hp || 0,
-        isDefeated: updatedBoss[0]?.status === "defeated"
-      });
-    } catch (error) {
-      console.error("Error attacking world boss:", error);
-      res.status(500).json({ error: "Failed to attack world boss" });
     }
   });
 
