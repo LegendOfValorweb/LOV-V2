@@ -183,7 +183,7 @@ export default function NpcBattle() {
         const res = await apiRequest("POST", `/api/accounts/${account?.id}/npc-battle`);
         const result = await res.json();
         
-        if (result.victory) {
+        if (result.won) {
           wins++;
         } else {
           losses++;
@@ -191,7 +191,7 @@ export default function NpcBattle() {
         
         setAutoFightProgress({ current: i + 1, total: count, wins, losses });
         
-        if (!result.victory && result.message?.includes("rank")) {
+        if (!result.won && result.message?.includes("rank")) {
           toast({ title: "Auto-Fight Stopped", description: "Rank requirement not met", variant: "destructive" });
           break;
         }
@@ -275,7 +275,7 @@ export default function NpcBattle() {
               <CardContent className="space-y-4">
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Floor</span>
-                  <Badge variant="outline" className="text-lg">{currentNpc?.floor || 1} / 50</Badge>
+                  <Badge variant="outline" className="text-lg">{currentNpc?.floor || 1} / 100</Badge>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Level</span>

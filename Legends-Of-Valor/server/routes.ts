@@ -3865,11 +3865,11 @@ export async function registerRoutes(
         // Advance to next level (sequential progression - no skipping)
         if (level >= 100) {
           // Beat the floor boss, advance to next floor
-          if (floor < 50) {
+          if (floor < 100) {
             newFloor = floor + 1;
             newLevel = 1;
           }
-          // If floor 50, stay at max
+          // If floor 100, stay at max
         } else {
           newLevel = level + 1;
         }
