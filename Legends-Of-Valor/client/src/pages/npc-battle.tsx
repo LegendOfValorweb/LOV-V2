@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useGame } from "@/lib/game-context";
+import { useZoneDiscovery } from "@/hooks/use-zone-discovery";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +43,7 @@ const elementColors: Record<string, string> = {
 };
 
 export default function NpcBattle() {
+  useZoneDiscovery("mystic_tower");
   const [, navigate] = useLocation();
   const { account, logout } = useGame();
   const { toast } = useToast();

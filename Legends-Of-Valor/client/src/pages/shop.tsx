@@ -6,6 +6,7 @@ import type { Item, ItemTier, ItemType } from "@shared/schema";
 import { playerRanks } from "@shared/schema";
 import { ALL_ITEMS, TIER_LABELS } from "@/lib/items-data";
 import { useGame } from "@/lib/game-context";
+import { useZoneDiscovery } from "@/hooks/use-zone-discovery";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -82,6 +83,7 @@ function ShopTooltip({ item, position }: { item: Item; position: { x: number; y:
 }
 
 export default function Shop() {
+  useZoneDiscovery("capital_city");
   const [, navigate] = useLocation();
   const { account, inventory, addToInventory, logout } = useGame();
   const { toast } = useToast();

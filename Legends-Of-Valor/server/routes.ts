@@ -11601,8 +11601,8 @@ export async function registerRoutes(
           }).where(eq(accounts.id, accountId));
         }
 
-        // Valorpedia: discover zone and monster on victory
-        recordValorpediaDiscovery(accountId, "zones", zoneId);
+        // Valorpedia: discover zone and monster on victory (normalize dashes → underscores)
+        recordValorpediaDiscovery(accountId, "zones", zoneId.replace(/-/g, "_"));
         const monsterVpId = MONSTER_NAME_TO_VALORPEDIA_ID[enemy.name];
         if (monsterVpId) recordValorpediaDiscovery(accountId, "monsters", monsterVpId);
 
@@ -11615,8 +11615,8 @@ export async function registerRoutes(
           message: `Defeated ${enemy.name}! Earned ${enemy.rewards.gold} gold.`,
         });
       } else {
-        // Valorpedia: still discover the zone on defeat
-        recordValorpediaDiscovery(accountId, "zones", zoneId);
+        // Valorpedia: still discover the zone on defeat (normalize dashes → underscores)
+        recordValorpediaDiscovery(accountId, "zones", zoneId.replace(/-/g, "_"));
         res.json({
           result: "defeat",
           enemy,
@@ -13972,8 +13972,8 @@ export async function registerRoutes(
           lastCombatTime: new Date(),
         }).where(eq(accounts.id, accountId));
 
-        // Valorpedia: discover the zone and defeated monster
-        recordValorpediaDiscovery(accountId, "zones", req.params.zoneId);
+        // Valorpedia: discover the zone and defeated monster (normalize dashes → underscores)
+        recordValorpediaDiscovery(accountId, "zones", req.params.zoneId.replace(/-/g, "_"));
         const mVpId = MONSTER_NAME_TO_VALORPEDIA_ID[monster.template.name];
         if (mVpId) recordValorpediaDiscovery(accountId, "monsters", mVpId);
       } else {
@@ -14261,8 +14261,8 @@ export async function registerRoutes(
           },
         });
 
-        // Valorpedia: discover the zone when an NPC is defeated
-        recordValorpediaDiscovery(accountId, "zones", req.params.zoneId);
+        // Valorpedia: discover the zone when an NPC is defeated (normalize dashes → underscores)
+        recordValorpediaDiscovery(accountId, "zones", req.params.zoneId.replace(/-/g, "_"));
       } else {
         await db.update(accounts).set({
           lastCombatTime: new Date(),
