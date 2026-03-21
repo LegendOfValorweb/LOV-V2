@@ -134,11 +134,11 @@ export default function Shop() {
       setConfirmItem(null);
       return;
     }
-    const success = await addToInventory(confirmItem);
-    if (success) {
+    const result = await addToInventory(confirmItem);
+    if (result.success) {
       toast({ title: "Purchase successful!", description: `You acquired ${confirmItem.name}!` });
     } else {
-      toast({ title: "Purchase failed", description: "Something went wrong.", variant: "destructive" });
+      toast({ title: "Purchase failed", description: result.error || "Something went wrong.", variant: "destructive" });
     }
     setConfirmItem(null);
   };

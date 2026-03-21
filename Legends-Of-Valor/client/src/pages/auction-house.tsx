@@ -48,6 +48,8 @@ export default function AuctionHouse() {
   const [startingPrice, setStartingPrice] = useState(100);
   const [duration, setDuration] = useState(24);
   const [minIncrement, setMinIncrement] = useState(1);
+  const [customBidDialog, setCustomBidDialog] = useState<{ open: boolean; auctionId: string; minBid: number }>({ open: false, auctionId: "", minBid: 0 });
+  const [customBidAmount, setCustomBidAmount] = useState("");
 
   const { data: auctions = [], isLoading: isAuctionsLoading } = useQuery<Auction[]>({
     queryKey: ["/api/auctions", activeTab],
@@ -211,8 +213,9 @@ export default function AuctionHouse() {
                                 size="sm" 
                                 className="bg-amber-600 hover:bg-amber-700"
                                 onClick={() => {
-                                   const amount = prompt("Enter bid amount:");
-                                   if (amount) handleBid(auction.id, parseInt(amount));
+                                  const minBid = Math.floor(auction.currentBid * (1 + (auction.minIncrement / 100)));
+                                  setCustomBidAmount(String(minBid));
+                                  setCustomBidDialog({ open: true, auctionId: auction.id, minBid });
                                 }}
                                 disabled={auction.sellerId === account.id}
                               >
@@ -300,6 +303,50 @@ export default function AuctionHouse() {
             <Button variant="ghost" onClick={() => setIsCreateDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleCreateAuction} className="bg-amber-600 hover:bg-amber-700" disabled={!selectedItemForAuction}>
               Start Auction
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={customBidDialog.open} onOpenChange={(open) => setCustomBidDialog(prev => ({ ...prev, open }))}>
+        <DialogContent className="bg-slate-900 border-slate-800 text-slate-100 max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-amber-400 font-serif text-xl">Place Custom Bid</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Enter your bid amount. Minimum: {customBidDialog.minBid.toLocaleString()}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label htmlFor="custom-bid-input" className="text-slate-300">Bid Amount</Label>
+              <Input
+                id="custom-bid-input"
+                type="number"
+                min={customBidDialog.minBid}
+                value={customBidAmount}
+                onChange={e => setCustomBidAmount(e.target.value)}
+                className="bg-slate-800 border-slate-700 text-slate-100"
+                autoFocus
+              />
+              {customBidAmount && parseInt(customBidAmount) < customBidDialog.minBid && (
+                <p className="text-xs text-red-400">Bid must be at least {customBidDialog.minBid.toLocaleString()}</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setCustomBidDialog(prev => ({ ...prev, open: false }))}>Cancel</Button>
+            <Button
+              className="bg-amber-600 hover:bg-amber-700"
+              disabled={!customBidAmount || parseInt(customBidAmount) < customBidDialog.minBid}
+              onClick={() => {
+                const amount = parseInt(customBidAmount);
+                if (!isNaN(amount) && amount >= customBidDialog.minBid) {
+                  handleBid(customBidDialog.auctionId, amount);
+                  setCustomBidDialog(prev => ({ ...prev, open: false }));
+                }
+              }}
+            >
+              Place Bid
             </Button>
           </DialogFooter>
         </DialogContent>

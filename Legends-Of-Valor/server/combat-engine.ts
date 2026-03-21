@@ -839,6 +839,8 @@ export async function runAutoCombat(
       };
       rounds.push(skipRound);
       tickStatusEffects(ccTracker, first.id);
+      const buffExpiry1Skip = tickBuffs(buffTracker, first.id);
+      if (buffExpiry1Skip.length > 0) skipRound.effects.push(...buffExpiry1Skip);
     } else {
       let firstAction: CombatAction = selectAIAction(first, combatState[first.id], first, ccTracker);
       if (firstSilenced && firstAction.type === "spell") {
@@ -889,6 +891,8 @@ export async function runAutoCombat(
       };
       rounds.push(skipRound);
       tickStatusEffects(ccTracker, second.id);
+      const buffExpiry2Skip = tickBuffs(buffTracker, second.id);
+      if (buffExpiry2Skip.length > 0) skipRound.effects.push(...buffExpiry2Skip);
     } else {
       let secondAction: CombatAction = selectAIAction(second, combatState[second.id], second, ccTracker);
       if (secondSilenced && secondAction.type === "spell") {

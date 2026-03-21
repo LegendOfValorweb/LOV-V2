@@ -10254,9 +10254,11 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/hell-zone/battle", async (req, res) => {
+  app.post("/api/hell-zone/battle", authMiddleware, async (req, res) => {
     try {
-      const { accountId, enemyId } = z.object({ accountId: z.string(), enemyId: z.string().optional() }).parse(req.body);
+      const accountId = (req as any).user?.id;
+      if (!accountId) return res.status(401).json({ error: "Unauthorized" });
+      const { enemyId } = z.object({ enemyId: z.string().optional() }).parse(req.body);
       
       const account = await storage.getAccount(accountId);
       if (!account) {
@@ -10276,13 +10278,17 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid enemy" });
       }
       
-      const playerPower = Object.values(account.stats || { Str: 10 }).reduce((a, b) => a + b, 0) * 100;
+      const rawStats = await getPlayerTotalStats(accountId);
+      let totalStats = applyRaceModifiers(rawStats, account.race);
+      totalStats = applyRacePassiveSkill(totalStats, account.equippedRacePassive);
+      totalStats = applyWeaknessDebuff(totalStats, account.weaknessDebuffExpires ? new Date(account.weaknessDebuffExpires) : null);
+      const playerPower = (totalStats.Str + totalStats.Def + totalStats.Spd + totalStats.Int) * 100;
       const won = playerPower >= enemy.power * 0.7 || Math.random() > 0.4;
       
       if (!won) {
         participant.alive = false;
         const goldLost = Math.floor(account.gold * HELL_ZONE_CONFIG.deathTax);
-        await storage.updateAccountGold(accountId, account.gold - goldLost);
+        await db.update(accounts).set({ gold: sql`GREATEST(0, ${accounts.gold} - ${goldLost})` }).where(eq(accounts.id, accountId));
         
         await storage.createActivityFeed({
           type: "hell_zone_death",
@@ -10301,7 +10307,7 @@ export async function registerRoutes(
       
       participant.kills++;
       const goldEarned = enemy.goldDrop;
-      await storage.updateAccountGold(accountId, account.gold + goldEarned);
+      await db.update(accounts).set({ gold: sql`${accounts.gold} + ${goldEarned}` }).where(eq(accounts.id, accountId));
       
       let mythicDrop = null;
       if (Math.random() < HELL_ZONE_CONFIG.mythicDropChance * (enemy.isBoss ? 10 : 1)) {
@@ -11497,14 +11503,11 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/zones/:zoneId/battle", async (req, res) => {
+  app.post("/api/zones/:zoneId/battle", authMiddleware, async (req, res) => {
     try {
       const zoneId = req.params.zoneId;
-      const { accountId } = req.body;
-      
-      if (!accountId) {
-        return res.status(400).json({ error: "Account ID required" });
-      }
+      const accountId = (req as any).user?.id;
+      if (!accountId) return res.status(401).json({ error: "Unauthorized" });
       
       const account = await storage.getAccount(accountId);
       if (!account) {
@@ -11515,7 +11518,10 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Cannot battle while dead" });
       }
       
-      const totalStats = await getPlayerTotalStats(accountId);
+      const rawTotalStats = await getPlayerTotalStats(accountId);
+      let totalStats = applyRaceModifiers(rawTotalStats, account.race);
+      totalStats = applyRacePassiveSkill(totalStats, account.equippedRacePassive);
+      totalStats = applyWeaknessDebuff(totalStats, account.weaknessDebuffExpires ? new Date(account.weaknessDebuffExpires) : null);
       const playerPower = totalStats.Str + totalStats.Def + totalStats.Spd + totalStats.Int;
       const playerRankIndex = playerRanks.indexOf(account.rank);
       
@@ -11549,11 +11555,14 @@ export async function registerRoutes(
       const won = playerAdvantage > 0.5 && Math.random() < Math.min(0.9, playerAdvantage * 0.6);
       
       if (won) {
-        const newGold = account.gold + enemy.rewards.gold;
-        const newRubies = (account.rubies || 0) + enemy.rewards.rubies;
-        await storage.updateAccountGold(accountId, newGold);
+        await db.update(accounts).set({
+          gold: sql`${accounts.gold} + ${enemy.rewards.gold}`,
+          lastCombatTime: new Date(),
+        }).where(eq(accounts.id, accountId));
         if (enemy.rewards.rubies > 0) {
-          await storage.updateAccountResources(accountId, { rubies: newRubies });
+          await db.update(accounts).set({
+            rubies: sql`${accounts.rubies} + ${enemy.rewards.rubies}`,
+          }).where(eq(accounts.id, accountId));
         }
         
         res.json({
@@ -13842,9 +13851,10 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/zones/:zoneId/monster/fight", async (req, res) => {
+  app.post("/api/zones/:zoneId/monster/fight", authMiddleware, async (req, res) => {
     try {
-      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      const accountId = (req as any).user?.id;
+      if (!accountId) return res.status(401).json({ error: "Unauthorized" });
       const account = await storage.getAccount(accountId);
       if (!account) return res.status(404).json({ error: "Account not found" });
       if (account.isDead || account.ghostState) return res.status(403).json({ error: "Cannot fight in Ghost State" });
@@ -13852,7 +13862,10 @@ export async function registerRoutes(
       const monster = getActiveMonster(req.params.zoneId, accountId);
       if (!monster) return res.status(404).json({ error: "No active monster in this zone" });
 
-      const playerStats = account.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 };
+      const playerStats = await getPlayerTotalStats(accountId);
+      let modifiedStats = applyRaceModifiers(playerStats, account.race);
+      modifiedStats = applyRacePassiveSkill(modifiedStats, account.equippedRacePassive);
+      modifiedStats = applyWeaknessDebuff(modifiedStats, account.weaknessDebuffExpires ? new Date(account.weaknessDebuffExpires) : null);
 
       let monsterFightSpell: any = null;
       const monsterFightEquippedSkill = await storage.getEquippedSkill(accountId);
@@ -13881,14 +13894,7 @@ export async function registerRoutes(
       const playerCombatant: Combatant = {
         id: accountId,
         name: account.username,
-        stats: {
-          Str: Number(playerStats.Str) || 10,
-          Def: Number(playerStats.Def) || 10,
-          Spd: Number(playerStats.Spd) || 10,
-          Int: Number(playerStats.Int) || 10,
-          Luck: Number(playerStats.Luck) || 10,
-          Pot: Number(playerStats.Pot) || 0,
-        },
+        stats: modifiedStats,
         race: account.race,
         rank: account.rank,
         level: playerRanks.indexOf(account.rank) + 1,
@@ -13916,19 +13922,19 @@ export async function registerRoutes(
       if (playerWon) {
         rewards = calculateMonsterRewards(monster);
         await db.update(accounts).set({
-          gold: (account.gold || 0) + rewards.gold,
-          trainingPoints: (account.trainingPoints || 0) + rewards.trainingPoints,
-          soulShards: (account.soulShards || 0) + rewards.soulShards,
-          petExp: (account.petExp || 0) + rewards.petExp,
+          gold: sql`${accounts.gold} + ${rewards.gold}`,
+          trainingPoints: sql`${accounts.trainingPoints} + ${rewards.trainingPoints}`,
+          soulShards: sql`${accounts.soulShards} + ${rewards.soulShards}`,
+          petExp: sql`${accounts.petExp} + ${rewards.petExp}`,
           lastCombatTime: new Date(),
         }).where(eq(accounts.id, accountId));
       } else {
         const penalty = calculateDeathPenalty(account.gold || 0);
         await db.update(accounts).set({
-          gold: Math.max(0, (account.gold || 0) - penalty.goldLost),
+          gold: sql`GREATEST(0, ${accounts.gold} - ${penalty.goldLost})`,
           isDead: true,
           ghostState: true,
-          deathCount: (account.deathCount || 0) + 1,
+          deathCount: sql`${accounts.deathCount} + 1`,
           lastDeathTime: new Date(),
           weaknessDebuffExpires: penalty.weaknessDebuffExpires,
           lastCombatTime: new Date(),
@@ -13976,7 +13982,7 @@ export async function registerRoutes(
           if (weaponFx.lifeStealPct > 0) bonusGold += Math.floor(rewards.gold * weaponFx.lifeStealPct * 0.5);
           if (bonusGold > 0) {
             rewards.gold += bonusGold;
-            await db.update(accounts).set({ gold: (account.gold || 0) + rewards.gold }).where(eq(accounts.id, accountId));
+            await db.update(accounts).set({ gold: sql`${accounts.gold} + ${bonusGold}` }).where(eq(accounts.id, accountId));
           }
         }
       }
@@ -14083,9 +14089,10 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/zones/:zoneId/npc/fight", async (req, res) => {
+  app.post("/api/zones/:zoneId/npc/fight", authMiddleware, async (req, res) => {
     try {
-      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      const accountId = (req as any).user?.id;
+      if (!accountId) return res.status(401).json({ error: "Unauthorized" });
       const zoneId = req.params.zoneId;
 
       const account = await storage.getAccount(accountId);
@@ -14104,7 +14111,10 @@ export async function registerRoutes(
       const npcScaled = calculateNPCStats(npc, playerRankIndex, defeatCount);
       const rewards = calculateNPCRewards(npc, playerRankIndex, defeatCount);
 
-      const playerStats = account.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 };
+      const playerStats = await getPlayerTotalStats(accountId);
+      let modifiedStats = applyRaceModifiers(playerStats, account.race);
+      modifiedStats = applyRacePassiveSkill(modifiedStats, account.equippedRacePassive);
+      modifiedStats = applyWeaknessDebuff(modifiedStats, account.weaknessDebuffExpires ? new Date(account.weaknessDebuffExpires) : null);
 
       let npcFightSpell: any = null;
       const npcEquippedSkill = await storage.getEquippedSkill(accountId);
@@ -14132,14 +14142,7 @@ export async function registerRoutes(
       const playerCombatant: Combatant = {
         id: accountId,
         name: account.username,
-        stats: {
-          Str: Number(playerStats.Str) || 10,
-          Def: Number(playerStats.Def) || 10,
-          Spd: Number(playerStats.Spd) || 10,
-          Int: Number(playerStats.Int) || 10,
-          Luck: Number(playerStats.Luck) || 10,
-          Pot: Number(playerStats.Pot) || 0,
-        },
+        stats: modifiedStats,
         race: account.race,
         rank: account.rank,
         level: playerRankIndex + 1,
@@ -14172,10 +14175,10 @@ export async function registerRoutes(
 
       if (playerWon) {
         await db.update(accounts).set({
-          gold: (account.gold || 0) + rewards.gold,
-          trainingPoints: (account.trainingPoints || 0) + rewards.trainingPoints,
-          soulShards: (account.soulShards || 0) + rewards.soulShards,
-          rubies: (account.rubies || 0) + rewards.rubies,
+          gold: sql`${accounts.gold} + ${rewards.gold}`,
+          trainingPoints: sql`${accounts.trainingPoints} + ${rewards.trainingPoints}`,
+          soulShards: sql`${accounts.soulShards} + ${rewards.soulShards}`,
+          rubies: sql`${accounts.rubies} + ${rewards.rubies}`,
           lastCombatTime: new Date(),
         }).where(eq(accounts.id, accountId));
 
@@ -14616,10 +14619,11 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/zone-dungeons/:zoneId/fight", async (req, res) => {
+  app.post("/api/zone-dungeons/:zoneId/fight", authMiddleware, async (req, res) => {
     try {
       const { zoneId } = req.params;
-      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      const accountId = (req as any).user?.id;
+      if (!accountId) return res.status(401).json({ error: "Unauthorized" });
 
       const config = getZoneDungeonConfig(zoneId);
       if (!config) {
@@ -14664,7 +14668,10 @@ export async function registerRoutes(
       const monsterHp = Math.max(10, Math.floor(baseHp * monsterTemplate.hpMultiplier * floorScale));
       const monsterLevel = Math.max(1, Math.floor((safeRankIdx + 1) * 10 * floorScale * (isBossFloor ? 1.5 : 1)));
 
-      const playerStats = account.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 };
+      const rawPlayerStats = await getPlayerTotalStats(accountId);
+      let playerStats = applyRaceModifiers(rawPlayerStats, account.race);
+      playerStats = applyRacePassiveSkill(playerStats, account.equippedRacePassive);
+      playerStats = applyWeaknessDebuff(playerStats, account.weaknessDebuffExpires ? new Date(account.weaknessDebuffExpires) : null);
       const playerMaxHP = calculateMaxHP(playerStats as any, safeRankIdx * 10, account.race, account.rank);
 
       const playerCombatant: Combatant = {

@@ -183,11 +183,7 @@ export default function Inventory() {
     const usedIds = new Set<string>();
     const findInvItem = (equippedId: string | null) => {
       if (!equippedId) return null;
-      // Try UUID match first, then fall back to itemId for legacy accounts
-      let inv = inventory.find(i => i.id === equippedId && !usedIds.has(i.id));
-      if (!inv) {
-        inv = inventory.find(i => i.itemId === equippedId && !usedIds.has(i.id));
-      }
+      const inv = inventory.find(i => i.id === equippedId && !usedIds.has(i.id));
       if (!inv) return null;
       usedIds.add(inv.id);
       const item = getItemById(inv.itemId);

@@ -67,6 +67,12 @@ export default function NpcBattle() {
     }
   }, [account, navigate]);
 
+  useEffect(() => {
+    return () => {
+      autoFightRef.current = false;
+    };
+  }, []);
+
   const { data: currentNpc } = useQuery({
     queryKey: ["/api/accounts", account?.id, "current-npc"],
     queryFn: async () => {

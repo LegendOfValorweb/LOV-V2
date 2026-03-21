@@ -14,6 +14,7 @@ import { useGame } from "@/lib/game-context";
 import { LoadingScreen } from "@/components/loading-screen";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { playerRanks } from "@shared/schema";
 import TutorialOverlay from "@/components/tutorial-overlay";
 import {
   Dialog,
@@ -37,11 +38,7 @@ interface Zone {
   route?: string;
 }
 
-const rankOrder = [
-  "Novice", "Apprentice", "Initiate", "Journeyman", "Adept",
-  "Expert", "Master", "Grandmaster", "Champion", "Overlord",
-  "Sovereign", "Ascendant", "Legend", "Mythic", "Mythical Legend"
-];
+const rankOrder = playerRanks as readonly string[];
 
 const zones: Zone[] = [
   {
@@ -219,7 +216,7 @@ const zones: Zone[] = [
     landmark: "hellgate",
     difficulty: "hell",
     pvpEnabled: true,
-    rankRequired: "Grand Master",
+    rankRequired: "Grandmaster",
     activities: ["High-Risk PvP", "Mythic Drops", "Battle Royale"],
     coordinates: { x: 50, y: 6 },
     route: "/hell-zone",
@@ -310,7 +307,7 @@ function isZoneUnlocked(zone: Zone, playerRank: string): boolean {
 
 export default function WorldMap() {
   const [, navigate] = useLocation();
-  const { account, logout, setAccount } = useGame();
+  const { account, logout, refetchAccount } = useGame();
   const { toast } = useToast();
   const [showTutorial, setShowTutorial] = useState(false);
 
@@ -440,11 +437,7 @@ export default function WorldMap() {
     setWorldBossAttacking(true);
     setWorldBossResult(null);
     try {
-      const res = await fetch("/api/world-boss/attack", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accountId: account.id }),
-      });
+      const res = await apiRequest("POST", "/api/world-boss/attack", { accountId: account.id });
       const data = await res.json();
       if (res.ok) {
         setWorldBossResult(data);
@@ -559,10 +552,7 @@ export default function WorldMap() {
           title: "Victory!",
           description: `Defeated ${data.enemy.name}! Earned ${data.rewards.gold} gold.`,
         });
-        const accRes = await fetch(`/api/accounts/${account.id}`);
-        if (accRes.ok) {
-          setAccount(await accRes.json());
-        }
+        refetchAccount();
       } else {
         toast({
           title: "Defeat",
@@ -634,10 +624,7 @@ export default function WorldMap() {
           title: "Gathering Complete!",
           description: `Earned ${data.totalGold.toLocaleString()} gold from resources!`,
         });
-        const accRes = await fetch(`/api/accounts/${account.id}`);
-        if (accRes.ok) {
-          setAccount(await accRes.json());
-        }
+        refetchAccount();
       }
     } catch (error: any) {
       toast({

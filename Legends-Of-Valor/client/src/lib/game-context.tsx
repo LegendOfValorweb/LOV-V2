@@ -19,7 +19,7 @@ interface GameContextType {
   isLoading: boolean;
   setAccount: (account: Account | null) => void;
   setInventory: (inventory: InventoryItem[]) => void;
-  addToInventory: (item: Item) => Promise<boolean>;
+  addToInventory: (item: Item) => Promise<{ success: boolean; error?: string }>;
   spendGold: (amount: number) => boolean;
   addGold: (amount: number) => void;
   logout: () => void;
@@ -290,8 +290,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setAccount(newAccount);
   }, [account, setAccount]);
 
-  const addToInventory = useCallback(async (item: Item): Promise<boolean> => {
-    if (!account || account.gold < item.price) return false;
+  const addToInventory = useCallback(async (item: Item): Promise<{ success: boolean; error?: string }> => {
+    if (!account || account.gold < item.price) return { success: false, error: "Not enough gold" };
     
     try {
       // First deduct gold from account on server
@@ -302,8 +302,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
       });
       
       if (!goldRes.ok) {
-        console.error("Failed to deduct gold");
-        return false;
+        const goldData = await goldRes.json().catch(() => ({}));
+        const msg = goldData.error || "Failed to deduct gold";
+        console.error(msg);
+        return { success: false, error: msg };
       }
       
       // Then add item to inventory on server
@@ -317,14 +319,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
       });
       
       if (!invRes.ok) {
-        console.error("Failed to add item to inventory");
+        const invData = await invRes.json().catch(() => ({}));
+        const msg = invData.error || "Failed to add item to inventory";
+        console.error(msg);
         // Refund the gold if inventory add failed
         await fetch(`/api/accounts/${account.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ gold: account.gold }),
         });
-        return false;
+        return { success: false, error: msg };
       }
       
       const newItem = await invRes.json();
@@ -334,10 +338,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setAccount(newAccount);
       setInventory(prev => [...prev, newItem]);
       
-      return true;
-    } catch (error) {
+      return { success: true };
+    } catch (error: any) {
       console.error("Error adding to inventory:", error);
-      return false;
+      return { success: false, error: error?.message || "Unexpected error" };
     }
   }, [account, setAccount]);
 
