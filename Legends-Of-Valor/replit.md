@@ -245,4 +245,3 @@ cd Legends-Of-Valor && npm run build && npm run start
 - **Tournament Player UI**: Full tournament page at /tournaments with join, view brackets, and auto-refresh. Tournament Grounds zone added to World Map
 - **Battle Royale**: Full PvP mode in Hell Zone with admin controls, registration, target selection, elimination mechanics, and top 5 rewards (final V2 feature)
 - **Auto-Achievements**: Automatic achievement/trophy unlocking based on player progress
-- **3D Login Battle Scene**: `races-battle-scene.tsx` uses Three.js (WebGL) to render two animated 3D humanoid characters fighting on the login page. Each character is procedurally built from BoxGeometry with race-specific skin/armor/accent colors and scale. Animations: idle bob, attack lunge + arm swing, recoil stagger, death fall. Fight loop runs imperatively via `clock.getElapsedTime()`. Falls back gracefully if WebGL is unavailable. **Dependency added**: `three` + `@types/three`.
