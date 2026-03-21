@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useGame } from "@/lib/game-context";
+import { useZoneDiscovery } from "@/hooks/use-zone-discovery";
 import { ZoneScene } from "@/components/zone-scene";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -96,6 +97,7 @@ const SPIRIT_ENCOUNTERS = [
 ];
 
 export default function EnchantedForest() {
+  useZoneDiscovery("enchanted_forest");
   const [, navigate] = useLocation();
   const { account, setAccount } = useGame();
   const { toast } = useToast();

@@ -3100,6 +3100,10 @@ export async function registerRoutes(
         exp,
         stats,
       });
+
+      // Valorpedia: discover pet element type
+      recordValorpediaDiscovery(req.params.accountId, "pets", petElement.toLowerCase());
+
       res.json(pet);
     } catch (error) {
       res.status(500).json({ error: "Failed to create pet" });
@@ -9468,7 +9472,13 @@ export async function registerRoutes(
         dailyFishCaught: dailyFishCaught + 1,
         lastFishingReset: lastFishingReset,
       }).where(eq(accounts.id, accountId));
-      
+
+      // Valorpedia: discover the fish that was caught
+      const fishVpId = FISH_NAME_TO_VALORPEDIA_ID[fishTemplate.name];
+      if (fishVpId) recordValorpediaDiscovery(accountId, "fish", fishVpId);
+      // Valorpedia: discover Crystal Lake (fishing always happens here)
+      recordValorpediaDiscovery(accountId, "zones", "crystal_lake");
+
       let monsterEncounter = null;
       const fishingZone = "crystal_lake";
       const actionMonster = checkActionSpawn(fishingZone, accountId, rank);
@@ -11590,7 +11600,12 @@ export async function registerRoutes(
             rubies: sql`${accounts.rubies} + ${enemy.rewards.rubies}`,
           }).where(eq(accounts.id, accountId));
         }
-        
+
+        // Valorpedia: discover zone and monster on victory
+        recordValorpediaDiscovery(accountId, "zones", zoneId);
+        const monsterVpId = MONSTER_NAME_TO_VALORPEDIA_ID[enemy.name];
+        if (monsterVpId) recordValorpediaDiscovery(accountId, "monsters", monsterVpId);
+
         res.json({
           result: "victory",
           enemy,
@@ -11600,6 +11615,8 @@ export async function registerRoutes(
           message: `Defeated ${enemy.name}! Earned ${enemy.rewards.gold} gold.`,
         });
       } else {
+        // Valorpedia: still discover the zone on defeat
+        recordValorpediaDiscovery(accountId, "zones", zoneId);
         res.json({
           result: "defeat",
           enemy,
@@ -13954,6 +13971,11 @@ export async function registerRoutes(
           petExp: sql`${accounts.petExp} + ${rewards.petExp}`,
           lastCombatTime: new Date(),
         }).where(eq(accounts.id, accountId));
+
+        // Valorpedia: discover the zone and defeated monster
+        recordValorpediaDiscovery(accountId, "zones", req.params.zoneId);
+        const mVpId = MONSTER_NAME_TO_VALORPEDIA_ID[monster.template.name];
+        if (mVpId) recordValorpediaDiscovery(accountId, "monsters", mVpId);
       } else {
         const penalty = calculateDeathPenalty(account.gold || 0);
         await db.update(accounts).set({
@@ -14238,6 +14260,9 @@ export async function registerRoutes(
             updatedAt: new Date(),
           },
         });
+
+        // Valorpedia: discover the zone when an NPC is defeated
+        recordValorpediaDiscovery(accountId, "zones", req.params.zoneId);
       } else {
         await db.update(accounts).set({
           lastCombatTime: new Date(),
@@ -14871,6 +14896,85 @@ export async function registerRoutes(
       res.status(500).json({ error: "Failed to abandon dungeon" });
     }
   });
+
+  // ==================== VALORPEDIA HELPERS ====================
+  const FISH_NAME_TO_VALORPEDIA_ID: Record<string, string> = {
+    "Silver Minnow": "silver_minnow",
+    "Blue Guppy": "blue_guppy",
+    "River Dart": "river_dart",
+    "Emerald Carp": "emerald_carp",
+    "Golden Koi": "golden_koi",
+    "Frostfin Trout": "frostfin_trout",
+    "Ember Bass": "ember_bass",
+    "Storm Pike": "storm_pike",
+    "Crystal Eel": "crystal_eel",
+    "Aether Salmon": "aether_salmon",
+    "Chrono Catfish": "chrono_catfish",
+    "Void Leviathan Fry": "void_leviathan",
+    "Soul Lantern Fish": "soul_lantern",
+  };
+
+  const MONSTER_NAME_TO_VALORPEDIA_ID: Record<string, string> = {
+    "Stray Rat": "stray_rat",
+    "Training Golem": "training_golem",
+    "Cave Crawler": "cave_crawler",
+    "Rock Golem": "rock_golem",
+    "Crystal Guardian": "crystal_guardian",
+    "Cursed Spirit": "cursed_spirit",
+    "Stone Sentinel": "stone_sentinel",
+    "Ruin Wraith": "ruin_wraith",
+    "Forest Wolf": "forest_wolf",
+    "Wild Treant": "wild_treant",
+    "Ancient Ent": "ancient_ent",
+    "Lake Sprite": "lake_sprite",
+    "Water Elemental": "water_elemental",
+    "Sea Raider": "sea_raider",
+    "Crab Beast": "crab_beast",
+    "Gem Golem": "gem_golem",
+    "Mine Crawler": "mine_crawler",
+    "Ruby Wyrm": "ruby_wyrm",
+    "Arena Gladiator": "arena_gladiator",
+    "Beast Master": "beast_master",
+    "Arena Champion": "arena_champion",
+    "Mutant": "mutant",
+    "Failed Experiment": "failed_experiment",
+    "Wild Pet": "wild_pet",
+    "Feral Beast": "feral_beast",
+    "Demon Soldier": "demon_soldier",
+    "Hellfire Elemental": "hellfire_elemental",
+    "Abyssal Horror": "abyssal_horror",
+    "Demon Lord": "demon_lord",
+    "Arcane Sentinel": "arcane_sentinel",
+    "Tower Guardian": "tower_guardian",
+    "Floor Boss": "floor_boss",
+    "Thunderstorm Titan": "thunderstorm_titan",
+    "Blizzard Wyrm": "blizzard_wyrm",
+    "Fog Phantom": "fog_phantom",
+    "Rain Serpent": "rain_serpent",
+  };
+
+  async function recordValorpediaDiscovery(accountId: string, category: string, entryId: string): Promise<void> {
+    try {
+      const { valorpediaDiscoveries } = await import("@shared/schema");
+      const existing = await db.select({ id: valorpediaDiscoveries.id })
+        .from(valorpediaDiscoveries)
+        .where(and(
+          eq(valorpediaDiscoveries.accountId, accountId),
+          eq(valorpediaDiscoveries.category, category as any),
+          eq(valorpediaDiscoveries.entryId, entryId),
+        ))
+        .limit(1);
+      if (existing.length === 0) {
+        await db.insert(valorpediaDiscoveries).values({
+          accountId,
+          category: category as any,
+          entryId,
+        });
+      }
+    } catch (_e) {
+      // Discovery is non-critical — silently ignore errors
+    }
+  }
 
   // ==================== VALORPEDIA ROUTES ====================
   app.get("/api/accounts/:id/valorpedia", async (req, res) => {

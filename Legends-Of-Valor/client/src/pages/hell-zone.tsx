@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useGame } from "@/lib/game-context";
+import { useZoneDiscovery } from "@/hooks/use-zone-discovery";
 import { ZoneScene } from "@/components/zone-scene";
 import ZoneNPCPanel from "@/components/zone-npc-panel";
 import { Button } from "@/components/ui/button";
@@ -119,6 +120,7 @@ interface MyBRStatus {
 }
 
 export default function HellZone() {
+  useZoneDiscovery("hell_zone");
   const [, navigate] = useLocation();
   const { account, setAccount } = useGame();
   const { toast } = useToast();

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useGame } from "@/lib/game-context";
+import { useZoneDiscovery } from "@/hooks/use-zone-discovery";
 import { ZoneScene } from "@/components/zone-scene";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -29,6 +30,7 @@ const RUBY_NODES = [
 ];
 
 export default function RubyMines() {
+  useZoneDiscovery("ruby_mines");
   const [, navigate] = useLocation();
   const { account, setAccount } = useGame();
   const { toast } = useToast();

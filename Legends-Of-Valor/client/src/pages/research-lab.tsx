@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useGame } from "@/lib/game-context";
+import { useZoneDiscovery } from "@/hooks/use-zone-discovery";
 import { ZoneScene } from "@/components/zone-scene";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -148,6 +149,7 @@ const FOREST_WEAPON_RECIPES_UI = [
 ];
 
 export default function ResearchLab() {
+  useZoneDiscovery("research_lab");
   const [, navigate] = useLocation();
   const { account, setAccount } = useGame();
   const { toast } = useToast();

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useGame } from "@/lib/game-context";
+import { useZoneDiscovery } from "@/hooks/use-zone-discovery";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +30,7 @@ const MINING_NODES = [
 ];
 
 export default function Mining() {
+  useZoneDiscovery("mountain_caverns");
   const [, navigate] = useLocation();
   const { account, setAccount } = useGame();
   const { toast } = useToast();

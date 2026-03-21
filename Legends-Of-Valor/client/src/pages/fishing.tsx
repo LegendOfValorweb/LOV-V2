@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useGame } from "@/lib/game-context";
+import { useZoneDiscovery } from "@/hooks/use-zone-discovery";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -81,6 +82,7 @@ const elementIcons: Record<string, any> = {
 };
 
 export default function Fishing() {
+  useZoneDiscovery("crystal_lake");
   const [, navigate] = useLocation();
   const { account } = useGame();
   const { toast } = useToast();
