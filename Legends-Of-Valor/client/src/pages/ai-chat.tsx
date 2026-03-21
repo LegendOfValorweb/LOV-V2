@@ -132,7 +132,8 @@ export default function AIChat() {
     if (!account?.id) return;
     try {
       await apiRequest("POST", `/api/ai/tutorial/${account.id}/complete`, {});
-      queryClient.invalidateQueries({ queryKey: ["/api/ai/story-act"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ai/story-act", account.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ai/storyline", account.id] });
       setTutorialContent(null);
       toast({ title: "Tutorial completed! Explore the world!" });
     } catch (error) {

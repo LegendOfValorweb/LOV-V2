@@ -327,8 +327,12 @@ export default function WorldMap() {
   });
 
   useEffect(() => {
-    if (storylineData && storylineData.tutorialCompleted === false) {
-      setShowTutorial(true);
+    if (storylineData) {
+      if (storylineData.tutorialCompleted === false) {
+        setShowTutorial(true);
+      } else {
+        setShowTutorial(false);
+      }
     }
   }, [storylineData]);
 

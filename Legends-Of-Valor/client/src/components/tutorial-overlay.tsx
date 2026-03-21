@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { apiRequest } from "@/lib/queryClient";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, X } from "lucide-react";
 
 const TUTORIAL_STEPS = [
@@ -117,6 +118,7 @@ interface TutorialOverlayProps {
 export default function TutorialOverlay({ onComplete }: TutorialOverlayProps) {
   const { account } = useGame();
   const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState(0);
   const [isCompleting, setIsCompleting] = useState(false);
 
@@ -138,6 +140,8 @@ export default function TutorialOverlay({ onComplete }: TutorialOverlayProps) {
     try {
       if (account?.id) {
         await apiRequest("POST", `/api/ai/tutorial/${account.id}/complete`, {});
+        queryClient.invalidateQueries({ queryKey: ["/api/ai/storyline", account.id] });
+        queryClient.invalidateQueries({ queryKey: ["/api/ai/story-act", account.id] });
         // Trigger AI story start
         await apiRequest("POST", "/api/ai/chat", {
           accountId: account.id,
