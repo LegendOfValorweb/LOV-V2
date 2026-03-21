@@ -780,6 +780,7 @@ export default function WorldMap() {
           const unlocked = isZoneUnlocked(zone, account.rank || "Novice");
           const isSelected = selectedZone?.id === zone.id;
           const isPlayerHere = playerPosition === zone.id;
+          const isNewPlayerRecommended = zone.id === "mystic-tower" && (account.wins || 0) === 0;
 
           return (
             <button
@@ -797,16 +798,25 @@ export default function WorldMap() {
                 ${isSelected ? 'scale-125' : 'group-hover:scale-110'}
                 ${!unlocked ? 'opacity-40 grayscale' : ''}
               `}>
+                {isNewPlayerRecommended && (
+                  <div className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap z-20 pointer-events-none">
+                    <span className="text-[9px] font-bold bg-green-500 text-black px-1.5 py-0.5 rounded-full animate-bounce shadow-[0_0_8px_rgba(74,222,128,0.7)]">
+                      ★ Start Here
+                    </span>
+                  </div>
+                )}
                 <div className={`relative p-2 rounded-lg border-2 transition-all duration-300
                   ${isSelected 
                     ? 'bg-amber-900/80 border-amber-400 shadow-[0_0_16px_rgba(251,191,36,0.5)]' 
-                    : unlocked 
-                      ? `bg-card/80 border-amber-700/60 group-hover:border-amber-500/80 group-hover:shadow-[0_0_12px_rgba(251,191,36,0.3)]`
-                      : 'bg-gray-900/60 border-gray-600/40'
+                    : isNewPlayerRecommended
+                      ? 'bg-green-900/60 border-green-400 shadow-[0_0_16px_rgba(74,222,128,0.6)] animate-pulse'
+                      : unlocked 
+                        ? `bg-card/80 border-amber-700/60 group-hover:border-amber-500/80 group-hover:shadow-[0_0_12px_rgba(251,191,36,0.3)]`
+                        : 'bg-gray-900/60 border-gray-600/40'
                   }
                   ${zone.difficulty === 'hell' && unlocked ? 'animate-pulse border-red-500/70' : ''}
                 `}>
-                  <div className={`${difficultyColors[zone.difficulty]} ${unlocked ? difficultyGlows[zone.difficulty] : ''}`}>
+                  <div className={`${isNewPlayerRecommended ? 'text-green-400 drop-shadow-[0_0_6px_rgba(74,222,128,0.8)]' : difficultyColors[zone.difficulty]} ${unlocked ? difficultyGlows[zone.difficulty] : ''}`}>
                     <LandmarkIcon landmark={zone.landmark} />
                   </div>
 
@@ -816,7 +826,7 @@ export default function WorldMap() {
                     </div>
                   )}
 
-                  {zone.pvpEnabled && unlocked && (
+                  {zone.pvpEnabled && unlocked && !isNewPlayerRecommended && (
                     <div className="absolute -top-1 -right-1 bg-red-900/90 border border-red-500/60 rounded-full p-0.5">
                       <Skull className="w-3 h-3 text-red-400" />
                     </div>
@@ -833,9 +843,11 @@ export default function WorldMap() {
                 <span className={`mt-1 text-[10px] font-serif font-bold whitespace-nowrap px-1.5 py-0.5 rounded
                   ${isSelected 
                     ? 'bg-amber-900/90 text-amber-300 shadow-[0_0_8px_rgba(251,191,36,0.3)]' 
-                    : unlocked 
-                      ? 'bg-black/70 text-amber-200/90' 
-                      : 'bg-black/50 text-gray-500'
+                    : isNewPlayerRecommended
+                      ? 'bg-green-900/90 text-green-300 shadow-[0_0_6px_rgba(74,222,128,0.4)]'
+                      : unlocked 
+                        ? 'bg-black/70 text-amber-200/90' 
+                        : 'bg-black/50 text-gray-500'
                   }
                 `}>
                   {zone.name}

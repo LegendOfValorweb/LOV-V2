@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { useGame } from "@/lib/game-context";
 import { Button } from "@/components/ui/button";
@@ -17,8 +17,8 @@ const TUTORIAL_STEPS = [
       "Thou hast chosen a path of glory in this realm of legend.",
       "Legends of Valor is a browser RPG with 14 races, 15 ranks, turn-based combat, pets, guilds, fishing, crafting, and much more.",
       "This brief guide shall prepare thee for adventure.",
-      "Thy AI guide will now begin thy story. Listen closely to its words.",
     ],
+    action: "Click Continue to learn about thy race and starting stats.",
     highlight: null,
   },
   {
@@ -27,9 +27,10 @@ const TUTORIAL_STEPS = [
     icon: "🧬",
     content: [
       "Each race bestows unique bonuses: Elves gain speed and magic, Orcs gain strength, Dwarves gain defense, and so forth.",
-      "Thy base stats are Strength (STR), Defense (DEF), Speed (SPD), Intelligence (INT), Vitality (VIT), and Luck (LUK).",
-      "Visit thy Base to train stats using Training Points (TP) earned from battles.",
+      "Thy base stats are Strength (STR), Defense (DEF), Speed (SPD), Intelligence (INT), and Luck (LUK).",
+      "Thou hast received 10 Training Points, 35,000 gold, a Thunder Hammer, Shadow Cloak, and Lucky Ring to begin thy adventure.",
     ],
+    action: "Do this: After the tutorial, open your Inventory to equip starter gear, then go to Training Grounds to spend Training Points.",
     highlight: "base",
   },
   {
@@ -41,6 +42,7 @@ const TUTORIAL_STEPS = [
       "Spells bypass Defense entirely. Stuns, Freezes, and Silences can be applied by powerful foes.",
       "Death is not permanent — lose some gold and return as a Ghost. Visit thy Base to respawn.",
     ],
+    action: "Do this: Head to the Mystic Tower on the World Map to fight your first NPC battle.",
     highlight: "challenges",
   },
   {
@@ -52,6 +54,7 @@ const TUTORIAL_STEPS = [
       "Floor bosses drop special runes. Higher floors grant greater gold and soul shard rewards.",
       "Auto-fight lets thee battle up to 100 times automatically while thou art away.",
     ],
+    action: "Do this: First equip your starter gear from Inventory, then click the Mystic Tower on the World Map and press Battle.",
     highlight: "npc-battle",
   },
   {
@@ -63,6 +66,7 @@ const TUTORIAL_STEPS = [
       "Each pet has elements that deal bonus damage against opposing elements in combat.",
       "Feed pets fish from the Coastal Village, train them in Pet Training grounds, and evolve them through tiers.",
     ],
+    action: "Do this: Visit Pet Training Grounds on the World Map to train and evolve your starting pet.",
     highlight: "pets",
   },
   {
@@ -74,6 +78,7 @@ const TUTORIAL_STEPS = [
       "Weather changes dynamically — thunderstorms spawn rare bosses, fog hides champions, blizzards empower the darkness.",
       "Zone dungeons offer special challenges for guilds and solo adventurers alike.",
     ],
+    action: "Do this: Open the World Map and explore — look for the glowing Mystic Tower marker for beginners.",
     highlight: "world-map",
   },
   {
@@ -85,6 +90,7 @@ const TUTORIAL_STEPS = [
       "Build reputation with four factions — Merchants, Warriors, Scholars, and Nature Wardens — to unlock exclusive rewards.",
       "Guild members can challenge each other to earn guild experience and climb the guild leaderboard.",
     ],
+    action: "Do this: After your first battle, visit the Guild Hall to join an existing guild.",
     highlight: "guild",
   },
   {
@@ -96,6 +102,7 @@ const TUTORIAL_STEPS = [
       "Shop prices fluctuate with supply and demand — buy low and sell high on the Auction House.",
       "Craft items from fishing catches, mine rubies, and collect resources throughout the world.",
     ],
+    action: "Do this: Visit the Capital City Shop to buy your first gear upgrade with your starting gold.",
     highlight: "shop",
   },
   {
@@ -104,9 +111,10 @@ const TUTORIAL_STEPS = [
     icon: "🌟",
     content: [
       "Thou art now prepared to face the realm of Valor.",
-      "Visit the World Map to begin thy journey. Challenge NPCs, join a guild, tame pets, and forge thy legend.",
+      "Check thy First Steps checklist on the Home Base — complete each objective to grow quickly.",
       "May fortune favor thee, brave adventurer!",
     ],
+    action: "Do this: Go to your Home Base now and check the First Steps panel to begin your journey.",
     highlight: null,
   },
 ];
@@ -142,16 +150,16 @@ export default function TutorialOverlay({ onComplete }: TutorialOverlayProps) {
         await apiRequest("POST", `/api/ai/tutorial/${account.id}/complete`, {});
         queryClient.invalidateQueries({ queryKey: ["/api/ai/storyline", account.id] });
         queryClient.invalidateQueries({ queryKey: ["/api/ai/story-act", account.id] });
-        // Trigger AI story start
-        await apiRequest("POST", "/api/ai/chat", {
+        // Trigger AI story start with a concrete first directive
+        apiRequest("POST", "/api/ai/chat", {
           accountId: account.id,
-          message: "I have finished the tutorial. Please start my story and tell me where to go.",
-        });
+          message: "I have just arrived in Valor as a brand new adventurer. What is the single most important thing I should do right now to get started? Give me one clear, concrete action.",
+        }).catch(() => {});
       }
     } catch (e) {
     } finally {
       onComplete();
-      navigate("/ai-chat");
+      navigate("/base");
     }
   };
 
@@ -195,7 +203,7 @@ export default function TutorialOverlay({ onComplete }: TutorialOverlayProps) {
             </h2>
           </div>
 
-          <div className="space-y-4 mb-8">
+          <div className="space-y-4 mb-6">
             {current.content.map((line, i) => (
               <div key={i} className="flex items-start gap-3">
                 <span className="text-amber-400 mt-0.5 shrink-0">◆</span>
@@ -203,6 +211,12 @@ export default function TutorialOverlay({ onComplete }: TutorialOverlayProps) {
               </div>
             ))}
           </div>
+
+          {current.action && (
+            <div className="mb-6 rounded-lg bg-amber-500/10 border border-amber-500/40 px-4 py-3">
+              <p className="text-sm font-bold text-amber-300">{current.action}</p>
+            </div>
+          )}
 
           <div className="flex items-center justify-between gap-4">
             <div className="flex gap-1.5">

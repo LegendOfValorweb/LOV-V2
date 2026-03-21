@@ -587,13 +587,39 @@ export async function registerRoutes(
         username,
         password: hashedPassword,
         role,
-        gold: role === "player" ? 10000 : 0,
+        gold: role === "player" ? 35000 : 0,
+        trainingPoints: role === "player" ? 10 : 0,
         race: role === "player" ? race : undefined,
         gender: role === "player" ? gender : undefined,
         portrait: role === "player" ? `${race}_${gender}` : undefined,
         stats: startingStats,
         currentSessionId: sessionId,
       });
+
+      // Grant starter pack to new players
+      if (role === "player") {
+        // normal-1 = Thunder Hammer (weapon, Str+12, Luck+5)
+        await storage.addToInventory({
+          accountId: account.id,
+          itemId: "normal-1",
+          stats: {},
+          purchasedAt: new Date(),
+        });
+        // normal-2 = Shadow Cloak (armor, Spd+10, Luck+5)
+        await storage.addToInventory({
+          accountId: account.id,
+          itemId: "normal-2",
+          stats: {},
+          purchasedAt: new Date(),
+        });
+        // normal-7 = Lucky Ring (accessory, Luck+20) — bonus starter accessory
+        await storage.addToInventory({
+          accountId: account.id,
+          itemId: "normal-7",
+          stats: {},
+          purchasedAt: new Date(),
+        });
+      }
 
       const token = generateToken({ id: account.id, username: account.username, sessionId });
       res.cookie(COOKIE_NAME, token, COOKIE_OPTIONS);

@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { 
   Castle, Hammer, Package, Dumbbell, Shield, Sparkles,
   Coins, ArrowUp, Lock, Home, Palette, Trophy, Swords, Users, Calendar,
-  Target, Zap, Flame, Crown
+  Target, Zap, Flame, Crown, CheckCircle2, Circle, X, ChevronDown, ChevronUp
 } from "lucide-react";
 import { useGame } from "@/lib/game-context";
 import { useToast } from "@/hooks/use-toast";
@@ -471,6 +471,75 @@ function BuildingSketch({ id, tier, unlocked, glowColor }: { id: string; tier: L
   );
 }
 
+interface FirstStep {
+  id: string;
+  label: string;
+  description: string;
+  done: boolean;
+  route: string | null;
+  building: string | null;
+}
+
+function FirstStepsPanel({ steps, onDismiss, onGo }: {
+  steps: FirstStep[];
+  onDismiss: () => void;
+  onGo: (step: FirstStep) => void;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+  const completedCount = steps.filter(s => s.done).length;
+
+  return (
+    <div className="flex-shrink-0 mb-3 rounded-xl border border-amber-500/40 bg-gradient-to-br from-amber-950/60 to-gray-900/80 backdrop-blur-sm overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 cursor-pointer" onClick={() => setCollapsed(c => !c)}>
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-amber-400" />
+          <span className="font-serif text-sm font-bold text-amber-300">New Player — First Steps</span>
+          <Badge variant="outline" className="text-xs border-amber-500/50 text-amber-400">
+            {completedCount}/{steps.length}
+          </Badge>
+        </div>
+        <div className="flex items-center gap-1">
+          {collapsed ? <ChevronDown className="w-4 h-4 text-amber-400" /> : <ChevronUp className="w-4 h-4 text-amber-400" />}
+          <button
+            onClick={(e) => { e.stopPropagation(); onDismiss(); }}
+            className="ml-1 p-0.5 rounded hover:bg-white/10 text-muted-foreground hover:text-foreground"
+            title="Dismiss"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+      {!collapsed && (
+        <div className="px-3 pb-3 space-y-2">
+          {steps.map((step) => (
+            <div
+              key={step.id}
+              className={`flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors ${step.done ? "opacity-50" : "hover:bg-white/5 cursor-pointer"}`}
+              onClick={() => !step.done && onGo(step)}
+            >
+              {step.done
+                ? <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                : <Circle className="w-4 h-4 text-amber-500/60 shrink-0" />
+              }
+              <div className="flex-1 min-w-0">
+                <p className={`text-xs font-medium leading-tight ${step.done ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                  {step.label}
+                </p>
+                {!step.done && (
+                  <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{step.description}</p>
+                )}
+              </div>
+              {!step.done && (
+                <span className="text-[10px] text-amber-400 font-medium shrink-0">Go →</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const SKY_GRADIENTS: Record<string, string> = {
   town_hall: "linear-gradient(to bottom,#0d0620 0%,#1a0d3d 55%,#2d1654 100%)",
   storage: "linear-gradient(to bottom,#0d0500 0%,#1a0c06 55%,#2c1810 100%)",
@@ -877,6 +946,71 @@ export default function Base() {
 
   if (!account) return null;
 
+  const FIRST_STEPS_KEY = `lov_first_steps_${account.id}`;
+  const FIRST_STEPS_DISMISSED_KEY = `lov_first_steps_dismissed_${account.id}`;
+
+  const getStepsProgress = (): Record<string, boolean> => {
+    try { return JSON.parse(localStorage.getItem(FIRST_STEPS_KEY) || "{}"); } catch { return {}; }
+  };
+  const saveStepDone = (stepId: string) => {
+    try {
+      const progress = getStepsProgress();
+      progress[stepId] = true;
+      localStorage.setItem(FIRST_STEPS_KEY, JSON.stringify(progress));
+    } catch {}
+  };
+
+  const stepsProgress = getStepsProgress();
+
+  const firstSteps = [
+    {
+      id: "equip_gear",
+      label: "Equip your starter weapon and armor",
+      description: "Open your Inventory and equip the Thunder Hammer and Shadow Cloak",
+      done: !!(account.equipped as any)?.weapon || !!(account.equipped as any)?.armor,
+      route: "/inventory",
+      building: null as string | null,
+    },
+    {
+      id: "train_stat",
+      label: "Train a stat",
+      description: "Go to Training Grounds and spend your 10 starting Training Points",
+      done: stepsProgress.train_stat === true || (account.trainingPoints || 10) < 10,
+      route: null as string | null,
+      building: "training",
+    },
+    {
+      id: "first_battle",
+      label: "Win your first Mystic Tower battle",
+      description: "Go to the Mystic Tower on the World Map and defeat your first enemy",
+      done: (account.wins || 0) > 0,
+      route: "/npc-battle",
+      building: null as string | null,
+    },
+    {
+      id: "buy_gear",
+      label: "Buy a piece of gear from the Shop",
+      description: "Visit Capital City Shop and purchase a weapon or armor",
+      done: stepsProgress.buy_gear === true,
+      route: "/shop",
+      building: null as string | null,
+    },
+    {
+      id: "join_guild",
+      label: "Join or create a Guild",
+      description: "Visit the Guild Hall to team up with other players",
+      done: stepsProgress.join_guild === true,
+      route: "/guild",
+      building: null as string | null,
+    },
+  ];
+
+  const allFirstStepsDone = firstSteps.every(s => s.done);
+  const isDismissed = (() => {
+    try { return localStorage.getItem(FIRST_STEPS_DISMISSED_KEY) === "true"; } catch { return false; }
+  })();
+  const showFirstSteps = !isDismissed && !allFirstStepsDone;
+
   const nextTierCost = currentTier < 5 ? [0, 500000, 5000000, 50000000, 500000000][currentTier] : 0;
 
   const baseSkin = (account as any).baseSkin || "default";
@@ -917,6 +1051,26 @@ export default function Base() {
             <span className="text-xs text-yellow-300 font-semibold">{(account?.gold || 0).toLocaleString()}</span>
           </div>
         </div>
+
+        {showFirstSteps && (
+          <FirstStepsPanel
+            steps={firstSteps}
+            onDismiss={() => {
+              try { localStorage.setItem(FIRST_STEPS_DISMISSED_KEY, "true"); } catch {}
+              refetchAccount();
+            }}
+            onGo={(step) => {
+              if (step.id === "buy_gear") saveStepDone("buy_gear");
+              if (step.id === "join_guild") saveStepDone("join_guild");
+              if (step.id === "train_stat") saveStepDone("train_stat");
+              if (step.building) {
+                setOpenBuilding(step.building);
+              } else if (step.route) {
+                navigate(step.route);
+              }
+            }}
+          />
+        )}
 
         {/* Base scene with backdrop */}
         <div className="relative flex-1 overflow-hidden" style={{ minHeight: 0 }}>
