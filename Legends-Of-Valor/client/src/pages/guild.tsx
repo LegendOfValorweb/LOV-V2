@@ -434,6 +434,7 @@ export default function GuildPage() {
     queryKey: ["/api/guilds", guild?.id, "quests"],
     enabled: !!guild,
     refetchInterval: 10000,
+    select: (data: any) => Array.isArray(data) ? data : (data?.quests ?? []),
   });
 
   const contributeQuestMutation = useMutation({
