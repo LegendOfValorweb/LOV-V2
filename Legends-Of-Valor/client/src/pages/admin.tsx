@@ -1615,7 +1615,7 @@ export default function Admin() {
           </div>
         </div>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-6 bg-red-950/30 border border-red-500/20">
+          <TabsList className="mb-6 bg-red-950/30 border border-red-500/20 flex-wrap h-auto gap-y-1">
             <TabsTrigger value="items" className="gap-2">
               <Gift className="w-4 h-4" />
               Items

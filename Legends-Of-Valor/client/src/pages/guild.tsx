@@ -174,6 +174,15 @@ interface GuildWithMemberCount {
   memberCount: number;
 }
 
+interface ZoneConquest {
+  zoneId: string;
+  guildId: string | null;
+  guildName: string | null;
+  defensePoints: number | null;
+  taxRate: number | null;
+  conqueredAt: string | null;
+}
+
 interface GuildApplicationInfo {
   id: string;
   guildId: string;
@@ -236,6 +245,46 @@ export default function GuildPage() {
     queryKey: ["/api/guilds", guild?.id, "dungeon"],
     enabled: !!guild,
     refetchInterval: 5000,
+  });
+
+  const { data: zoneConquests = [], refetch: refetchZoneConquests } = useQuery<ZoneConquest[]>({
+    queryKey: ["/api/zone-conquests"],
+    enabled: !!guild,
+    refetchInterval: 10000,
+  });
+
+  const claimZoneMutation = useMutation({
+    mutationFn: async (zoneId: string) => {
+      const res = await apiRequest("POST", `/api/zone-conquests/${zoneId}/claim`, { accountId: account!.id });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Zone Claimed!", description: data.message || "Your guild now controls this zone." });
+      refetchZoneConquests();
+      queryClient.invalidateQueries({ queryKey: ["/api/zone-conquests"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Cannot Claim Zone", description: err?.message || "Failed to claim zone.", variant: "destructive" });
+    },
+  });
+
+  const attackZoneMutation = useMutation({
+    mutationFn: async (zoneId: string) => {
+      const res = await apiRequest("POST", `/api/zone-conquests/${zoneId}/attack`, { accountId: account!.id });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.conquered) {
+        toast({ title: "Zone Conquered!", description: data.message || "Your guild seized the zone!" });
+      } else {
+        toast({ title: "Zone Attacked!", description: data.message || "Defense reduced." });
+      }
+      refetchZoneConquests();
+      queryClient.invalidateQueries({ queryKey: ["/api/zone-conquests"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Attack Failed", description: err?.message || "Failed to attack zone.", variant: "destructive" });
+    },
   });
 
   const { data: chatMessages = [], refetch: refetchChat } = useQuery<GuildChatMessage[]>({
@@ -1659,6 +1708,103 @@ export default function GuildPage() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Zone Conquest Section */}
+            {guild && (() => {
+              const ZONE_DISPLAY: Record<string, { label: string; icon: string; minRank: string }> = {
+                capital_city:     { label: "Capital City",     icon: "🏛️", minRank: "Novice" },
+                mountain_caverns: { label: "Mountain Caverns", icon: "⛰️", minRank: "Apprentice" },
+                ancient_ruins:    { label: "Ancient Ruins",    icon: "🏚️", minRank: "Initiate" },
+                enchanted_forest: { label: "Enchanted Forest", icon: "🌲", minRank: "Apprentice" },
+                crystal_lake:     { label: "Crystal Lake",     icon: "💧", minRank: "Journeyman" },
+                coastal_village:  { label: "Coastal Village",  icon: "⚓", minRank: "Journeyman" },
+                ruby_mines:       { label: "Ruby Mines",       icon: "💎", minRank: "Expert" },
+                battle_arena:     { label: "Battle Arena",     icon: "⚔️", minRank: "Expert" },
+                research_lab:     { label: "Research Lab",     icon: "🔬", minRank: "Scholar" },
+                pet_training:     { label: "Pet Training Grounds", icon: "🐾", minRank: "Journeyman" },
+                hell_zone:        { label: "Hell Zone",        icon: "🔥", minRank: "Veteran" },
+                mystic_tower:     { label: "Mystic Tower",     icon: "🗼", minRank: "Master" },
+              };
+              const ALL_ZONES = Object.keys(ZONE_DISPLAY);
+              return (
+                <Card className="md:col-span-2">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Target className="w-5 h-5 text-violet-400" />
+                      Zone Conquest
+                    </CardTitle>
+                    <CardDescription>
+                      Conquer zones across the realm to earn tax income for your guild. Claim unclaimed zones for 5,000 guild gold. Reduce enemy defense to 0 to seize their territory.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {ALL_ZONES.map((zoneId) => {
+                        const info = ZONE_DISPLAY[zoneId];
+                        const conquest = zoneConquests.find(z => z.zoneId === zoneId);
+                        const isOurs = conquest?.guildId === guild.id;
+                        const isEnemy = !!conquest?.guildId && conquest.guildId !== guild.id;
+                        const isUnclaimed = !conquest?.guildId;
+                        const defense = conquest?.defensePoints ?? 100;
+
+                        return (
+                          <div
+                            key={zoneId}
+                            className={`p-3 rounded-lg border flex items-center justify-between gap-2 ${
+                              isOurs
+                                ? "bg-violet-500/10 border-violet-500/30"
+                                : isEnemy
+                                ? "bg-red-500/10 border-red-500/30"
+                                : "bg-muted/20 border-border"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <span className="text-xl shrink-0">{info.icon}</span>
+                              <div className="min-w-0">
+                                <p className="font-medium text-sm truncate">{info.label}</p>
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {isOurs
+                                    ? `Your guild · Defense: ${defense}/100`
+                                    : isEnemy
+                                    ? `${conquest!.guildName || "Enemy"} · Defense: ${defense}/100`
+                                    : "Unclaimed · 5,000 gold to claim"}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="shrink-0">
+                              {isOurs ? (
+                                <Badge variant="outline" className="border-violet-400 text-violet-400 text-xs">Owned</Badge>
+                              ) : isEnemy ? (
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  className="h-7 text-xs px-2"
+                                  onClick={() => attackZoneMutation.mutate(zoneId)}
+                                  disabled={attackZoneMutation.isPending}
+                                >
+                                  <Swords className="w-3 h-3 mr-1" />
+                                  Attack
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  className="h-7 text-xs px-2 bg-violet-600 hover:bg-violet-700"
+                                  onClick={() => claimZoneMutation.mutate(zoneId)}
+                                  disabled={claimZoneMutation.isPending}
+                                >
+                                  <Crown className="w-3 h-3 mr-1" />
+                                  Claim
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
 
             {/* Applications Management Section (for masters/officers) */}
             {canManageApplications && (
