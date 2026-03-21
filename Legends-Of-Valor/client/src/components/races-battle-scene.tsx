@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { motion, useAnimation } from "framer-motion";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { motion, useAnimation, AnimatePresence } from "framer-motion";
 
 interface Particle {
   x: number;
@@ -9,9 +9,37 @@ interface Particle {
   life: number;
   maxLife: number;
   size: number;
-  type: "ember" | "spark" | "orb" | "smoke" | "lightning";
+  type: "ember" | "spark" | "orb" | "smoke" | "lightning" | "impact";
   hue: number;
   alpha: number;
+}
+
+const RACES = [
+  "human", "elf", "dwarf", "orc", "beastfolk", "mystic",
+  "fae", "elemental", "undead", "demon", "draconic", "celestial", "aquatic", "titan",
+];
+const GENDERS = ["male", "female"] as const;
+
+type FightState = "idle" | "lunge" | "hit" | "recoil" | "dying";
+
+interface Fighter {
+  race: string;
+  gender: "male" | "female";
+  startingHp: number;
+}
+
+let lastRacePair: [string, string] = ["", ""];
+
+function randomRacePair(): [Fighter, Fighter] {
+  let shuffled: string[];
+  do {
+    shuffled = [...RACES].sort(() => Math.random() - 0.5);
+  } while (shuffled[0] === lastRacePair[0] && shuffled[1] === lastRacePair[1]);
+  lastRacePair = [shuffled[0], shuffled[1]];
+  return [
+    { race: shuffled[0], gender: GENDERS[Math.floor(Math.random() * 2)], startingHp: 3 + Math.floor(Math.random() * 3) },
+    { race: shuffled[1], gender: GENDERS[Math.floor(Math.random() * 2)], startingHp: 3 + Math.floor(Math.random() * 3) },
+  ];
 }
 
 export default function RacesBattleScene() {
@@ -21,75 +49,189 @@ export default function RacesBattleScene() {
   const [flashOpacity, setFlashOpacity] = useState(0);
   const [shakeX, setShakeX] = useState(0);
   const [shakeY, setShakeY] = useState(0);
-  const imageControls = useAnimation();
 
-  const kenBurnsKeyframes = [
-    { scale: 1.0, x: 0, y: 0 },
-    { scale: 1.12, x: -30, y: -20 },
-    { scale: 1.08, x: 20, y: -10 },
-    { scale: 1.15, x: -15, y: 15 },
-    { scale: 1.05, x: 10, y: -25 },
-    { scale: 1.0, x: 0, y: 0 },
-  ];
+  const [[leftFighter, rightFighter], setFighters] = useState<[Fighter, Fighter]>(() => randomRacePair());
+  const [roundVisible, setRoundVisible] = useState(true);
+  const [leftState, setLeftState] = useState<FightState>("idle");
+  const [rightState, setRightState] = useState<FightState>("idle");
+
+  const leftControls = useAnimation();
+  const rightControls = useAnimation();
+  const clashTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
-    let frameIndex = 0;
-    let cancelled = false;
-
-    async function runKenBurns() {
-      while (!cancelled) {
-        const from = kenBurnsKeyframes[frameIndex % kenBurnsKeyframes.length];
-        const to = kenBurnsKeyframes[(frameIndex + 1) % kenBurnsKeyframes.length];
-        frameIndex++;
-
-        await imageControls.start({
-          scale: to.scale,
-          x: to.x,
-          y: to.y,
-          transition: { duration: 6, ease: "easeInOut" },
-        });
-      }
-    }
-
-    imageControls.set(kenBurnsKeyframes[0]);
-    runKenBurns();
-
     return () => {
-      cancelled = true;
+      clashTimersRef.current.forEach(clearTimeout);
     };
-  }, [imageControls]);
+  }, []);
 
-  useEffect(() => {
-    let clashTimeout: ReturnType<typeof setTimeout>;
+  const spawnImpactBurst = useCallback((canvas: HTMLCanvasElement) => {
+    const cx = canvas.width / 2;
+    const cy = canvas.height * 0.42;
+    for (let i = 0; i < 32; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 2 + Math.random() * 7;
+      particlesRef.current.push({
+        x: cx + (Math.random() - 0.5) * 20,
+        y: cy + (Math.random() - 0.5) * 20,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 1,
+        life: 0,
+        maxLife: 20 + Math.random() * 25,
+        size: 1.5 + Math.random() * 3.5,
+        type: "impact",
+        hue: 30 + Math.random() * 40,
+        alpha: 0,
+      });
+    }
+  }, []);
 
-    function triggerClash() {
-      setFlashOpacity(0.55);
-      const shx = (Math.random() - 0.5) * 14;
-      const shy = (Math.random() - 0.5) * 10;
-      setShakeX(shx);
-      setShakeY(shy);
+  const triggerClash = useCallback((canvas: HTMLCanvasElement | null) => {
+    if (canvas) spawnImpactBurst(canvas);
 
+    setFlashOpacity(0.6);
+    const shx = (Math.random() - 0.5) * 16;
+    const shy = (Math.random() - 0.5) * 10;
+    setShakeX(shx);
+    setShakeY(shy);
+
+    clashTimersRef.current.push(
       setTimeout(() => {
-        setFlashOpacity(0.2);
+        setFlashOpacity(0.25);
         setShakeX(-shx * 0.5);
         setShakeY(-shy * 0.5);
-      }, 80);
+      }, 80)
+    );
 
+    clashTimersRef.current.push(
       setTimeout(() => {
         setFlashOpacity(0);
         setShakeX(0);
         setShakeY(0);
-      }, 200);
+      }, 200)
+    );
+  }, [spawnImpactBurst]);
 
-      const nextDelay = 8000 + Math.random() * 4000;
-      clashTimeout = setTimeout(triggerClash, nextDelay);
+  const startNewRound = useCallback(() => {
+    const [l, r] = randomRacePair();
+    setFighters([l, r]);
+    setLeftState("idle");
+    setRightState("idle");
+    leftControls.set({ x: 0, y: 0, opacity: 1, scaleX: 1 });
+    rightControls.set({ x: 0, y: 0, opacity: 1, scaleX: -1 });
+    setRoundVisible(true);
+  }, [leftControls, rightControls]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let currentLeftHp = leftFighter.startingHp;
+    let currentRightHp = rightFighter.startingHp;
+
+    leftControls.set({ x: 0, y: 0, opacity: 1, scaleX: 1 });
+    rightControls.set({ x: 0, y: 0, opacity: 1, scaleX: -1 });
+    setLeftState("idle");
+    setRightState("idle");
+
+    async function idleBob(controls: ReturnType<typeof useAnimation>) {
+      while (!cancelled) {
+        await controls.start({
+          y: [0, -8, 0],
+          transition: { duration: 1.8 + Math.random() * 0.6, ease: "easeInOut" },
+        });
+      }
     }
 
-    const initialDelay = 4000 + Math.random() * 4000;
-    clashTimeout = setTimeout(triggerClash, initialDelay);
+    async function fightLoop() {
+      idleBob(leftControls);
+      idleBob(rightControls);
 
-    return () => clearTimeout(clashTimeout);
-  }, []);
+      await new Promise(r => setTimeout(r, 2000 + Math.random() * 1500));
+
+      while (!cancelled && currentLeftHp > 0 && currentRightHp > 0) {
+        const attackerIsLeft = Math.random() > 0.5;
+        const attackerControls = attackerIsLeft ? leftControls : rightControls;
+        const defenderControls = attackerIsLeft ? rightControls : leftControls;
+        const lungeDir = attackerIsLeft ? 1 : -1;
+
+        if (attackerIsLeft) setLeftState("lunge");
+        else setRightState("lunge");
+
+        await attackerControls.start({
+          x: lungeDir * 80,
+          y: 0,
+          transition: { duration: 0.35, ease: "easeIn" },
+        });
+
+        if (cancelled) break;
+
+        triggerClash(canvasRef.current);
+
+        if (attackerIsLeft) {
+          currentRightHp--;
+          setRightState("hit");
+          setLeftState("recoil");
+        } else {
+          currentLeftHp--;
+          setLeftState("hit");
+          setRightState("recoil");
+        }
+
+        await Promise.all([
+          attackerControls.start({
+            x: lungeDir * 40,
+            transition: { duration: 0.15, ease: "easeOut" },
+          }),
+          defenderControls.start({
+            x: -lungeDir * 25,
+            transition: { duration: 0.15, ease: "easeOut" },
+          }),
+        ]);
+
+        await new Promise(r => setTimeout(r, 150));
+
+        await Promise.all([
+          attackerControls.start({ x: 0, y: 0, transition: { duration: 0.5, ease: "easeOut" } }),
+          defenderControls.start({ x: 0, transition: { duration: 0.5, ease: "easeOut" } }),
+        ]);
+
+        if (attackerIsLeft) {
+          setLeftState("idle");
+          setRightState(currentRightHp <= 0 ? "dying" : "idle");
+        } else {
+          setRightState("idle");
+          setLeftState(currentLeftHp <= 0 ? "dying" : "idle");
+        }
+
+        if (cancelled || currentLeftHp <= 0 || currentRightHp <= 0) break;
+
+        await new Promise(r => setTimeout(r, 1500 + Math.random() * 1500));
+      }
+
+      if (cancelled) return;
+
+      const loserControls = currentLeftHp <= 0 ? leftControls : rightControls;
+      if (currentLeftHp <= 0) setLeftState("dying");
+      else setRightState("dying");
+
+      await loserControls.start({
+        opacity: 0,
+        y: 40,
+        transition: { duration: 1.2, ease: "easeIn" },
+      });
+
+      if (cancelled) return;
+
+      setRoundVisible(false);
+      await new Promise(r => setTimeout(r, 1500));
+      if (cancelled) return;
+
+      startNewRound();
+    }
+
+    fightLoop();
+
+    return () => { cancelled = true; };
+  }, [leftFighter.race, rightFighter.race, leftControls, rightControls, triggerClash, startNewRound, leftFighter.startingHp, rightFighter.startingHp]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -106,68 +248,43 @@ export default function RacesBattleScene() {
     resize();
     window.addEventListener("resize", resize);
 
-    function spawnParticle() {
+    function spawnAmbientParticle() {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const w = canvas.width;
       const h = canvas.height;
 
-      const type = (() => {
-        const r = Math.random();
-        if (r < 0.38) return "ember";
-        if (r < 0.60) return "spark";
-        if (r < 0.78) return "orb";
-        if (r < 0.90) return "smoke";
-        return "lightning";
-      })() as Particle["type"];
+      const r = Math.random();
+      const type: Particle["type"] = r < 0.38 ? "ember" : r < 0.60 ? "spark" : r < 0.78 ? "orb" : r < 0.90 ? "smoke" : "lightning";
 
       let x: number, y: number, vx: number, vy: number, size: number, hue: number, maxLife: number;
 
       switch (type) {
         case "ember":
-          x = Math.random() * w;
-          y = h * (0.3 + Math.random() * 0.7);
-          vx = (Math.random() - 0.5) * 1.5;
-          vy = -(0.5 + Math.random() * 1.5);
-          size = 1.5 + Math.random() * 3;
-          hue = 20 + Math.random() * 30;
-          maxLife = 60 + Math.random() * 100;
+          x = Math.random() * w; y = h * (0.3 + Math.random() * 0.7);
+          vx = (Math.random() - 0.5) * 1.5; vy = -(0.5 + Math.random() * 1.5);
+          size = 1.5 + Math.random() * 3; hue = 20 + Math.random() * 30; maxLife = 60 + Math.random() * 100;
           break;
         case "spark":
-          x = Math.random() * w;
-          y = h * (0.4 + Math.random() * 0.5);
-          vx = (Math.random() - 0.5) * 3;
-          vy = -(1 + Math.random() * 3);
-          size = 1 + Math.random() * 2;
-          hue = 35 + Math.random() * 20;
-          maxLife = 30 + Math.random() * 50;
+          x = Math.random() * w; y = h * (0.4 + Math.random() * 0.5);
+          vx = (Math.random() - 0.5) * 3; vy = -(1 + Math.random() * 3);
+          size = 1 + Math.random() * 2; hue = 35 + Math.random() * 20; maxLife = 30 + Math.random() * 50;
           break;
         case "orb":
-          x = Math.random() * w;
-          y = h * (0.1 + Math.random() * 0.8);
-          vx = (Math.random() - 0.5) * 0.6;
-          vy = (Math.random() - 0.5) * 0.6;
-          size = 3 + Math.random() * 6;
-          hue = 180 + Math.random() * 180;
-          maxLife = 120 + Math.random() * 180;
+          x = Math.random() * w; y = h * (0.1 + Math.random() * 0.8);
+          vx = (Math.random() - 0.5) * 0.6; vy = (Math.random() - 0.5) * 0.6;
+          size = 3 + Math.random() * 6; hue = 180 + Math.random() * 180; maxLife = 120 + Math.random() * 180;
           break;
         case "smoke":
-          x = Math.random() * w;
-          y = h * (0.5 + Math.random() * 0.5);
-          vx = (Math.random() - 0.5) * 0.4;
-          vy = -(0.2 + Math.random() * 0.5);
-          size = 20 + Math.random() * 40;
-          hue = 220 + Math.random() * 40;
-          maxLife = 150 + Math.random() * 150;
+          x = Math.random() * w; y = h * (0.5 + Math.random() * 0.5);
+          vx = (Math.random() - 0.5) * 0.4; vy = -(0.2 + Math.random() * 0.5);
+          size = 20 + Math.random() * 40; hue = 220 + Math.random() * 40; maxLife = 150 + Math.random() * 150;
           break;
         case "lightning":
-          x = Math.random() * w;
-          y = h * (0.05 + Math.random() * 0.4);
-          vx = 0;
-          vy = 0;
-          size = 40 + Math.random() * 80;
-          hue = 200 + Math.random() * 60;
-          maxLife = 8 + Math.random() * 12;
+        default:
+          x = Math.random() * w; y = h * (0.05 + Math.random() * 0.4);
+          vx = 0; vy = 0;
+          size = 40 + Math.random() * 80; hue = 200 + Math.random() * 60; maxLife = 8 + Math.random() * 12;
           break;
       }
 
@@ -183,7 +300,7 @@ export default function RacesBattleScene() {
       frameCount++;
       const spawnRate = frameCount % 2 === 0 ? 3 : 2;
       for (let i = 0; i < spawnRate; i++) {
-        if (particlesRef.current.length < 250) spawnParticle();
+        if (particlesRef.current.length < 280) spawnAmbientParticle();
       }
 
       particlesRef.current = particlesRef.current.filter(p => p.life < p.maxLife);
@@ -198,7 +315,26 @@ export default function RacesBattleScene() {
         const fadeOut = 1 - Math.pow(progress, 2);
         p.alpha = fadeIn * fadeOut;
 
-        if (p.type === "ember") {
+        if (p.type === "impact") {
+          p.vy += 0.15;
+          const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * 2);
+          grd.addColorStop(0, `hsla(${p.hue}, 100%, 95%, ${p.alpha})`);
+          grd.addColorStop(0.4, `hsla(${p.hue + 15}, 100%, 70%, ${p.alpha * 0.7})`);
+          grd.addColorStop(1, `hsla(${p.hue + 30}, 100%, 50%, 0)`);
+          ctx.fillStyle = grd;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.save();
+          ctx.globalAlpha = p.alpha * 0.9;
+          ctx.strokeStyle = `hsl(${p.hue}, 100%, 85%)`;
+          ctx.lineWidth = p.size * 0.4;
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x - p.vx * 3, p.y - p.vy * 3);
+          ctx.stroke();
+          ctx.restore();
+        } else if (p.type === "ember") {
           p.vx += (Math.random() - 0.5) * 0.1;
           p.vy += (Math.random() - 0.5) * 0.05;
           const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size);
@@ -271,30 +407,34 @@ export default function RacesBattleScene() {
     };
   }, []);
 
+  const leftPortrait = `/portraits/${leftFighter.race}_${leftFighter.gender}.png`;
+  const rightPortrait = `/portraits/${rightFighter.race}_${rightFighter.gender}.png`;
+
   return (
     <div
       className="fixed inset-0 overflow-hidden"
       style={{ transform: `translate(${shakeX}px, ${shakeY}px)`, transition: "transform 0.05s ease-out" }}
     >
-      <motion.div
-        animate={imageControls}
-        className="absolute inset-0 w-full h-full"
-        style={{ willChange: "transform" }}
-      >
-        <img
-          src="/races-battle.png"
-          alt="Playable Races Battle Scene"
-          className="w-full h-full object-cover"
-          style={{ filter: "brightness(0.75) saturate(1.2)" }}
-        />
-      </motion.div>
+      <div
+        className="absolute inset-0"
+        style={{
+          background: "linear-gradient(180deg, #0a0314 0%, #10062a 30%, #1a0a3a 60%, #0d0520 100%)",
+        }}
+      />
+
+      <img
+        src="/races-battle.png"
+        alt=""
+        className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+        style={{ opacity: 0.07, mixBlendMode: "screen" }}
+      />
 
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
           background: `
             radial-gradient(ellipse at 50% 0%, transparent 40%, rgba(0,0,0,0.6) 100%),
-            radial-gradient(ellipse at 50% 100%, rgba(0,0,0,0.8) 0%, transparent 60%)
+            radial-gradient(ellipse at 50% 100%, rgba(0,0,0,0.85) 0%, transparent 60%)
           `,
         }}
       />
@@ -302,31 +442,93 @@ export default function RacesBattleScene() {
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: "radial-gradient(ellipse at 50% 50%, transparent 50%, rgba(0,0,0,0.75) 100%)",
+          background: "radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(0,0,0,0.7) 100%)",
         }}
       />
 
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: `
-            linear-gradient(to bottom,
-              rgba(15,5,30,0.55) 0%,
-              transparent 30%,
-              transparent 70%,
-              rgba(10,3,20,0.7) 100%
-            )
-          `,
-        }}
-      />
+      <AnimatePresence>
+        {roundVisible && (
+          <motion.div
+            key={`${leftFighter.race}-${rightFighter.race}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.6 }}
+            className="absolute inset-0 pointer-events-none"
+          >
+            <div
+              className="absolute inset-0 flex justify-around"
+              style={{ paddingLeft: "5%", paddingRight: "5%", alignItems: "flex-end", paddingBottom: "4%" }}
+            >
+              <motion.div
+                animate={leftControls}
+                initial={{ x: 0, y: 0, opacity: 1, scaleX: 1 }}
+                className="relative flex flex-col items-center"
+                style={{ width: "clamp(140px, 18vw, 280px)" }}
+              >
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{
+                    background: "radial-gradient(ellipse at 50% 60%, rgba(120,60,200,0.35) 0%, transparent 70%)",
+                    filter: "blur(20px)",
+                    transform: "scale(1.3)",
+                  }}
+                />
+                <img
+                  src={leftPortrait}
+                  alt={leftFighter.race}
+                  draggable={false}
+                  style={{
+                    width: "100%",
+                    height: "auto",
+                    objectFit: "contain",
+                    display: "block",
+                    filter: leftState === "hit"
+                      ? "brightness(2) saturate(0.3) drop-shadow(0 0 12px rgba(255,100,50,0.9))"
+                      : leftState === "dying"
+                      ? "brightness(0.5) saturate(0)"
+                      : "brightness(1.05) drop-shadow(0 0 18px rgba(100,60,200,0.5))",
+                    transition: "filter 0.15s ease",
+                  }}
+                />
+              </motion.div>
 
-      <div
-        className="absolute inset-x-0 bottom-0 pointer-events-none"
-        style={{
-          height: "35%",
-          background: "linear-gradient(to top, rgba(80,30,10,0.25), transparent)",
-        }}
-      />
+              <motion.div
+                animate={rightControls}
+                initial={{ x: 0, y: 0, opacity: 1, scaleX: -1 }}
+                className="relative flex flex-col items-center"
+                style={{ width: "clamp(140px, 18vw, 280px)" }}
+              >
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{
+                    background: "radial-gradient(ellipse at 50% 60%, rgba(200,60,60,0.35) 0%, transparent 70%)",
+                    filter: "blur(20px)",
+                    transform: "scale(1.3)",
+                  }}
+                />
+                <img
+                  src={rightPortrait}
+                  alt={rightFighter.race}
+                  draggable={false}
+                  style={{
+                    width: "100%",
+                    height: "auto",
+                    objectFit: "contain",
+                    display: "block",
+                    filter: rightState === "hit"
+                      ? "brightness(2) saturate(0.3) drop-shadow(0 0 12px rgba(255,100,50,0.9))"
+                      : rightState === "dying"
+                      ? "brightness(0.5) saturate(0)"
+                      : "brightness(1.05) drop-shadow(0 0 18px rgba(200,60,60,0.5))",
+                    transition: "filter 0.15s ease",
+                  }}
+                />
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <canvas
         ref={canvasRef}
@@ -339,6 +541,14 @@ export default function RacesBattleScene() {
         style={{
           backgroundColor: `rgba(255, 160, 60, ${flashOpacity})`,
           transition: "background-color 0.05s ease-out",
+        }}
+      />
+
+      <div
+        className="absolute inset-x-0 bottom-0 pointer-events-none"
+        style={{
+          height: "30%",
+          background: "linear-gradient(to top, rgba(80,30,10,0.3), transparent)",
         }}
       />
     </div>
