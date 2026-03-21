@@ -3877,7 +3877,7 @@ export async function registerRoutes(
       };
       
       // Run V2 combat engine
-      const combatResult = runAutoCombat(playerCombatant, npcCombatant, 20);
+      const combatResult = await runAutoCombat(playerCombatant, npcCombatant, 20);
       const won = combatResult.winner === account.id;
       let deathPenaltyInfo: { goldLost: number; durabilityDamage: number } | null = null;
       
@@ -13905,7 +13905,7 @@ export async function registerRoutes(
         isPlayer: false,
       };
 
-      const result = runAutoCombat(playerCombatant, monsterCombatant, 20);
+      const result = await runAutoCombat(playerCombatant, monsterCombatant, 20);
       const playerWon = result.winner === accountId;
 
       clearActiveMonster(req.params.zoneId, accountId);
@@ -14692,7 +14692,7 @@ export async function registerRoutes(
         isPlayer: false,
       };
 
-      const combatResult = runAutoCombat(playerCombatant, monsterCombatant);
+      const combatResult = await runAutoCombat(playerCombatant, monsterCombatant);
 
       const playerWon = combatResult.winner === accountId;
 
