@@ -303,3 +303,225 @@ export const getAvailableSkillsForRank = (rank: string): SkillDefinition[] => {
     (!skill.rankRequirement || availableRanks.includes(skill.rankRequirement))
   );
 };
+
+export interface RacePassiveBonus {
+  statBonus?: Record<string, number>;
+  critBonus?: number;
+  lifeStealPct?: number;
+  immunities?: string[];
+  dodgeBonus?: number;
+  damageReduction?: number;
+  thornsPct?: number;
+  counterChance?: number;
+  bonusDamagePct?: number;
+  description: string;
+}
+
+const RACE_PASSIVE_BONUSES: Record<string, RacePassiveBonus> = {
+  human_passive: {
+    statBonus: { Str: 3, Def: 3, Spd: 3, Int: 3, Luck: 3 },
+    counterChance: 0.10,
+    description: "Human Adaptability: balanced stats and 10% counter-attack chance",
+  },
+  elf_passive: {
+    statBonus: { Int: 10, Spd: 8, Luck: 5 },
+    critBonus: 0.05,
+    description: "Elven Grace: enhanced intellect, speed, and critical chance",
+  },
+  dwarf_passive: {
+    statBonus: { Def: 12, Str: 8, Pot: 5 },
+    damageReduction: 0.08,
+    thornsPct: 0.05,
+    description: "Dwarven Fortitude: 8% damage reduction and 5% thorns reflect",
+  },
+  orc_passive: {
+    statBonus: { Str: 15, Def: 8 },
+    bonusDamagePct: 0.10,
+    description: "Orcish Brutality: massive strength and 10% bonus attack damage",
+  },
+  beastfolk_passive: {
+    statBonus: { Spd: 12, Luck: 8 },
+    critBonus: 0.08,
+    dodgeBonus: 0.05,
+    description: "Beast Instincts: heightened speed, critical chance, and 5% dodge bonus",
+  },
+  mystic_passive: {
+    statBonus: { Int: 10, Luck: 6 },
+    lifeStealPct: 0.05,
+    description: "Mystic Harmony: nature magic grants life regeneration",
+  },
+  fae_passive: {
+    statBonus: { Luck: 15, Spd: 8, Int: 5 },
+    critBonus: 0.06,
+    dodgeBonus: 0.08,
+    description: "Fae Tricks: extraordinary luck, evasion, and 8% dodge bonus",
+  },
+  elemental_passive: {
+    statBonus: { Int: 12, Pot: 8 },
+    bonusDamagePct: 0.08,
+    damageReduction: 0.05,
+    description: "Elemental Affinity: 8% bonus elemental damage and 5% damage reduction",
+  },
+  undead_passive: {
+    statBonus: { Def: 8, Str: 6 },
+    immunities: ["Dark", "Soul"],
+    damageReduction: 0.06,
+    description: "Undead Resilience: dark/soul immunity and 6% damage reduction",
+  },
+  demon_passive: {
+    statBonus: { Str: 12, Int: 8 },
+    critBonus: 0.07,
+    lifeStealPct: 0.03,
+    description: "Demonic Bloodlust: combat fuels the demon's power",
+  },
+  draconic_passive: {
+    statBonus: { Str: 10, Def: 8, Int: 6 },
+    immunities: ["Fire"],
+    description: "Dragon Heritage: fire immunity and powerful combat stats",
+  },
+  celestial_passive: {
+    statBonus: { Int: 10, Luck: 8, Def: 5 },
+    lifeStealPct: 0.04,
+    description: "Celestial Light: divine energy heals the celestial in combat",
+  },
+  aquatic_passive: {
+    statBonus: { Spd: 10, Def: 6, Int: 5 },
+    immunities: ["Water"],
+    description: "Aquatic Resilience: water immunity and fluid combat movement",
+  },
+  titan_passive: {
+    statBonus: { Str: 20, Def: 15 },
+    bonusDamagePct: 0.12,
+    thornsPct: 0.08,
+    description: "Titan's Might: 12% bonus damage and 8% thorns reflect",
+  },
+};
+
+export function getRacePassiveBonuses(passiveSkillId: string): RacePassiveBonus | null {
+  return RACE_PASSIVE_BONUSES[passiveSkillId] || null;
+}
+
+export interface RaceActiveSpell {
+  name: string;
+  multiplier: number;
+  element?: string;
+  spellCategory?: string;
+  spellPower?: number;
+  ccType?: string;
+  ccDuration?: number;
+  buffStat?: string;
+  buffAmount?: number;
+}
+
+const RACE_ACTIVE_SPELLS: Record<string, (stats: { Str?: number; Int?: number }, petStats?: { Str?: number; Int?: number }) => RaceActiveSpell> = {
+  human_strike: () => ({
+    name: "Valor Strike",
+    multiplier: 1.8,
+    element: undefined,
+    spellCategory: "damage",
+    spellPower: 1.8,
+  }),
+  elf_moonbeam: () => ({
+    name: "Moonbeam",
+    multiplier: 2.0,
+    element: "Light",
+    spellCategory: "damage",
+    spellPower: 2.0,
+  }),
+  dwarf_stonefist: () => ({
+    name: "Stone Fist",
+    multiplier: 2.2,
+    element: "Earth",
+    spellCategory: "damage",
+    spellPower: 2.2,
+  }),
+  orc_warcry: () => ({
+    name: "War Cry",
+    multiplier: 1.5,
+    spellCategory: "buff",
+    buffStat: "Str",
+    buffAmount: 20,
+  }),
+  beastfolk_feral: () => ({
+    name: "Feral Strike",
+    multiplier: 2.0,
+    spellCategory: "damage",
+    spellPower: 2.0,
+  }),
+  mystic_regrowth: () => ({
+    name: "Regrowth",
+    multiplier: 1.6,
+    element: "Nature",
+    spellCategory: "heal",
+    spellPower: 1.6,
+  }),
+  fae_illusion: () => ({
+    name: "Fae Illusion",
+    multiplier: 1.4,
+    element: "Light",
+    spellCategory: "buff",
+    buffStat: "Spd",
+    buffAmount: 25,
+  }),
+  elemental_nova: () => ({
+    name: "Elemental Nova",
+    multiplier: 2.3,
+    element: "Aether",
+    spellCategory: "aoe",
+    spellPower: 2.3,
+  }),
+  undead_drain: () => ({
+    name: "Soul Drain",
+    multiplier: 1.9,
+    element: "Dark",
+    spellCategory: "damage",
+    spellPower: 1.9,
+  }),
+  demon_hellfire: () => ({
+    name: "Hellfire",
+    multiplier: 2.5,
+    element: "Fire",
+    spellCategory: "damage",
+    spellPower: 2.5,
+  }),
+  draconic_breath: () => ({
+    name: "Dragon Breath",
+    multiplier: 2.4,
+    element: "Fire",
+    spellCategory: "aoe",
+    spellPower: 2.4,
+  }),
+  celestial_radiance: () => ({
+    name: "Celestial Radiance",
+    multiplier: 1.8,
+    element: "Light",
+    spellCategory: "heal",
+    spellPower: 1.8,
+  }),
+  aquatic_surge: () => ({
+    name: "Tidal Surge",
+    multiplier: 2.0,
+    element: "Water",
+    spellCategory: "cc",
+    spellPower: 2.0,
+    ccType: "freeze",
+    ccDuration: 1,
+  }),
+  titan_slam: () => ({
+    name: "Titan Slam",
+    multiplier: 2.8,
+    element: "Earth",
+    spellCategory: "damage",
+    spellPower: 2.8,
+  }),
+};
+
+export function getRaceActiveAsSpell(
+  activeSkillId: string,
+  stats: { Str?: number; Int?: number },
+  petStats?: { Str?: number; Int?: number }
+): RaceActiveSpell | null {
+  const fn = RACE_ACTIVE_SPELLS[activeSkillId];
+  if (!fn) return null;
+  return fn(stats, petStats);
+}

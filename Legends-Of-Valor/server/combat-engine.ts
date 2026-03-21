@@ -6,6 +6,36 @@ import { calculateElementModifier, checkResonance, ELEMENT_MODIFIERS, type Reson
 
 export type CCType = "stun" | "freeze" | "silence";
 
+export type DoTType = "burn" | "bleed" | "poison" | "drain" | "amplify" | "root" | "blind";
+
+export interface DoTEffect {
+  type: DoTType;
+  damagePerTurn: number;
+  remainingTurns: number;
+  appliedBy: string;
+}
+
+export interface DoTTracker {
+  activeDoTs: Map<string, DoTEffect[]>;
+}
+
+export interface WeaponSpecialEffect {
+  lifeStealPct?: number;
+  critBonus?: number;
+  stunChance?: number;
+  burnTurns?: number;
+  freezeTurns?: number;
+  silenceTurns?: number;
+  poisonTurns?: number;
+  doubleStrike?: boolean;
+  bleedTurns?: number;
+  drainPct?: number;
+  fireResist?: boolean;
+  magicShield?: boolean;
+  manaRegen?: boolean;
+  label: string;
+}
+
 export type BuffStatType = "Str" | "Def" | "Spd" | "Int" | "Luck" | "Pot";
 
 export interface BuffEffect {
@@ -75,6 +105,13 @@ export interface Combatant {
   level: number;
   isPlayer: boolean;
   spell?: SpellInfo | null;
+  raceCritBonus?: number;
+  raceLifeStealPct?: number;
+  raceDodgeBonus?: number;
+  raceDamageReduction?: number;
+  raceThornsPct?: number;
+  raceCounterChance?: number;
+  raceBonusDamagePct?: number;
 }
 
 export interface CombatAction {
@@ -99,6 +136,9 @@ export interface CombatRound {
   statusEffectsApplied?: { type: CCType; duration: number; target: string }[];
   buffsApplied?: { statType: BuffStatType; bonus: number; target: string; buffName: string }[];
   skippedDueToCC?: CCType;
+  dotEffectsApplied?: { type: DoTType; damagePerTurn: number; turns: number; target: string }[];
+  weaponSpecialTriggered?: string;
+  thornsReflect?: number;
 }
 
 export interface CombatResult {
@@ -184,12 +224,205 @@ export function calculateTurnOrder(combatantA: Combatant, combatantB: Combatant)
     : { first: combatantB, second: combatantA };
 }
 
-export function calculateCritical(attackerLuck: number): { isCritical: boolean; multiplier: number } {
+const RANK_CRIT_MULTIPLIER: Record<string, number> = {
+  "Novice": 2.0,
+  "Apprentice": 2.1,
+  "Initiate": 2.2,
+  "Journeyman": 2.3,
+  "Adept": 2.5,
+  "Expert": 2.7,
+  "Master": 3.0,
+  "Grandmaster": 3.2,
+  "Champion": 3.5,
+  "Overlord": 3.8,
+  "Sovereign": 4.0,
+  "Ascendant": 4.3,
+  "Legend": 4.6,
+  "Mythic": 5.0,
+  "Mythical Legend": 5.5,
+};
+
+export function calculateCritical(attackerLuck: number, attackerRank?: string | null): { isCritical: boolean; multiplier: number } {
   const safeLuck = safeNumber(attackerLuck, 0);
   const critChance = Math.min(safeLuck / 40, 0.5);
   const isCritical = Math.random() < critChance;
-  const multiplier = isCritical ? 3 : 1;
+  const baseMult = (attackerRank && RANK_CRIT_MULTIPLIER[attackerRank]) ? RANK_CRIT_MULTIPLIER[attackerRank] : 3.0;
+  const multiplier = isCritical ? baseMult : 1;
   return { isCritical, multiplier };
+}
+
+export function parseWeaponSpecial(special: string | null | undefined): WeaponSpecialEffect | null {
+  if (!special) return null;
+  const s = special.trim();
+
+  if (/life steal (\d+)%/i.test(s)) {
+    const pct = parseInt(s.match(/life steal (\d+)%/i)![1]) / 100;
+    return { lifeStealPct: pct, label: s };
+  }
+  if (/stun (\d+)%/i.test(s)) {
+    const chance = parseInt(s.match(/stun (\d+)%/i)![1]) / 100;
+    return { stunChance: chance, label: s };
+  }
+  if (/critical \+(\d+)%/i.test(s)) {
+    const bonus = parseInt(s.match(/critical \+(\d+)%/i)![1]) / 100;
+    return { critBonus: bonus, label: s };
+  }
+  if (/burn (\d+)t/i.test(s)) {
+    const turns = parseInt(s.match(/burn (\d+)t/i)![1]);
+    return { burnTurns: turns, label: s };
+  }
+  if (/freeze (\d+)t/i.test(s)) {
+    const turns = parseInt(s.match(/freeze (\d+)t/i)![1]);
+    return { freezeTurns: turns, label: s };
+  }
+  if (/silence (\d+)t/i.test(s)) {
+    const turns = parseInt(s.match(/silence (\d+)t/i)![1]);
+    return { silenceTurns: turns, label: s };
+  }
+  if (/poison (\d+)t/i.test(s)) {
+    const turns = parseInt(s.match(/poison (\d+)t/i)![1]);
+    return { poisonTurns: turns, label: s };
+  }
+  if (/bleed (\d+)t/i.test(s)) {
+    const turns = parseInt(s.match(/bleed (\d+)t/i)![1]);
+    return { bleedTurns: turns, label: s };
+  }
+  if (/double strike/i.test(s)) {
+    return { doubleStrike: true, label: s };
+  }
+  if (/fire resist/i.test(s)) {
+    return { fireResist: true, label: s };
+  }
+  if (/magic shield/i.test(s)) {
+    return { magicShield: true, label: s };
+  }
+  if (/mana regen/i.test(s)) {
+    return { manaRegen: true, label: s };
+  }
+  return { label: s };
+}
+
+export function createDoTTracker(): DoTTracker {
+  return { activeDoTs: new Map() };
+}
+
+export function applyDoT(
+  tracker: DoTTracker,
+  targetId: string,
+  dotType: DoTType,
+  damagePerTurn: number,
+  turns: number,
+  appliedBy: string
+): { applied: boolean; effects: string[] } {
+  const effects: string[] = [];
+  const existing = tracker.activeDoTs.get(targetId) || [];
+
+  const sameType = existing.filter(d => d.type === dotType && d.remainingTurns > 0);
+  if (sameType.length > 0) {
+    sameType[0].remainingTurns = Math.max(sameType[0].remainingTurns, turns);
+    sameType[0].damagePerTurn = Math.max(sameType[0].damagePerTurn, damagePerTurn);
+    effects.push(`${dotType} refreshed (${damagePerTurn} dmg/turn for ${turns} turns).`);
+    return { applied: true, effects };
+  }
+
+  existing.push({ type: dotType, damagePerTurn, remainingTurns: turns, appliedBy });
+  tracker.activeDoTs.set(targetId, existing);
+
+  const dotNames: Record<DoTType, string> = {
+    burn: "Burning",
+    bleed: "Bleeding",
+    poison: "Poisoned",
+    drain: "Drained",
+    amplify: "Amplified",
+    root: "Rooted",
+    blind: "Blinded",
+  };
+  effects.push(`${dotNames[dotType]}! ${damagePerTurn} ${dotType} damage per turn for ${turns} turns.`);
+  return { applied: true, effects };
+}
+
+export function tickDoTs(
+  tracker: DoTTracker,
+  targetId: string,
+  targetStats: CombatStats
+): { totalDamage: number; statPenalties: Partial<CombatStats>; effects: string[] } {
+  const effects: string[] = [];
+  const dots = tracker.activeDoTs.get(targetId) || [];
+  let totalDamage = 0;
+  const statPenalties: Partial<CombatStats> = {};
+
+  for (const dot of dots) {
+    if (dot.remainingTurns <= 0) continue;
+
+    switch (dot.type) {
+      case "burn":
+      case "bleed":
+      case "poison":
+        totalDamage += dot.damagePerTurn;
+        const dotLabel = dot.type === "burn" ? "Burning" : dot.type === "bleed" ? "Bleeding" : "Poisoned";
+        effects.push(`${dotLabel}: -${dot.damagePerTurn} HP`);
+        break;
+      case "drain":
+        const drainAmt = Math.floor(targetStats.Int * 0.05 + dot.damagePerTurn);
+        totalDamage += drainAmt;
+        effects.push(`Drain: -${drainAmt} HP (life siphoned)`);
+        break;
+      case "amplify":
+        statPenalties.Def = (statPenalties.Def || 0) - Math.floor(targetStats.Def * 0.10);
+        effects.push(`Amplify: Defense reduced by 10% this turn`);
+        break;
+      case "root":
+        statPenalties.Spd = (statPenalties.Spd || 0) - Math.floor(targetStats.Spd * 0.50);
+        effects.push(`Rooted: Speed halved this turn`);
+        break;
+      case "blind":
+        statPenalties.Luck = (statPenalties.Luck || 0) - Math.floor(targetStats.Luck * 0.30);
+        effects.push(`Blinded: Crit/Luck reduced by 30% this turn`);
+        break;
+    }
+
+    dot.remainingTurns = Math.max(0, dot.remainingTurns - 1);
+    if (dot.remainingTurns === 0) {
+      effects.push(`${dot.type} wore off.`);
+    }
+  }
+
+  tracker.activeDoTs.set(targetId, dots.filter(d => d.remainingTurns > 0));
+  return { totalDamage, statPenalties, effects };
+}
+
+export function applyDoTStatPenalties(
+  buffTracker: BuffTracker,
+  targetId: string,
+  penalties: Partial<CombatStats>,
+  sourceId: string
+): void {
+  const statMap: Record<string, BuffStatType> = {
+    Str: "Str", Def: "Def", Spd: "Spd", Int: "Int", Luck: "Luck",
+  };
+  const existing = buffTracker.activeBuffs.get(targetId) || [];
+  const filtered = existing.filter(b => b.buffName !== "DoT Penalty");
+  for (const [key, value] of Object.entries(penalties)) {
+    const statType = statMap[key];
+    if (statType && typeof value === "number" && value !== 0) {
+      filtered.push({
+        statType,
+        flatBonus: value,
+        remainingTurns: 2,
+        appliedBy: sourceId,
+        buffName: "DoT Penalty",
+      });
+    }
+  }
+  buffTracker.activeBuffs.set(targetId, filtered);
+}
+
+export function getActiveDoTs(tracker: DoTTracker, targetId: string): DoTEffect[] {
+  return (tracker.activeDoTs.get(targetId) || []).filter(d => d.remainingTurns > 0);
+}
+
+export function hasActiveDoT(tracker: DoTTracker, targetId: string, dotType: DoTType): boolean {
+  return getActiveDoTs(tracker, targetId).some(d => d.type === dotType);
 }
 
 export function calculateElementalMultiplier(
@@ -259,9 +492,9 @@ export function applyCC(
   const effects: string[] = [];
 
   const activeOnTarget = tracker.activeEffects.get(targetId) || [];
-  const ccThisTurn = activeOnTarget.filter(e => e.remainingTurns > 0);
-  if (ccThisTurn.length >= 1) {
-    effects.push("CC blocked: target already has an active CC this turn.");
+  const sameTypeActive = activeOnTarget.filter(e => e.type === ccType && e.remainingTurns > 0);
+  if (sameTypeActive.length >= 1) {
+    effects.push(`CC blocked: target is already ${ccType}ed.`);
     return { applied: false, duration: 0, effects };
   }
 
@@ -495,11 +728,14 @@ export function processAction(
   action: CombatAction,
   defenderAction?: CombatAction,
   ccTracker?: CCTracker,
-  buffTracker?: BuffTracker
+  buffTracker?: BuffTracker,
+  dotTracker?: DoTTracker,
+  attackerWeaponSpecial?: string | null
 ): CombatRound {
   const effects: string[] = [];
   const statusEffectsApplied: { type: CCType; duration: number; target: string }[] = [];
   const buffsApplied: { statType: BuffStatType; bonus: number; target: string; buffName: string }[] = [];
+  const dotEffectsApplied: { type: DoTType; damagePerTurn: number; turns: number; target: string }[] = [];
   let damage = 0;
   let blocked = 0;
   let healAmount = 0;
@@ -508,6 +744,8 @@ export function processAction(
   let isBlocked = false;
   let elementalMultiplier = 1;
   let resonance: ResonanceResult | undefined;
+  let weaponSpecialTriggered: string | undefined;
+  let thornsReflect: number | undefined;
 
   const attackerStats = buffTracker ? getBuffedStats(buffTracker, attacker.id, attacker.stats) : attacker.stats;
   const defenderStats = buffTracker ? getBuffedStats(buffTracker, defender.id, defender.stats) : defender.stats;
@@ -516,9 +754,15 @@ export function processAction(
     case "attack": {
       let baseDamage = safeNumber(attackerStats.Str, 10);
 
-      const critResult = calculateCritical(attackerStats.Luck);
+      const baseCritResult = calculateCritical(attackerStats.Luck, attacker.rank);
+      const raceCritBonusChance = attacker.raceCritBonus || 0;
+      let critResult = baseCritResult;
+      if (!baseCritResult.isCritical && raceCritBonusChance > 0 && Math.random() < raceCritBonusChance) {
+        const rankMult = RANK_CRIT_MULTIPLIER[attacker.rank || "Novice"] || 2.0;
+        critResult = { isCritical: true, multiplier: rankMult };
+      }
       isCritical = critResult.isCritical;
-      if (isCritical) effects.push("Critical hit!");
+      if (isCritical) effects.push(`Critical hit! (${critResult.multiplier.toFixed(1)}x)`);
 
       if (attacker.elements && attacker.elements.elements.length > 0) {
         elementalMultiplier = calculateElementalMultiplier(
@@ -542,23 +786,34 @@ export function processAction(
         }
       }
 
-      const rawDamage = baseDamage * critResult.multiplier * elementalMultiplier + resonanceBonusDamage;
+      let rawDamage = baseDamage * critResult.multiplier * elementalMultiplier + resonanceBonusDamage;
+
+      const attackerBonusDmgPct = attacker.raceBonusDamagePct || 0;
+      if (attackerBonusDmgPct > 0) {
+        const bonusDmg = Math.floor(rawDamage * attackerBonusDmgPct);
+        rawDamage += bonusDmg;
+        effects.push(`Racial power! +${bonusDmg} bonus damage`);
+      }
 
       if (defenderAction?.type === "dodge") {
         const attackerSpd = safeNumber(attackerStats.Spd, 10);
         const defenderSpd = safeNumber(defenderStats.Spd, 10);
-        const defenderDef = safeNumber(defenderStats.Def, 10);
+        const dodgeBonus = defender.raceDodgeBonus || 0;
 
-        if (defenderSpd > attackerSpd) {
+        if (defenderSpd > attackerSpd || (dodgeBonus > 0 && Math.random() < dodgeBonus)) {
           isEvaded = true;
           effects.push(`${defender.name} fully evaded the attack!`);
           damage = 0;
-        } else if (defenderSpd > defenderDef) {
-          effects.push(`${defender.name} dodged past defense but was still hit!`);
-          damage = Math.floor(rawDamage);
         } else {
-          effects.push(`${defender.name} failed to dodge!`);
-          damage = applyDiminishingReturns(safeNumber(defenderStats.Def, 0), Math.floor(rawDamage));
+          const dodgePartialReduction = Math.max(0, defenderSpd - attackerSpd * 0.5) / (attackerSpd * 0.5);
+          const partialMitigationPct = Math.min(dodgePartialReduction * 0.25, 0.25);
+          const effectiveDef = safeNumber(defenderStats.Def, 0) * (1 + partialMitigationPct);
+          damage = applyDiminishingReturns(effectiveDef, Math.floor(rawDamage));
+          if (partialMitigationPct > 0) {
+            effects.push(`${defender.name} partially dodged! +${Math.round(partialMitigationPct * 100)}% defense`);
+          } else {
+            effects.push(`${defender.name} failed to dodge!`);
+          }
         }
       } else if (defenderAction?.type === "defend") {
         isBlocked = true;
@@ -574,6 +829,41 @@ export function processAction(
         }
       } else {
         damage = applyDiminishingReturns(safeNumber(defenderStats.Def, 0), Math.floor(rawDamage));
+      }
+
+      if (damage > 0) {
+        const defDmgReduction = defender.raceDamageReduction || 0;
+        if (defDmgReduction > 0) {
+          const reduced = Math.floor(damage * defDmgReduction);
+          damage -= reduced;
+          if (reduced > 0) effects.push(`${defender.name}'s racial toughness reduced ${reduced} damage`);
+        }
+
+        const defThornsPct = defender.raceThornsPct || 0;
+        if (defThornsPct > 0) {
+          const thornsDmg = Math.floor(damage * defThornsPct);
+          if (thornsDmg > 0) {
+            thornsReflect = thornsDmg;
+            effects.push(`${defender.name} reflects ${thornsDmg} damage back!`);
+          }
+        }
+
+        const defCounterChance = defender.raceCounterChance || 0;
+        if (defCounterChance > 0 && Math.random() < defCounterChance) {
+          const counterDmg = Math.floor(safeNumber(defenderStats.Str, 10) * 0.3);
+          if (counterDmg > 0) {
+            thornsReflect = (thornsReflect || 0) + counterDmg;
+            effects.push(`${defender.name} counter-attacks for ${counterDmg} damage!`);
+          }
+        }
+      }
+
+      if (damage > 0 && attacker.raceLifeStealPct && attacker.raceLifeStealPct > 0) {
+        const raceLifeSteal = Math.floor(damage * attacker.raceLifeStealPct);
+        if (raceLifeSteal > 0) {
+          healAmount += raceLifeSteal;
+          effects.push(`Racial passive: recovered ${raceLifeSteal} HP`);
+        }
       }
       break;
     }
@@ -611,10 +901,10 @@ export function processAction(
       if (spellCategory === "cc") {
         let ccBaseDamage = safeNumber(attackerStats.Int, 10) * spellPower * rankMult;
 
-        const critResult = calculateCritical(attackerStats.Luck);
+        const critResult = calculateCritical(attackerStats.Luck, attacker.rank);
         isCritical = critResult.isCritical;
         if (isCritical) {
-          effects.push("Critical spell hit!");
+          effects.push(`Critical spell hit! (${critResult.multiplier.toFixed(1)}x)`);
           ccBaseDamage *= critResult.multiplier;
         }
 
@@ -647,18 +937,23 @@ export function processAction(
       if (spellCategory === "heal") {
         const healPower = safeNumber(spellPower, 1.5);
         const baseHeal = safeNumber(attackerStats.Int, 10) * healPower * rankMult;
-        const critHeal = calculateCritical(attackerStats.Luck);
-        if (critHeal.isCritical) effects.push("Critical heal!");
-        healAmount = Math.floor(baseHeal * (critHeal.isCritical ? critHeal.multiplier : 1));
+        const resonanceBonus = (attacker.elements && attacker.elements.elements.length >= 2)
+          ? checkResonance(attacker.elements.elements) : null;
+        const resonanceBonusHeal = resonanceBonus?.triggered && resonanceBonus.effect
+          ? baseHeal * (resonanceBonus.effect.damageBonus * 0.5)
+          : 0;
+        const critHeal = calculateCritical(attackerStats.Luck, attacker.rank);
+        if (critHeal.isCritical) effects.push(`Critical heal! (${critHeal.multiplier.toFixed(1)}x)`);
+        healAmount = Math.floor((baseHeal + resonanceBonusHeal) * (critHeal.isCritical ? critHeal.multiplier : 1));
         effects.push(`${attacker.name} casts ${spell?.name || "a healing spell"}! Restores ${healAmount} HP!`);
         break;
       }
 
       let baseDamage = safeNumber(attackerStats.Int, 10) * spellPower * rankMult;
 
-      const critResult = calculateCritical(attackerStats.Luck);
+      const critResult = calculateCritical(attackerStats.Luck, attacker.rank);
       isCritical = critResult.isCritical;
-      if (isCritical) effects.push("Critical spell hit!");
+      if (isCritical) effects.push(`Critical spell hit! (${critResult.multiplier.toFixed(1)}x)`);
 
       let spellElement = spell?.element;
       let spellElements = spellElement ? [spellElement] : (attacker.elements?.elements || []);
@@ -713,15 +1008,16 @@ export function processAction(
     }
 
     case "trick": {
-      const trickDamage = safeNumber(attackerStats.Str, 10) * 0.6;
       const trickLuckBonus = attackerStats.Luck / 100;
+      const successChance = Math.min(0.5 + trickLuckBonus, 0.85);
 
-      const successChance = 0.5 + trickLuckBonus;
       if (Math.random() < successChance) {
-        damage = Math.floor(trickDamage * 1.5);
-        effects.push("Trick succeeded! Extra damage dealt!");
+        const trickBaseDamage = safeNumber(attackerStats.Str, 10) * 0.5 + safeNumber(attackerStats.Int, 10) * 0.3;
+        damage = Math.floor(trickBaseDamage * 1.5);
+        effects.push("Trick succeeded!");
 
-        if (ccTracker && Math.random() < 0.3) {
+        const roll = Math.random();
+        if (roll < 0.35 && ccTracker) {
           const ccResult = applyCC(
             ccTracker, defender.id, "stun", 1, attacker.id,
             safeNumber(attackerStats.Int, 10),
@@ -732,11 +1028,46 @@ export function processAction(
           if (ccResult.applied) {
             statusEffectsApplied.push({ type: "stun", duration: ccResult.duration, target: defender.id });
           }
-        } else if (!ccTracker && Math.random() < 0.3) {
-          effects.push(`${defender.name} is stunned!`);
+        } else if (roll < 0.65 && buffTracker) {
+          const defDebuff = Math.floor(safeNumber(defenderStats.Def, 10) * 0.15);
+          const debuffResult = applyBuff(
+            buffTracker, defender.id, "Def",
+            -defDebuff, safeNumber(attackerStats.Int, 10),
+            attacker.id, "Trick Debuff", safeNumber(defenderStats.Def, 10), 2, attacker.rank
+          );
+          if (debuffResult.applied) {
+            effects.push(`${defender.name}'s defense reduced by ${defDebuff} for 2 turns!`);
+          } else {
+            effects.push(...debuffResult.effects);
+          }
+        } else if (roll < 0.85 && buffTracker) {
+          const spdDebuff = Math.floor(safeNumber(defenderStats.Spd, 10) * 0.20);
+          const spdDebuffResult = applyBuff(
+            buffTracker, defender.id, "Spd",
+            -spdDebuff, safeNumber(attackerStats.Int, 10),
+            attacker.id, "Trick Debuff", safeNumber(defenderStats.Spd, 10), 2, attacker.rank
+          );
+          if (spdDebuffResult.applied) {
+            effects.push(`${defender.name}'s speed reduced by ${spdDebuff} for 2 turns!`);
+          } else {
+            effects.push(...spdDebuffResult.effects);
+          }
+        } else {
+          if (buffTracker) {
+            const dodgeBuff = Math.floor(safeNumber(attackerStats.Spd, 10) * 0.25);
+            const buffResult = applyBuff(
+              buffTracker, attacker.id, "Spd",
+              dodgeBuff, safeNumber(attackerStats.Int, 10),
+              attacker.id, "Evasion Trick", safeNumber(attackerStats.Spd, 10), 2, attacker.rank
+            );
+            effects.push(...buffResult.effects);
+          } else {
+            effects.push("Trick grants evasion boost next turn!");
+          }
         }
       } else {
-        damage = Math.floor(trickDamage * 0.3);
+        const trickBaseDamage = safeNumber(attackerStats.Str, 10) * 0.5 + safeNumber(attackerStats.Int, 10) * 0.3;
+        damage = Math.floor(trickBaseDamage * 0.3);
         effects.push("Trick failed! Minimal damage dealt.");
       }
       break;
@@ -753,10 +1084,12 @@ export function processAction(
     }
   }
 
-  if (ccTracker && resonance?.triggered && resonance.statusApplied && resonance.effect?.statusEffect) {
+  if (resonance?.triggered && resonance.statusApplied && resonance.effect?.statusEffect) {
     const statusType = resonance.effect.statusEffect as string;
     const ccType = mapResonanceStatusToCC(statusType);
-    if (ccType) {
+    const DOT_STATUS_TYPES: DoTType[] = ["burn", "bleed", "poison", "drain", "amplify", "root", "blind"];
+
+    if (ccType && ccTracker) {
       const ccResult = applyCC(
         ccTracker, defender.id, ccType,
         resonance.effect.statusDuration || 1,
@@ -768,6 +1101,100 @@ export function processAction(
       effects.push(...ccResult.effects);
       if (ccResult.applied) {
         statusEffectsApplied.push({ type: ccType, duration: ccResult.duration, target: defender.id });
+      }
+    } else if (DOT_STATUS_TYPES.includes(statusType as DoTType) && dotTracker) {
+      const dotType = statusType as DoTType;
+      const dotDamage = Math.floor(safeNumber(attackerStats.Int, 10) * 0.15 + safeNumber(attackerStats.Str, 10) * 0.08);
+      const dotTurns = resonance.effect.statusDuration || 2;
+      const dotResult = applyDoT(dotTracker, defender.id, dotType, dotDamage, dotTurns, attacker.id);
+      effects.push(...dotResult.effects);
+      if (dotResult.applied) {
+        dotEffectsApplied.push({ type: dotType, damagePerTurn: dotDamage, turns: dotTurns, target: defender.id });
+      }
+    }
+  }
+
+  if (damage > 0 && action.type === "attack" && attackerWeaponSpecial) {
+    const weaponFx = parseWeaponSpecial(attackerWeaponSpecial);
+    if (weaponFx) {
+      weaponSpecialTriggered = weaponFx.label;
+
+      if (weaponFx.lifeStealPct && weaponFx.lifeStealPct > 0) {
+        const stolen = Math.floor(damage * weaponFx.lifeStealPct);
+        healAmount = (healAmount || 0) + stolen;
+        effects.push(`Life Steal! Recovered ${stolen} HP.`);
+      }
+      if (weaponFx.stunChance && Math.random() < weaponFx.stunChance && ccTracker) {
+        const ccResult = applyCC(
+          ccTracker, defender.id, "stun", 1, attacker.id,
+          safeNumber(attackerStats.Int, 10),
+          safeNumber(defenderStats.Int, 10),
+          safeNumber(defenderStats.Luck, 10)
+        );
+        effects.push(...ccResult.effects);
+        if (ccResult.applied) {
+          statusEffectsApplied.push({ type: "stun", duration: ccResult.duration, target: defender.id });
+        }
+      }
+      if (weaponFx.critBonus) {
+        if (Math.random() < weaponFx.critBonus) {
+          const bonusDmg = Math.floor(damage * 0.5);
+          damage += bonusDmg;
+          effects.push(`Weapon Critical Bonus! +${bonusDmg} extra damage.`);
+        }
+      }
+      if (weaponFx.burnTurns && dotTracker) {
+        const burnDmg = Math.floor(safeNumber(attackerStats.Str, 10) * 0.12);
+        const dotResult = applyDoT(dotTracker, defender.id, "burn", burnDmg, weaponFx.burnTurns, attacker.id);
+        effects.push(...dotResult.effects);
+        if (dotResult.applied) {
+          dotEffectsApplied.push({ type: "burn", damagePerTurn: burnDmg, turns: weaponFx.burnTurns, target: defender.id });
+        }
+      }
+      if (weaponFx.freezeTurns && ccTracker) {
+        const ccResult = applyCC(
+          ccTracker, defender.id, "freeze", weaponFx.freezeTurns, attacker.id,
+          safeNumber(attackerStats.Int, 10),
+          safeNumber(defenderStats.Int, 10),
+          safeNumber(defenderStats.Luck, 10)
+        );
+        effects.push(...ccResult.effects);
+        if (ccResult.applied) {
+          statusEffectsApplied.push({ type: "freeze", duration: ccResult.duration, target: defender.id });
+        }
+      }
+      if (weaponFx.silenceTurns && ccTracker) {
+        const ccResult = applyCC(
+          ccTracker, defender.id, "silence", weaponFx.silenceTurns, attacker.id,
+          safeNumber(attackerStats.Int, 10),
+          safeNumber(defenderStats.Int, 10),
+          safeNumber(defenderStats.Luck, 10)
+        );
+        effects.push(...ccResult.effects);
+        if (ccResult.applied) {
+          statusEffectsApplied.push({ type: "silence", duration: ccResult.duration, target: defender.id });
+        }
+      }
+      if (weaponFx.poisonTurns && dotTracker) {
+        const poisonDmg = Math.floor(safeNumber(attackerStats.Str, 10) * 0.10);
+        const dotResult = applyDoT(dotTracker, defender.id, "poison", poisonDmg, weaponFx.poisonTurns, attacker.id);
+        effects.push(...dotResult.effects);
+        if (dotResult.applied) {
+          dotEffectsApplied.push({ type: "poison", damagePerTurn: poisonDmg, turns: weaponFx.poisonTurns, target: defender.id });
+        }
+      }
+      if (weaponFx.bleedTurns && dotTracker) {
+        const bleedDmg = Math.floor(safeNumber(attackerStats.Str, 10) * 0.10);
+        const dotResult = applyDoT(dotTracker, defender.id, "bleed", bleedDmg, weaponFx.bleedTurns, attacker.id);
+        effects.push(...dotResult.effects);
+        if (dotResult.applied) {
+          dotEffectsApplied.push({ type: "bleed", damagePerTurn: bleedDmg, turns: weaponFx.bleedTurns, target: defender.id });
+        }
+      }
+      if (weaponFx.doubleStrike) {
+        const bonusDmg = Math.floor(damage * 0.75);
+        damage += bonusDmg;
+        effects.push(`Double Strike! +${bonusDmg} additional damage!`);
       }
     }
   }
@@ -788,15 +1215,19 @@ export function processAction(
     resonance,
     statusEffectsApplied: statusEffectsApplied.length > 0 ? statusEffectsApplied : undefined,
     buffsApplied: buffsApplied.length > 0 ? buffsApplied : undefined,
+    dotEffectsApplied: dotEffectsApplied.length > 0 ? dotEffectsApplied : undefined,
+    weaponSpecialTriggered,
+    thornsReflect,
   };
 }
 
 export async function runAutoCombat(
   player: Combatant,
   npc: Combatant,
-  maxRounds: number = 20
+  maxRounds: number = 20,
+  playerWeaponSpecial?: string | null,
+  npcWeaponSpecial?: string | null
 ): Promise<CombatResult> {
-  // Update last combat time for anti-combat logging
   if (player.isPlayer) {
     await db.update(accounts).set({ lastCombatTime: new Date() }).where(eq(accounts.id, player.id)).execute();
   }
@@ -819,8 +1250,14 @@ export async function runAutoCombat(
 
   const ccTracker = createCCTracker();
   const buffTracker = createBuffTracker();
+  const dotTracker = createDoTTracker();
   const rounds: CombatRound[] = [];
   let turn = 1;
+
+  const weaponSpecialMap: Record<string, string | null | undefined> = {
+    [player.id]: playerWeaponSpecial,
+    [npc.id]: npcWeaponSpecial,
+  };
 
   while (combatState[player.id] > 0 && combatState[npc.id] > 0 && turn <= maxRounds) {
     const { first, second } = calculateTurnOrder(player, npc);
@@ -845,6 +1282,18 @@ export async function runAutoCombat(
         effects: [`${first.name} is ${firstStunned ? "stunned" : "frozen"} and cannot act!`],
         skippedDueToCC: skipCC,
       };
+
+      const dotResult1 = tickDoTs(dotTracker, first.id, getBuffedStats(buffTracker, first.id, first.stats));
+      if (dotResult1.totalDamage > 0) {
+        combatState[first.id] -= dotResult1.totalDamage;
+        totalDamage[second.id] += dotResult1.totalDamage;
+        skipRound.effects.push(...dotResult1.effects);
+        skipRound.effects.push(`DoT damage: -${dotResult1.totalDamage} HP`);
+      }
+      if (Object.keys(dotResult1.statPenalties).length > 0) {
+        applyDoTStatPenalties(buffTracker, first.id, dotResult1.statPenalties, second.id);
+      }
+
       rounds.push(skipRound);
       tickStatusEffects(ccTracker, first.id);
       const buffExpiry1Skip = tickBuffs(buffTracker, first.id);
@@ -856,7 +1305,10 @@ export async function runAutoCombat(
       }
       const secondAction: CombatAction = selectAIAction(second, combatState[second.id], second, ccTracker);
 
-      const round1 = processAction(first, second, firstAction, secondAction, ccTracker, buffTracker);
+      const round1 = processAction(
+        first, second, firstAction, secondAction,
+        ccTracker, buffTracker, dotTracker, weaponSpecialMap[first.id]
+      );
       round1.turn = turn;
 
       const freezeMultiplier = getFreezeDamageMultiplier(ccTracker, second.id);
@@ -870,9 +1322,24 @@ export async function runAutoCombat(
       combatState[second.id] -= round1.damage;
       totalDamage[first.id] += round1.damage;
 
+      if (round1.thornsReflect && round1.thornsReflect > 0) {
+        combatState[first.id] -= round1.thornsReflect;
+        totalDamage[second.id] += round1.thornsReflect;
+      }
+
       if (round1.healAmount && round1.healAmount > 0) {
         const maxHP1 = calculateMaxHP(first.stats, first.level, first.race, first.rank);
         combatState[first.id] = Math.min(maxHP1, combatState[first.id] + round1.healAmount);
+      }
+
+      const dotResult1 = tickDoTs(dotTracker, first.id, getBuffedStats(buffTracker, first.id, first.stats));
+      if (dotResult1.totalDamage > 0) {
+        combatState[first.id] -= dotResult1.totalDamage;
+        totalDamage[second.id] += dotResult1.totalDamage;
+        round1.effects.push(...dotResult1.effects);
+      }
+      if (Object.keys(dotResult1.statPenalties).length > 0) {
+        applyDoTStatPenalties(buffTracker, first.id, dotResult1.statPenalties, second.id);
       }
 
       tickStatusEffects(ccTracker, first.id);
@@ -880,7 +1347,7 @@ export async function runAutoCombat(
       if (buffExpiry1.length > 0) round1.effects.push(...buffExpiry1);
     }
 
-    if (combatState[second.id] <= 0) break;
+    if (combatState[player.id] <= 0 || combatState[npc.id] <= 0) break;
 
     const secondStunned = isStunned(ccTracker, second.id);
     const secondFrozen = isFrozen(ccTracker, second.id);
@@ -902,6 +1369,18 @@ export async function runAutoCombat(
         effects: [`${second.name} is ${secondStunned ? "stunned" : "frozen"} and cannot act!`],
         skippedDueToCC: skipCC,
       };
+
+      const dotResult2 = tickDoTs(dotTracker, second.id, getBuffedStats(buffTracker, second.id, second.stats));
+      if (dotResult2.totalDamage > 0) {
+        combatState[second.id] -= dotResult2.totalDamage;
+        totalDamage[first.id] += dotResult2.totalDamage;
+        skipRound.effects.push(...dotResult2.effects);
+        skipRound.effects.push(`DoT damage: -${dotResult2.totalDamage} HP`);
+      }
+      if (Object.keys(dotResult2.statPenalties).length > 0) {
+        applyDoTStatPenalties(buffTracker, second.id, dotResult2.statPenalties, first.id);
+      }
+
       rounds.push(skipRound);
       tickStatusEffects(ccTracker, second.id);
       const buffExpiry2Skip = tickBuffs(buffTracker, second.id);
@@ -913,7 +1392,10 @@ export async function runAutoCombat(
       }
       const firstAction: CombatAction = selectAIAction(first, combatState[first.id], first, ccTracker);
 
-      const round2 = processAction(second, first, secondAction, firstAction, ccTracker, buffTracker);
+      const round2 = processAction(
+        second, first, secondAction, firstAction,
+        ccTracker, buffTracker, dotTracker, weaponSpecialMap[second.id]
+      );
       round2.turn = turn;
 
       const freezeMultiplier = getFreezeDamageMultiplier(ccTracker, first.id);
@@ -927,9 +1409,24 @@ export async function runAutoCombat(
       combatState[first.id] -= round2.damage;
       totalDamage[second.id] += round2.damage;
 
+      if (round2.thornsReflect && round2.thornsReflect > 0) {
+        combatState[second.id] -= round2.thornsReflect;
+        totalDamage[first.id] += round2.thornsReflect;
+      }
+
       if (round2.healAmount && round2.healAmount > 0) {
         const maxHP2 = calculateMaxHP(second.stats, second.level, second.race, second.rank);
         combatState[second.id] = Math.min(maxHP2, combatState[second.id] + round2.healAmount);
+      }
+
+      const dotResult2 = tickDoTs(dotTracker, second.id, getBuffedStats(buffTracker, second.id, second.stats));
+      if (dotResult2.totalDamage > 0) {
+        combatState[second.id] -= dotResult2.totalDamage;
+        totalDamage[first.id] += dotResult2.totalDamage;
+        round2.effects.push(...dotResult2.effects);
+      }
+      if (Object.keys(dotResult2.statPenalties).length > 0) {
+        applyDoTStatPenalties(buffTracker, second.id, dotResult2.statPenalties, first.id);
       }
 
       tickStatusEffects(ccTracker, second.id);
@@ -948,7 +1445,10 @@ export async function runAutoCombat(
     loser,
     rounds,
     totalDamageDealt: totalDamage,
-    finalHP: combatState,
+    finalHP: {
+      [player.id]: Math.max(0, combatState[player.id]),
+      [npc.id]: Math.max(0, combatState[npc.id]),
+    },
   };
 }
 
@@ -1062,7 +1562,10 @@ export function applyRaceModifiers(baseStats: CombatStats, race: string | null):
   };
 }
 
-export function applyRacePassiveSkill(baseStats: CombatStats, passiveSkillId: string | null | undefined): CombatStats {
+export function applyRacePassiveSkill(
+  baseStats: CombatStats,
+  passiveSkillId: string | null | undefined
+): CombatStats {
   if (!passiveSkillId) return baseStats;
 
   try {
@@ -1079,7 +1582,7 @@ export function applyRacePassiveSkill(baseStats: CombatStats, passiveSkillId: st
         const statKey = bonusMap[key];
         if (statKey && typeof value === "number") {
           const base = safeNumber(result[statKey], 0);
-          result[statKey] = base + Math.floor(base * (value / 100));
+          result[statKey] = base + value;
         }
       }
     }

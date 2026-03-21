@@ -423,6 +423,66 @@ export async function registerRoutes(
     return Math.floor(strength);
   };
 
+  async function getPlayerCombatExtras(accountId: string, equippedRacePassive?: string | null) {
+    let weaponSpecial: string | null = null;
+    let raceCritBonus = 0;
+    let raceLifeStealPct = 0;
+    let raceImmunities: string[] = [];
+
+    try {
+      const { ALL_ITEMS } = require("../client/src/lib/items-data");
+      const inventory = await storage.getInventoryByAccount(accountId);
+      const acct = await storage.getAccount(accountId);
+      const equipped = ((acct?.equipped) || {}) as Record<string, string | null | undefined>;
+      const weaponEquippedId = equipped.weapon;
+      if (weaponEquippedId) {
+        let weaponInvItem = inventory.find((i: { id: string }) => i.id === weaponEquippedId);
+        if (!weaponInvItem) {
+          weaponInvItem = inventory.find((i: { itemId: string }) => i.itemId === weaponEquippedId);
+        }
+        if (weaponInvItem) {
+          const invItemId = (weaponInvItem as { itemId: string }).itemId;
+          const itemDef = ALL_ITEMS.find((itm: { id: string; name: string; special?: string }) =>
+            itm.id === invItemId || itm.name === invItemId
+          );
+          if (itemDef?.special) {
+            weaponSpecial = itemDef.special;
+          }
+        }
+      }
+    } catch (e) {
+      console.error("[Combat] Failed to resolve weapon special:", e);
+    }
+
+    let raceDodgeBonus = 0;
+    let raceDamageReduction = 0;
+    let raceThornsPct = 0;
+    let raceCounterChance = 0;
+    let raceBonusDamagePct = 0;
+
+    try {
+      const { getRacePassiveBonuses } = require("../shared/skills-data");
+      const passive = getRacePassiveBonuses(equippedRacePassive || "");
+      if (passive) {
+        raceCritBonus = passive.critBonus || 0;
+        raceLifeStealPct = passive.lifeStealPct || 0;
+        raceImmunities = passive.immunities || [];
+        raceDodgeBonus = passive.dodgeBonus || 0;
+        raceDamageReduction = passive.damageReduction || 0;
+        raceThornsPct = passive.thornsPct || 0;
+        raceCounterChance = passive.counterChance || 0;
+        raceBonusDamagePct = passive.bonusDamagePct || 0;
+      }
+    } catch (e) {
+      console.error("[Combat] Failed to resolve race passives:", e);
+    }
+
+    return {
+      weaponSpecial, raceCritBonus, raceLifeStealPct, raceImmunities,
+      raceDodgeBonus, raceDamageReduction, raceThornsPct, raceCounterChance, raceBonusDamagePct,
+    };
+  }
+
   app.get("/api/server/status", (req, res) => {
     cleanupInactiveSessions();
     const playerSessions = Array.from(activeSessions.values()).filter(s => {
@@ -3831,7 +3891,9 @@ export async function registerRoutes(
       }
       
       // V2 Combat Engine: Build player combatant using unified stat helper
-      const totalStats = await getPlayerTotalStats(account.id);
+      const rawStats = await getPlayerTotalStats(account.id);
+      let totalStats = applyRaceModifiers(rawStats, account.race);
+      totalStats = applyRacePassiveSkill(totalStats, account.equippedRacePassive);
       const playerCombatStats: CombatStats = { ...totalStats };
       
       // Pet elements and elemental power (not covered by getPlayerTotalStats)
@@ -3876,6 +3938,7 @@ export async function registerRoutes(
       }
 
       // Build player combatant
+      const towerExtras = await getPlayerCombatExtras(account.id, account.equippedRacePassive);
       const playerCombatant: Combatant = {
         id: account.id,
         name: account.username,
@@ -3883,10 +3946,17 @@ export async function registerRoutes(
         race: account.race,
         rank: account.rank,
         elements: petElements.length > 0 ? { elements: petElements, elementalPower: petElementalPower } : undefined,
-        immunities: [],
+        immunities: towerExtras.raceImmunities.length > 0 ? towerExtras.raceImmunities : [],
         level: globalLevel,
         isPlayer: true,
         spell: playerSpell || null,
+        raceCritBonus: towerExtras.raceCritBonus,
+        raceLifeStealPct: towerExtras.raceLifeStealPct,
+        raceDodgeBonus: towerExtras.raceDodgeBonus,
+        raceDamageReduction: towerExtras.raceDamageReduction,
+        raceThornsPct: towerExtras.raceThornsPct,
+        raceCounterChance: towerExtras.raceCounterChance,
+        raceBonusDamagePct: towerExtras.raceBonusDamagePct,
       };
       
       // Build NPC combatant with scaled stats
@@ -3910,7 +3980,7 @@ export async function registerRoutes(
       };
       
       // Run V2 combat engine
-      const combatResult = await runAutoCombat(playerCombatant, npcCombatant, 20);
+      const combatResult = await runAutoCombat(playerCombatant, npcCombatant, 20, towerExtras.weaponSpecial, null);
       const won = combatResult.winner === account.id;
       let deathPenaltyInfo: { goldLost: number; durabilityDamage: number } | null = null;
       
@@ -13966,6 +14036,8 @@ export async function registerRoutes(
         }
       }
 
+      const monsterFightExtras = await getPlayerCombatExtras(accountId, account.equippedRacePassive);
+
       const playerCombatant: Combatant = {
         id: accountId,
         name: account.username,
@@ -13975,6 +14047,14 @@ export async function registerRoutes(
         level: playerRanks.indexOf(account.rank) + 1,
         isPlayer: true,
         spell: monsterFightSpell,
+        raceCritBonus: monsterFightExtras.raceCritBonus,
+        raceLifeStealPct: monsterFightExtras.raceLifeStealPct,
+        immunities: monsterFightExtras.raceImmunities.length > 0 ? monsterFightExtras.raceImmunities : undefined,
+        raceDodgeBonus: monsterFightExtras.raceDodgeBonus,
+        raceDamageReduction: monsterFightExtras.raceDamageReduction,
+        raceThornsPct: monsterFightExtras.raceThornsPct,
+        raceCounterChance: monsterFightExtras.raceCounterChance,
+        raceBonusDamagePct: monsterFightExtras.raceBonusDamagePct,
       };
 
       const monsterCombatant: Combatant = {
@@ -13988,7 +14068,7 @@ export async function registerRoutes(
         isPlayer: false,
       };
 
-      const result = await runAutoCombat(playerCombatant, monsterCombatant, 20);
+      const result = await runAutoCombat(playerCombatant, monsterCombatant, 20, monsterFightExtras.weaponSpecial, null);
       const playerWon = result.winner === accountId;
 
       clearActiveMonster(req.params.zoneId, accountId);
@@ -14234,6 +14314,7 @@ export async function registerRoutes(
         }
       }
 
+      const npcFightExtras = await getPlayerCombatExtras(accountId, account.equippedRacePassive);
       const playerCombatant: Combatant = {
         id: accountId,
         name: account.username,
@@ -14244,6 +14325,14 @@ export async function registerRoutes(
         isPlayer: true,
         spell: npcFightSpell,
         elements: npcFightPetElements,
+        raceCritBonus: npcFightExtras.raceCritBonus,
+        raceLifeStealPct: npcFightExtras.raceLifeStealPct,
+        immunities: npcFightExtras.raceImmunities.length > 0 ? npcFightExtras.raceImmunities : undefined,
+        raceDodgeBonus: npcFightExtras.raceDodgeBonus,
+        raceDamageReduction: npcFightExtras.raceDamageReduction,
+        raceThornsPct: npcFightExtras.raceThornsPct,
+        raceCounterChance: npcFightExtras.raceCounterChance,
+        raceBonusDamagePct: npcFightExtras.raceBonusDamagePct,
       };
 
       const npcCombatant: Combatant = {
@@ -14266,7 +14355,7 @@ export async function registerRoutes(
         isPlayer: false,
       };
 
-      const result = await runAutoCombat(playerCombatant, npcCombatant, 20);
+      const result = await runAutoCombat(playerCombatant, npcCombatant, 20, npcFightExtras.weaponSpecial, null);
       const playerWon = result.winner === accountId;
 
       if (playerWon) {
@@ -14773,6 +14862,7 @@ export async function registerRoutes(
       playerStats = applyWeaknessDebuff(playerStats, account.weaknessDebuffExpires ? new Date(account.weaknessDebuffExpires) : null);
       const playerMaxHP = calculateMaxHP(playerStats as any, safeRankIdx * 10, account.race, account.rank);
 
+      const dungeonExtras = await getPlayerCombatExtras(accountId, account.equippedRacePassive);
       const playerCombatant: Combatant = {
         id: accountId,
         name: account.username,
@@ -14780,9 +14870,16 @@ export async function registerRoutes(
         race: account.race,
         rank: account.rank,
         elements: { elements: [], elementalPower: 0 },
-        immunities: [],
+        immunities: dungeonExtras.raceImmunities.length > 0 ? dungeonExtras.raceImmunities : [],
         level: safeRankIdx * 10 + 1,
         isPlayer: true,
+        raceCritBonus: dungeonExtras.raceCritBonus,
+        raceLifeStealPct: dungeonExtras.raceLifeStealPct,
+        raceDodgeBonus: dungeonExtras.raceDodgeBonus,
+        raceDamageReduction: dungeonExtras.raceDamageReduction,
+        raceThornsPct: dungeonExtras.raceThornsPct,
+        raceCounterChance: dungeonExtras.raceCounterChance,
+        raceBonusDamagePct: dungeonExtras.raceBonusDamagePct,
       };
 
       const raceElement = account.race ? (raceModifiers[account.race as keyof typeof raceModifiers]?.element || null) : null;
@@ -14800,7 +14897,7 @@ export async function registerRoutes(
         isPlayer: false,
       };
 
-      const combatResult = await runAutoCombat(playerCombatant, monsterCombatant);
+      const combatResult = await runAutoCombat(playerCombatant, monsterCombatant, 20, dungeonExtras.weaponSpecial, null);
 
       const playerWon = combatResult.winner === accountId;
 
