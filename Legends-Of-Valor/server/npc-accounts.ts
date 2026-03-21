@@ -2,7 +2,7 @@ import { storage } from "./storage";
 import { db } from "./db";
 import { accounts } from "@shared/schema";
 import { eq } from "drizzle-orm";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 
 // NPC player configuration with power level (0 = weakest, 1 = strongest)
 // Each NPC has a unique race (same rules as real players — max 2 per race)

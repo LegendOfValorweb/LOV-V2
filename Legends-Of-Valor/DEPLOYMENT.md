@@ -14,7 +14,8 @@ This guide explains how to deploy Legend of Valor with the frontend on Vercel an
 
 1. Go to https://railway.app and create a new project
 2. Select "Deploy from GitHub repo" and connect this repository
-3. Railway will auto-detect the configuration from `railway.json`
+3. **Important:** In the Railway project settings, set the **Root Directory** to `Legends-Of-Valor`
+4. Railway will auto-detect the configuration from `railway.json` and `nixpacks.toml`
 
 ### 1.2 Add PostgreSQL Database
 
@@ -32,6 +33,8 @@ In Railway's project settings, add:
 | `OPENAI_API_KEY` | Your OpenAI API key for AI Game Master |
 | `SESSION_SECRET` | A random string for session encryption |
 
+> **Note:** Do **not** set `SERVE_STATIC=true` on Railway. The Railway backend is an API-only deployment — static frontend files are not present and not needed. The `SERVE_STATIC` flag is only for environments where both the backend and built frontend assets are co-located (e.g., a single-server Replit deployment).
+
 ### 1.4 Get your Railway Backend URL
 
 After deployment, note your Railway app URL (e.g., `https://your-app.up.railway.app`)
@@ -42,7 +45,8 @@ After deployment, note your Railway app URL (e.g., `https://your-app.up.railway.
 
 1. Go to https://vercel.com and create a new project
 2. Import this repository from GitHub
-3. Vercel will auto-detect the configuration from `vercel.json`
+3. **Important:** In Vercel project settings, set the **Root Directory** to `Legends-Of-Valor`
+4. Vercel will auto-detect the configuration from `vercel.json`
 
 ### 2.2 Configure Environment Variables
 
@@ -68,9 +72,15 @@ After Vercel deployment:
 
 | Command | Description |
 |---------|-------------|
-| `npm run build:frontend` | Builds the React frontend (for Vercel) |
-| `npm run build:backend` | Builds the Express backend (for Railway) |
+| `npm run build:frontend` | Builds only the React frontend (for Vercel) using `vite build` |
+| `npm run build:backend` | Builds only the Express backend (for Railway) using esbuild |
 | `npm run start:backend` | Starts the production backend server |
+
+## Railway Configuration Notes
+
+- `nixpacks.toml` tells Railway to use Node.js 20 and run `npm run build:backend` (backend only)
+- `railway.json` configures the build and start commands and health check path
+- The backend uses `bcryptjs` (pure JavaScript) so no native compilation tools are needed on Railway
 
 ## Database Migrations
 
@@ -95,6 +105,10 @@ This syncs your Drizzle schema to the PostgreSQL database.
 ### Database Connection
 - Ensure `DATABASE_URL` is set in Railway
 - Run `npm run db:push` to create tables
+
+### Build Failures on Railway
+- Make sure the Railway project's Root Directory is set to `Legends-Of-Valor`
+- The `nixpacks.toml` file handles Node.js installation and the build step automatically
 
 ## Local Development
 

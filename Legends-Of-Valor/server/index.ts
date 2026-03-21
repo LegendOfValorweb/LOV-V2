@@ -101,7 +101,12 @@ app.use((req, res, next) => {
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
-    serveStatic(app);
+    // Only serve static frontend assets when SERVE_STATIC=true is set.
+    // On Railway (API-only deployment) this env var is not set, so the
+    // backend runs as a pure API server without requiring dist/public.
+    if (process.env.SERVE_STATIC === "true") {
+      serveStatic(app);
+    }
   } else {
     const { setupVite } = await import("./vite");
     await setupVite(httpServer, app);

@@ -46,7 +46,7 @@ import {
   getRankRequirementLabel,
 } from "./resource-system";
 import { eq, sql, and, lt } from "drizzle-orm";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { getActiveWorldBoss, spawnWorldBoss, recordBossDamage, MAX_ATTACKS_PER_BOSS, getPlayerBossAttackCount } from "./world-boss";
 import { COOKIE_NAME, COOKIE_OPTIONS, generateToken, authMiddleware, type AuthRequest } from "./auth";
