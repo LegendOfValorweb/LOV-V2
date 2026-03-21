@@ -3534,6 +3534,9 @@ export async function registerRoutes(
         abilities: Array.isArray(abilities) ? abilities : [],
       });
 
+      // Discover pet element in Valorpedia
+      recordValorpediaDiscovery(accountId, "pets", petElement.toLowerCase());
+
       // Broadcast to the player that they received a new pet
       broadcastToPlayer(accountId, "petAdded", pet);
       
@@ -5607,6 +5610,9 @@ export async function registerRoutes(
         stats: baseStats,
       });
 
+      // Discover merged pet element in Valorpedia
+      recordValorpediaDiscovery(account.id, "pets", (combinedElements[0] as string).toLowerCase());
+
       res.json({
         success: true,
         newPet,
@@ -6603,6 +6609,19 @@ export async function registerRoutes(
 
       // Equip new skill
       const updated = await storage.updatePlayerSkill(skillId, { isEquipped: true });
+
+      // Discover spell in Valorpedia based on skill element
+      try {
+        const { getSkillById } = await import("@shared/skills-data");
+        const skillDef = getSkillById(playerSkill.skillId);
+        if (skillDef?.element) {
+          const vpSpellId = SKILL_ELEMENT_TO_VALORPEDIA_SPELL[skillDef.element];
+          if (vpSpellId) {
+            await recordValorpediaDiscovery(accountId, "spells", vpSpellId);
+          }
+        }
+      } catch {}
+
       res.json(updated);
     } catch (error) {
       res.status(500).json({ error: "Failed to equip skill" });
@@ -11811,6 +11830,12 @@ export async function registerRoutes(
       // Remove from active gatherers
       activeGatherers.delete(gatherKey);
 
+      // Discover gathered resources in Valorpedia
+      for (const g of gathered) {
+        const vpResourceId = g.resource.replace(/-/g, "_");
+        await recordValorpediaDiscovery(accountId, "resources", vpResourceId);
+      }
+
       const updatedCarryInfo = await getPlayerCarryInfo(accountId);
 
       res.json({
@@ -11920,6 +11945,9 @@ export async function registerRoutes(
         element: element as any,
         elements: [element] as any,
       });
+
+      // Discover pet element in Valorpedia
+      await recordValorpediaDiscovery(accountId, "pets", element.toLowerCase());
 
       res.json({ success: true, pet, message: `Hatched a ${tier} ${element} pet named ${name}!` });
     } catch (error) {
@@ -12272,6 +12300,7 @@ export async function registerRoutes(
             bondLevel: 1,
             skin: "default",
           });
+          recordValorpediaDiscovery(accountId, "pets", (element as string).toLowerCase());
           grantedItems.push(`${tier} ${element} pet: ${name}`);
         }
       };
@@ -13037,6 +13066,9 @@ export async function registerRoutes(
 
       await storage.createPet(newPet as any);
       await storage.updateAccount(accountId, { rubies: (account.rubies || 0) - egg.rubyPrice });
+
+      // Discover pet element in Valorpedia
+      recordValorpediaDiscovery(accountId, "pets", (element as string).toLowerCase());
 
       res.json({ success: true, pet: newPet });
     } catch (error) {
@@ -14951,6 +14983,28 @@ export async function registerRoutes(
     "Blizzard Wyrm": "blizzard_wyrm",
     "Fog Phantom": "fog_phantom",
     "Rain Serpent": "rain_serpent",
+  };
+
+  const SKILL_ELEMENT_TO_VALORPEDIA_SPELL: Record<string, string> = {
+    "Fire": "fireball",
+    "Water": "water_surge",
+    "Storm": "thunder_strike",
+    "Earth": "earth_shatter",
+    "Light": "healing_light",
+    "Dark": "shadow_bolt",
+    "Air": "wind_slash",
+    "Nature": "wind_slash",
+    "Arcane": "arcane_missile",
+    "Aether": "arcane_missile",
+    "Soul": "soul_drain",
+    "Blood": "soul_drain",
+    "Void": "void_rift",
+    "Space": "void_rift",
+    "Plasma": "plasma_burst",
+    "Metal": "earth_shatter",
+    "Time": "time_stop",
+    "Ice": "ice_lance",
+    "Crystal": "crystal_shield",
   };
 
   async function recordValorpediaDiscovery(accountId: string, category: string, entryId: string): Promise<void> {
