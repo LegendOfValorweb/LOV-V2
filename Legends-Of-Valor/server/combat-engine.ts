@@ -94,6 +94,7 @@ export interface CombatRound {
   isBlocked: boolean;
   elementalMultiplier: number;
   effects: string[];
+  healAmount?: number;
   resonance?: ResonanceResult;
   statusEffectsApplied?: { type: CCType; duration: number; target: string }[];
   buffsApplied?: { statType: BuffStatType; bonus: number; target: string; buffName: string }[];
@@ -501,6 +502,7 @@ export function processAction(
   const buffsApplied: { statType: BuffStatType; bonus: number; target: string; buffName: string }[] = [];
   let damage = 0;
   let blocked = 0;
+  let healAmount = 0;
   let isCritical = false;
   let isEvaded = false;
   let isBlocked = false;
@@ -643,7 +645,12 @@ export function processAction(
       }
 
       if (spellCategory === "heal") {
-        effects.push(`${attacker.name} casts ${spell?.name || "a healing spell"}!`);
+        const healPower = safeNumber(spellPower, 1.5);
+        const baseHeal = safeNumber(attackerStats.Int, 10) * healPower * rankMult;
+        const critHeal = calculateCritical(attackerStats.Luck);
+        if (critHeal.isCritical) effects.push("Critical heal!");
+        healAmount = Math.floor(baseHeal * (critHeal.isCritical ? critHeal.multiplier : 1));
+        effects.push(`${attacker.name} casts ${spell?.name || "a healing spell"}! Restores ${healAmount} HP!`);
         break;
       }
 
@@ -772,6 +779,7 @@ export function processAction(
     action,
     damage: Math.max(0, Math.floor(damage)),
     blocked,
+    healAmount: healAmount > 0 ? healAmount : undefined,
     isCritical,
     isEvaded,
     isBlocked,
@@ -862,6 +870,11 @@ export async function runAutoCombat(
       combatState[second.id] -= round1.damage;
       totalDamage[first.id] += round1.damage;
 
+      if (round1.healAmount && round1.healAmount > 0) {
+        const maxHP1 = calculateMaxHP(first.stats, first.level, first.race, first.rank);
+        combatState[first.id] = Math.min(maxHP1, combatState[first.id] + round1.healAmount);
+      }
+
       tickStatusEffects(ccTracker, first.id);
       const buffExpiry1 = tickBuffs(buffTracker, first.id);
       if (buffExpiry1.length > 0) round1.effects.push(...buffExpiry1);
@@ -913,6 +926,11 @@ export async function runAutoCombat(
 
       combatState[first.id] -= round2.damage;
       totalDamage[second.id] += round2.damage;
+
+      if (round2.healAmount && round2.healAmount > 0) {
+        const maxHP2 = calculateMaxHP(second.stats, second.level, second.race, second.rank);
+        combatState[second.id] = Math.min(maxHP2, combatState[second.id] + round2.healAmount);
+      }
 
       tickStatusEffects(ccTracker, second.id);
       const buffExpiry2 = tickBuffs(buffTracker, second.id);
