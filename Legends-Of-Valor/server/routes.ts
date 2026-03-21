@@ -12013,7 +12013,8 @@ export async function registerRoutes(
           return res.status(400).json({ error: `Insufficient ${skin.rarity} skin tickets` });
         }
         await storage.updateAccount(accountId, { 
-          gold: account.gold
+          [ticketField]: tickets - 1,
+          unlockedSkins: [...ownedSkins, fullSkinId],
         } as any);
       } else {
         // Ruby payment
@@ -12021,7 +12022,8 @@ export async function registerRoutes(
           return res.status(400).json({ error: "Insufficient rubies", required: skin.rubyPrice });
         }
         await storage.updateAccount(accountId, { 
-          gold: account.gold
+          rubies: (account.rubies || 0) - skin.rubyPrice,
+          unlockedSkins: [...ownedSkins, fullSkinId],
         } as any);
       }
 
