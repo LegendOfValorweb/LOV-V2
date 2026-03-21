@@ -78,7 +78,7 @@ export default function Landing() {
       if (account.role === "admin") {
         navigate("/admin");
       } else {
-        navigate("/world-map");
+        navigate("/base");
       }
     }
   }, [account, isLoading, navigate]);
@@ -102,7 +102,7 @@ export default function Landing() {
     }
     
     if (result.account) {
-      navigate("/world-map");
+      navigate("/base");
     } else {
       setError(result.error || "Login failed");
     }
@@ -125,7 +125,7 @@ export default function Landing() {
     );
     
     if (result.account) {
-      navigate("/world-map");
+      navigate("/base");
     } else {
       setError(result.error || "Failed to create character");
     }

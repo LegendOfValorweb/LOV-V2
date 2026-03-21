@@ -1,11 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Castle, Hammer, Package, Dumbbell, Shield, Sparkles,
   Coins, ArrowUp, Lock, Home, Palette, Trophy, Swords, Users, Calendar,
@@ -160,6 +159,28 @@ const baseRooms: BaseRoom[] = [
   },
 ];
 
+interface BuildingDef {
+  id: string;
+  name: string;
+  icon: React.ReactNode;
+  color: string;
+  unlockTier: number;
+  description: string;
+}
+
+const ALL_BUILDINGS: BuildingDef[] = [
+  { id: "town_hall", name: "Town Hall", icon: <Castle className="w-6 h-6" />, color: "from-yellow-600 to-amber-700", unlockTier: 1, description: "Base upgrade hub and trophy hall." },
+  { id: "storage", name: "Storage", icon: <Package className="w-6 h-6" />, color: "from-green-700 to-emerald-800", unlockTier: 1, description: "Store items and resources." },
+  { id: "rest", name: "Rest Area", icon: <Home className="w-6 h-6" />, color: "from-blue-700 to-sky-800", unlockTier: 1, description: "Recover HP and energy." },
+  { id: "weapon_locker", name: "Weapon Locker", icon: <Swords className="w-6 h-6" />, color: "from-red-700 to-rose-800", unlockTier: 2, description: "Store and swap loadouts." },
+  { id: "crafting", name: "Workshop", icon: <Hammer className="w-6 h-6" />, color: "from-orange-700 to-amber-800", unlockTier: 2, description: "Craft weapons and gear." },
+  { id: "training", name: "Training Grounds", icon: <Dumbbell className="w-6 h-6" />, color: "from-purple-700 to-violet-800", unlockTier: 3, description: "Offline stat training." },
+  { id: "defenses", name: "Defense Tower", icon: <Shield className="w-6 h-6" />, color: "from-slate-600 to-gray-700", unlockTier: 3, description: "Traps and guards." },
+  { id: "vault", name: "Vault", icon: <Coins className="w-6 h-6" />, color: "from-yellow-600 to-yellow-800", unlockTier: 4, description: "Secure gold with interest." },
+  { id: "raids", name: "War Room", icon: <Target className="w-6 h-6" />, color: "from-red-800 to-red-900", unlockTier: 1, description: "Manage NPC raids." },
+  { id: "events", name: "Events Hall", icon: <Calendar className="w-6 h-6" />, color: "from-pink-700 to-fuchsia-800", unlockTier: 1, description: "Weekly events & visitors." },
+];
+
 interface BaseSkin {
   id: string;
   name: string;
@@ -198,6 +219,8 @@ export default function Base() {
       }
     } catch (e) {}
   };
+
+  const [openBuilding, setOpenBuilding] = useState<string | null>(null);
   const [skinDialog, setSkinDialog] = useState(false);
   const [trophyDialog, setTrophyDialog] = useState(false);
   const [isUpgrading, setIsUpgrading] = useState(false);
@@ -214,7 +237,6 @@ export default function Base() {
     };
   });
   const [selectedTrainingStat, setSelectedTrainingStat] = useState<string>("Str");
-  const [isTraining, setIsTraining] = useState(false);
   const [vaultAmount, setVaultAmount] = useState<string>("");
 
   const { data: baseSkins = [] } = useQuery<BaseSkin[]>({
@@ -279,7 +301,6 @@ export default function Base() {
   const [isRaiding, setIsRaiding] = useState(false);
   const [raidResult, setRaidResult] = useState<any>(null);
   const [visitDialog, setVisitDialog] = useState(false);
-  const [visitingPlayer, setVisitingPlayer] = useState("");
   const [visitorData, setVisitorData] = useState<any>(null);
   const [isLoadingVisit, setIsLoadingVisit] = useState(false);
 
@@ -308,16 +329,12 @@ export default function Base() {
     }
   };
 
-  if (!account) {
-    navigate("/");
-    return null;
-  }
+  useEffect(() => {
+    if (!account) navigate("/");
+  }, [account, navigate]);
 
-  const currentTier = (account as any).baseTier || 1;
+  const currentTier = (account as any)?.baseTier || 1;
   const currentTierData = baseTiers[currentTier - 1];
-  const availableRooms = baseRooms.filter((room) => 
-    currentTierData.rooms.includes(room.id)
-  );
 
   const { data: trainingStatus, refetch: refetchTraining } = useQuery<any>({
     queryKey: ["/api/accounts/" + account?.id + "/offline-training/status"],
@@ -391,37 +408,6 @@ export default function Base() {
       toast({ title: "Room Upgraded!", description: `Spent ${(data.goldSpent || 0).toLocaleString()} gold.` });
     } catch (error) {
       toast({ title: "Error", description: "Failed to upgrade room", variant: "destructive" });
-    }
-  };
-
-  const handleStartTraining = async () => {
-    if (!account) return;
-    setIsTraining(true);
-    try {
-      const res = await apiRequest("POST", `/api/accounts/${account.id}/offline-training/start`, { stat: selectedTrainingStat });
-      const data = await res.json();
-      toast({ title: "Training Started!", description: data.message });
-      refetchTraining();
-    } catch (error: any) {
-      toast({ title: "Training Failed", description: error.message || "Could not start training", variant: "destructive" });
-    } finally {
-      setIsTraining(false);
-    }
-  };
-
-  const handleStopTraining = async () => {
-    if (!account) return;
-    setIsTraining(true);
-    try {
-      const res = await apiRequest("POST", `/api/accounts/${account.id}/offline-training/stop`, {});
-      const data = await res.json();
-      toast({ title: "Training Complete!", description: data.message });
-      refetchTraining();
-      refetchAccount();
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Could not stop training", variant: "destructive" });
-    } finally {
-      setIsTraining(false);
     }
   };
 
@@ -527,7 +513,27 @@ export default function Base() {
     }
   };
 
+  if (!account) return null;
+
   const nextTierCost = currentTier < 5 ? [0, 500000, 5000000, 50000000, 500000000][currentTier] : 0;
+
+  const baseSkin = (account as any).baseSkin || "default";
+  const skinPath = baseSkin === "default" 
+    ? "/backdrops/base.png" 
+    : `/skins/base/${baseSkin === "dark" ? "dark_fortress" : baseSkin === "golden" ? "golden_throne" : baseSkin === "mythic" ? "void_dimension" : baseSkin === "autumn" ? "nature_sanctuary" : baseSkin === "winter" ? "ice_citadel" : baseSkin === "spring" ? "elven_treehouse" : baseSkin === "summer" ? "desert_oasis" : "crystal_palace"}.png`;
+
+  const isBuildingUnlocked = (building: BuildingDef) => {
+    if (building.unlockTier === 1) return true;
+    if (building.id === "raids" || building.id === "events") return true;
+    return currentTier >= building.unlockTier;
+  };
+
+  const getUnlockLabel = (building: BuildingDef) => {
+    const tier = baseTiers[building.unlockTier - 1];
+    return `Unlocks at Tier ${building.unlockTier} (${tier?.name || ""})`;
+  };
+
+  const getRoomLevel = (roomId: string) => roomLevels[roomId] || 1;
 
   return (
     <ZoneScene
@@ -541,1004 +547,1078 @@ export default function Base() {
           <div className="flex items-center justify-between">
             <div className="rpg-panel px-3 py-1.5 flex items-center gap-2">
               <Castle className="w-5 h-5 text-primary" />
-              <span className="rpg-heading text-sm">{baseTiers[currentTier - 1]?.name || "Your Base"}</span>
+              <span className="rpg-heading text-sm">{currentTierData?.name || "Your Base"}</span>
+              <Badge variant="secondary" className="text-xs">Tier {currentTier}</Badge>
+            </div>
           </div>
-          <Button variant="outline" size="sm" className="rpg-button-secondary text-xs" onClick={() => navigate("/world-map")}>
-            World Map
-          </Button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <Card className="mb-6">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="font-serif text-2xl">{currentTierData.name}</CardTitle>
-                    <CardDescription>{currentTierData.description}</CardDescription>
-                  </div>
-                  <Badge variant="secondary" className="text-lg px-4 py-1">
-                    Tier {currentTier}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="aspect-video rounded-lg bg-gradient-to-br from-secondary to-background flex items-center justify-center mb-4 overflow-hidden relative">
-                  {(() => {
-                    const baseSkin = (account as any).baseSkin || "default";
-                    const skinPath = baseSkin === "default" 
-                      ? "/backdrops/base.png" 
-                      : `/skins/base/${baseSkin === "dark" ? "dark_fortress" : baseSkin === "golden" ? "golden_throne" : baseSkin === "mythic" ? "void_dimension" : baseSkin === "autumn" ? "nature_sanctuary" : baseSkin === "winter" ? "ice_citadel" : baseSkin === "spring" ? "elven_treehouse" : baseSkin === "summer" ? "desert_oasis" : "crystal_palace"}.png`;
-                    return (
-                      <img 
-                        src={skinPath}
-                        alt="Base"
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = "/backdrops/base.png";
-                        }}
-                      />
-                    );
-                  })()}
-                </div>
-                
-                <div className="flex justify-between items-center flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">
-                      {currentTier < 5 ? `Upgrade to Tier ${currentTier + 1}: ${nextTierCost.toLocaleString()} gold` : "Maximum tier reached"}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => setSkinDialog(true)}
-                    >
-                      <Palette className="w-4 h-4 mr-1" />
-                      Skins
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => setTrophyDialog(true)}
-                    >
-                      <Trophy className="w-4 h-4 mr-1" />
-                      Trophies ({(account as any).trophies?.length || 0})
-                    </Button>
-                    <Button 
-                      disabled={currentTier >= 5 || account.gold < nextTierCost || isUpgrading}
-                      onClick={handleUpgradeBase}
-                    >
-                      <ArrowUp className="w-4 h-4 mr-2" />
-                      {isUpgrading ? "Upgrading..." : "Upgrade Base"}
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+        <div className="relative flex-1 rounded-xl overflow-hidden mb-3 min-h-0" style={{ minHeight: "320px" }}>
+          <img
+            src={skinPath}
+            alt="Base"
+            className="absolute inset-0 w-full h-full object-cover"
+            onError={(e) => { (e.target as HTMLImageElement).src = "/backdrops/base.png"; }}
+          />
+          <div className="absolute inset-0 bg-black/40" />
 
-            <Tabs defaultValue="rooms">
-              <TabsList className="w-full flex-wrap">
-                <TabsTrigger value="rooms" className="flex-1">Rooms</TabsTrigger>
-                <TabsTrigger value="training" className="flex-1">Training</TabsTrigger>
-                <TabsTrigger value="vault" className="flex-1">Vault</TabsTrigger>
-                <TabsTrigger value="defenses" className="flex-1">Defenses</TabsTrigger>
-                <TabsTrigger value="recipes" className="flex-1">Recipes</TabsTrigger>
-                <TabsTrigger value="raids" className="flex-1">Raids</TabsTrigger>
-                <TabsTrigger value="events" className="flex-1">Events</TabsTrigger>
-                <TabsTrigger value="settings" className="flex-1">Settings</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="rooms" className="mt-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {availableRooms.map((room) => {
-                    const level = roomLevels[room.id] || 1;
-                    const maxLevel = ROOM_MAX_LEVEL_BY_TIER[currentTier] || 3;
-                    const progress = (level / maxLevel) * 100;
-                    const baseCost = ROOM_UPGRADE_BASE_COST[room.id] || 5000;
-                    const upgradeCost = baseCost * level;
-                    
+          <div className="absolute inset-0 p-3 grid grid-cols-5 gap-2 content-start">
+            {ALL_BUILDINGS.map((building) => {
+              const unlocked = isBuildingUnlocked(building);
+              return (
+                <button
+                  key={building.id}
+                  onClick={() => unlocked && setOpenBuilding(building.id)}
+                  className={`flex flex-col items-center gap-1 p-2 rounded-lg border transition-all group relative
+                    ${unlocked
+                      ? "border-white/20 bg-black/50 hover:bg-black/70 hover:border-white/50 cursor-pointer"
+                      : "border-white/10 bg-black/30 opacity-50 cursor-not-allowed"
+                    }`}
+                  title={unlocked ? building.name : getUnlockLabel(building)}
+                >
+                  {!unlocked && (
+                    <div className="absolute inset-0 flex items-center justify-center rounded-lg">
+                      <Lock className="w-4 h-4 text-white/60" />
+                    </div>
+                  )}
+                  <div className={`p-1.5 rounded-md bg-gradient-to-br ${building.color} ${!unlocked ? "opacity-30" : ""}`}>
+                    {building.icon}
+                  </div>
+                  <span className="text-white text-xs font-medium leading-tight text-center line-clamp-2 hidden sm:block">
+                    {building.name}
+                  </span>
+                  {unlocked && building.id !== "town_hall" && building.id !== "raids" && building.id !== "events" && (
+                    <Badge className="text-[10px] h-4 px-1 bg-primary/80">
+                      Lv.{getRoomLevel(building.id)}
+                    </Badge>
+                  )}
+                  {!unlocked && (
+                    <span className="text-white/40 text-[10px] leading-tight text-center hidden sm:block">
+                      Tier {building.unlockTier}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex-shrink-0 text-xs text-center text-muted-foreground">
+          Tap a building to open it — locked buildings show what tier unlocks them
+        </div>
+      </div>
+
+      {/* Town Hall Dialog */}
+      <Dialog open={openBuilding === "town_hall"} onOpenChange={(open) => !open && setOpenBuilding(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Castle className="w-5 h-5 text-yellow-500" />
+              Town Hall
+            </DialogTitle>
+            <DialogDescription>Your base upgrade hub and trophy room.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 py-2">
+            <div className="flex items-center justify-between p-4 rounded-lg bg-gradient-to-br from-yellow-500/10 to-amber-500/10 border border-yellow-500/30">
+              <div>
+                <p className="font-serif text-xl font-semibold">{currentTierData.name}</p>
+                <p className="text-sm text-muted-foreground">{currentTierData.description}</p>
+              </div>
+              <Badge variant="secondary" className="text-lg px-4 py-1">Tier {currentTier}</Badge>
+            </div>
+
+            {currentTier < 5 && (
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  Next tier: <span className="font-medium text-yellow-400">{baseTiers[currentTier]?.name}</span> — costs {nextTierCost.toLocaleString()} gold
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Required rank: {baseTiers[currentTier]?.requirements.rank}
+                </p>
+                <Button 
+                  disabled={currentTier >= 5 || account.gold < nextTierCost || isUpgrading}
+                  onClick={handleUpgradeBase}
+                  className="w-full"
+                >
+                  <ArrowUp className="w-4 h-4 mr-2" />
+                  {isUpgrading ? "Upgrading..." : `Upgrade to ${baseTiers[currentTier]?.name} (${nextTierCost.toLocaleString()} gold)`}
+                </Button>
+              </div>
+            )}
+            {currentTier >= 5 && (
+              <div className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/30 text-center">
+                <Crown className="w-6 h-6 text-purple-400 mx-auto mb-1" />
+                <p className="font-medium">Maximum Tier Reached — Castle</p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold text-muted-foreground">TIER PROGRESSION</h4>
+              {baseTiers.map((tier) => (
+                <div
+                  key={tier.tier}
+                  className={`p-3 rounded-lg border ${
+                    tier.tier === currentTier
+                      ? "border-primary bg-primary/10"
+                      : tier.tier < currentTier
+                        ? "border-green-500/30 bg-green-500/5"
+                        : "border-border"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium">{tier.name}</span>
+                    <Badge variant={tier.tier <= currentTier ? "default" : "outline"}>Tier {tier.tier}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{tier.description}</p>
+                  {tier.tier > currentTier && (
+                    <div className="mt-2 text-xs text-yellow-400">
+                      {tier.requirements.gold.toLocaleString()} Gold | {tier.requirements.rank}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => { setSkinDialog(true); }}>
+                <Palette className="w-4 h-4 mr-2" />
+                Base Skins
+              </Button>
+              <Button variant="outline" className="flex-1" onClick={() => { setTrophyDialog(true); }}>
+                <Trophy className="w-4 h-4 mr-2" />
+                Trophies ({(account as any).trophies?.length || 0})
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenBuilding(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Storage Dialog */}
+      <Dialog open={openBuilding === "storage"} onOpenChange={(open) => !open && setOpenBuilding(null)}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="w-5 h-5 text-green-500" />
+              Storage Room
+            </DialogTitle>
+            <DialogDescription>Store your items and resources safely.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {(() => {
+              const room = baseRooms.find(r => r.id === "storage")!;
+              const level = getRoomLevel("storage");
+              const maxLevel = ROOM_MAX_LEVEL_BY_TIER[currentTier] || 3;
+              const progress = (level / maxLevel) * 100;
+              const upgradeCost = ROOM_UPGRADE_BASE_COST["storage"] * level;
+              return (
+                <>
+                  <div className="flex items-center justify-between">
+                    <Badge>Level {level} / {maxLevel}</Badge>
+                    <span className="text-sm text-muted-foreground">Capacity: {100 * level} / 1000</span>
+                  </div>
+                  <Progress value={progress} className="h-2" />
+                  <div className="space-y-1">
+                    {room.benefits.map((b, i) => (
+                      <div key={i} className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Sparkles className="w-3 h-3 text-primary" />{b}
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    className="w-full"
+                    disabled={level >= maxLevel}
+                    onClick={() => handleUpgradeRoom("storage")}
+                  >
+                    <Coins className="w-4 h-4 mr-2" />
+                    {level >= maxLevel ? "Max Level" : `Upgrade (${upgradeCost.toLocaleString()} Gold)`}
+                  </Button>
+                </>
+              );
+            })()}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenBuilding(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rest Area Dialog */}
+      <Dialog open={openBuilding === "rest"} onOpenChange={(open) => !open && setOpenBuilding(null)}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Home className="w-5 h-5 text-blue-500" />
+              Rest Area
+            </DialogTitle>
+            <DialogDescription>Recover HP and energy faster.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {(() => {
+              const room = baseRooms.find(r => r.id === "rest")!;
+              const level = getRoomLevel("rest");
+              const maxLevel = ROOM_MAX_LEVEL_BY_TIER[currentTier] || 3;
+              const progress = (level / maxLevel) * 100;
+              const upgradeCost = ROOM_UPGRADE_BASE_COST["rest"] * level;
+              return (
+                <>
+                  <div className="flex items-center justify-between">
+                    <Badge>Level {level} / {maxLevel}</Badge>
+                    <span className="text-sm text-muted-foreground">HP Regen: +{level * 10}%</span>
+                  </div>
+                  <Progress value={progress} className="h-2" />
+                  <div className="space-y-1">
+                    {room.benefits.map((b, i) => (
+                      <div key={i} className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Sparkles className="w-3 h-3 text-primary" />{b}
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    className="w-full"
+                    disabled={level >= maxLevel}
+                    onClick={() => handleUpgradeRoom("rest")}
+                  >
+                    <Coins className="w-4 h-4 mr-2" />
+                    {level >= maxLevel ? "Max Level" : `Upgrade (${upgradeCost.toLocaleString()} Gold)`}
+                  </Button>
+                </>
+              );
+            })()}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenBuilding(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Weapon Locker Dialog */}
+      <Dialog open={openBuilding === "weapon_locker"} onOpenChange={(open) => !open && setOpenBuilding(null)}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Swords className="w-5 h-5 text-red-500" />
+              Weapon Locker
+            </DialogTitle>
+            <DialogDescription>Store extra weapons and armor sets.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {(() => {
+              const room = baseRooms.find(r => r.id === "weapon_locker")!;
+              const level = getRoomLevel("weapon_locker");
+              const maxLevel = ROOM_MAX_LEVEL_BY_TIER[currentTier] || 3;
+              const progress = (level / maxLevel) * 100;
+              const upgradeCost = ROOM_UPGRADE_BASE_COST["weapon_locker"] * level;
+              return (
+                <>
+                  <div className="flex items-center justify-between">
+                    <Badge>Level {level} / {maxLevel}</Badge>
+                    <span className="text-sm text-muted-foreground">Slots: {level * 2}</span>
+                  </div>
+                  <Progress value={progress} className="h-2" />
+                  <div className="space-y-1">
+                    {room.benefits.map((b, i) => (
+                      <div key={i} className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Sparkles className="w-3 h-3 text-primary" />{b}
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    className="w-full"
+                    disabled={level >= maxLevel}
+                    onClick={() => handleUpgradeRoom("weapon_locker")}
+                  >
+                    <Coins className="w-4 h-4 mr-2" />
+                    {level >= maxLevel ? "Max Level" : `Upgrade (${upgradeCost.toLocaleString()} Gold)`}
+                  </Button>
+                </>
+              );
+            })()}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenBuilding(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Crafting Workshop Dialog */}
+      <Dialog open={openBuilding === "crafting"} onOpenChange={(open) => !open && setOpenBuilding(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Hammer className="w-5 h-5 text-orange-500" />
+              Crafting Workshop
+            </DialogTitle>
+            <DialogDescription>Create weapons, armor, and consumables.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {(() => {
+              const room = baseRooms.find(r => r.id === "crafting")!;
+              const level = getRoomLevel("crafting");
+              const maxLevel = ROOM_MAX_LEVEL_BY_TIER[currentTier] || 3;
+              const progress = (level / maxLevel) * 100;
+              const upgradeCost = ROOM_UPGRADE_BASE_COST["crafting"] * level;
+              return (
+                <>
+                  <div className="flex items-center justify-between">
+                    <Badge>Level {level} / {maxLevel}</Badge>
+                    <span className="text-sm text-muted-foreground">Success Bonus: +{level * 5}%</span>
+                  </div>
+                  <Progress value={progress} className="h-2" />
+                  <div className="space-y-1">
+                    {room.benefits.map((b, i) => (
+                      <div key={i} className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Sparkles className="w-3 h-3 text-primary" />{b}
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    className="w-full"
+                    disabled={level >= maxLevel}
+                    onClick={() => handleUpgradeRoom("crafting")}
+                  >
+                    <Coins className="w-4 h-4 mr-2" />
+                    {level >= maxLevel ? "Max Level" : `Upgrade (${upgradeCost.toLocaleString()} Gold)`}
+                  </Button>
+                </>
+              );
+            })()}
+
+            <div className="border-t border-border pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-semibold flex items-center gap-2">
+                  <Hammer className="w-4 h-4 text-orange-400" /> Crafting Recipes
+                </h4>
+                <Badge variant="secondary">{craftingRecipes.length} recipes</Badge>
+              </div>
+              {craftingRecipes.length === 0 ? (
+                <div className="text-center text-muted-foreground py-6">
+                  <Hammer className="w-10 h-10 mx-auto mb-3 opacity-40" />
+                  <p className="text-sm">No crafting recipes available yet.</p>
+                  <p className="text-xs mt-1">Advance your rank to unlock recipes.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3">
+                  {craftingRecipes.map((recipe) => {
+                    const canCraft = (account?.rank && recipe.requiredRank)
+                      ? playerRanks.indexOf(account.rank as any) >= playerRanks.indexOf(recipe.requiredRank as any)
+                      : false;
                     return (
-                      <Card key={room.id}>
+                      <Card key={recipe.id} className={!canCraft ? "opacity-60" : ""}>
                         <CardHeader className="pb-2">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 rounded-lg bg-secondary">{room.icon}</div>
-                            <div className="flex-1">
-                              <CardTitle className="text-base">{room.name}</CardTitle>
-                              <CardDescription className="text-xs">{room.description}</CardDescription>
-                            </div>
-                            <Badge>Lv. {level}/{maxLevel}</Badge>
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-sm">{recipe.name}</CardTitle>
+                            <Badge variant="outline" className="text-xs capitalize">{recipe.tier}</Badge>
                           </div>
+                          {recipe.description && (
+                            <CardDescription className="text-xs">{recipe.description}</CardDescription>
+                          )}
                         </CardHeader>
-                        <CardContent>
-                          <Progress value={progress} className="h-2 mb-3" />
-                          <div className="text-xs text-muted-foreground mb-3">
-                            {room.benefits.map((benefit, i) => (
-                              <div key={i} className="flex items-center gap-1">
-                                <Sparkles className="w-3 h-3 text-primary" />
-                                {benefit}
+                        <CardContent className="pt-0">
+                          <div className="space-y-2">
+                            <div className="text-xs text-muted-foreground">
+                              <span className="font-medium">Required Rank:</span>{" "}
+                              <span className={canCraft ? "text-green-400" : "text-red-400"}>{recipe.requiredRank}</span>
+                            </div>
+                            <div className="text-xs">
+                              <span className="font-medium text-muted-foreground">Ingredients:</span>
+                              <div className="mt-1 space-y-0.5">
+                                {recipe.ingredients.map((ing, i) => (
+                                  <div key={i} className="flex items-center gap-1 text-muted-foreground">
+                                    <span>×{ing.quantity}</span>
+                                    <span className="capitalize">{ing.itemId.replace(/_/g, " ")}</span>
+                                  </div>
+                                ))}
                               </div>
-                            ))}
+                            </div>
+                            {recipe.goldCost > 0 && (
+                              <div className="text-xs flex items-center gap-1 text-yellow-400">
+                                <Coins className="w-3 h-3" />
+                                {recipe.goldCost.toLocaleString()} gold
+                              </div>
+                            )}
+                            <Button
+                              size="sm"
+                              className="w-full mt-2"
+                              disabled={!canCraft || craftItemMutation.isPending}
+                              onClick={() => craftItemMutation.mutate(recipe.id)}
+                            >
+                              <Hammer className="w-3 h-3 mr-1" />
+                              {!canCraft ? `Requires ${recipe.requiredRank}` : "Craft"}
+                            </Button>
                           </div>
-                          <Button 
-                            size="sm" 
-                            className="w-full"
-                            disabled={level >= maxLevel}
-                            onClick={() => handleUpgradeRoom(room.id)}
-                          >
-                            <Coins className="w-4 h-4 mr-2" />
-                            {level >= maxLevel ? "Max Level" : `Upgrade (${upgradeCost.toLocaleString()} Gold)`}
-                          </Button>
                         </CardContent>
                       </Card>
                     );
                   })}
                 </div>
-              </TabsContent>
-              
-              <TabsContent value="training" className="mt-4">
-                <Card>
-                  <CardContent className="p-6">
-                    {currentTier >= 3 ? (
-                      <div>
-                        <h3 style={{color:"#d4af37", marginBottom:12}}>⚔️ Offline Training</h3>
-                        {trainingStatus?.active ? (
-                          <div>
-                            <p>Training: <strong>{trainingStatus.stat}</strong></p>
-                            <p>Started: {trainingStatus.startedAt ? new Date(trainingStatus.startedAt).toLocaleTimeString() : "Unknown"}</p>
-                            <p>Estimated XP gain: <strong>{trainingStatus.accumulatedXp || 0}</strong></p>
-                            <p className="text-xs text-muted-foreground mb-4">XP Rate: {trainingStatus.xpPerHour} XP/hour</p>
-                            <button 
-                              onClick={() => collectTrainingMutation.mutate()} 
-                              disabled={collectTrainingMutation.isPending}
-                              style={{background:"#22c55e",color:"white",border:"none",padding:"8px 16px",borderRadius:4,cursor:"pointer",marginTop:8}}
-                            >
-                              💰 Collect Training ({trainingStatus.accumulatedXp || 0} XP)
-                            </button>
-                          </div>
-                        ) : (
-                          <div>
-                            <p style={{color:"#888",marginBottom:12}}>Select a stat to train while offline (Max 24h):</p>
-                            <div className="flex flex-wrap gap-2">
-                              {["Str","Def","Spd","Int","Luck"].map(stat => (
-                                <button 
-                                  key={stat} 
-                                  onClick={() => startTrainingMutation.mutate(stat)} 
-                                  disabled={startTrainingMutation.isPending}
-                                  style={{background:"#1a1a2e",border:"1px solid #d4af37",color:"#d4af37",padding:"6px 12px",borderRadius:4,cursor:"pointer"}}
-                                >
-                                  Train {stat}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="text-center text-muted-foreground py-6">
-                        <Dumbbell className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                        <p>Training Grounds unlock at Tier 3 (Keep)</p>
-                        <p className="text-sm mt-2">Upgrade your base to train stats while offline.</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="vault" className="mt-4">
-                <Card>
-                  <CardContent className="p-6">
-                    {currentTier >= 4 ? (
-                      <div className="space-y-6">
-                        <div className="flex items-center justify-between">
-                          <h3 className="font-serif text-lg font-semibold flex items-center gap-2">
-                            <Coins className="w-5 h-5 text-yellow-500" />
-                            Secure Vault
-                          </h3>
-                          <Badge variant="secondary">Lv. {roomLevels.vault || 1}</Badge>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-                            <p className="text-xs text-muted-foreground">Vault Gold</p>
-                            <p className="text-lg font-bold text-yellow-500">{(vaultStatus?.vaultGold || 0).toLocaleString()}</p>
-                          </div>
-                          <div className="p-3 rounded-lg bg-secondary/50">
-                            <p className="text-xs text-muted-foreground">Capacity</p>
-                            <p className="text-lg font-bold">{(vaultStatus?.maxCapacity || 0).toLocaleString()}</p>
-                          </div>
-                        </div>
-
-                        <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-                          <p className="text-xs text-muted-foreground">Daily Interest</p>
-                          <p className="text-sm font-medium text-green-500">
-                            +{(vaultStatus?.dailyInterest || 0).toLocaleString()} gold/day ({((vaultStatus?.interestRate || 0) * 100).toFixed(1)}%)
-                          </p>
-                        </div>
-
-                        <div className="flex gap-2">
-                          <input
-                            type="number"
-                            value={vaultAmount}
-                            onChange={(e) => setVaultAmount(e.target.value)}
-                            placeholder="Amount"
-                            className="flex-1 px-3 py-2 rounded-md border bg-background text-sm"
-                          />
-                          <Button size="sm" onClick={handleVaultDeposit} disabled={!vaultAmount}>
-                            Deposit
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={handleVaultWithdraw} disabled={!vaultAmount}>
-                            Withdraw
-                          </Button>
-                        </div>
-
-                        <p className="text-xs text-muted-foreground">
-                          Gold in the vault is protected from raids and PvP losses. Interest is calculated on login.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="text-center text-muted-foreground py-6">
-                        <Coins className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                        <p>Secure Vault unlocks at Tier 4 (Manor)</p>
-                        <p className="text-sm mt-2">Store gold safely and earn daily interest.</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="defenses" className="mt-4">
-                <Card>
-                  <CardContent className="p-6">
-                    {currentTier >= 3 ? (
-                      <div className="space-y-6">
-                        <div className="flex items-center justify-between">
-                          <h3 className="font-serif text-lg font-semibold flex items-center gap-2">
-                            <Shield className="w-5 h-5 text-primary" />
-                            Base Defenses
-                          </h3>
-                          <Badge variant="secondary">Tier {currentTier} Defenses</Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          Your {currentTierData.name} is equipped with defensive systems. Higher tiers unlock more options.
-                        </p>
-                        
-                        <div className="space-y-4">
-                          <h4 className="text-sm font-semibold text-muted-foreground">TRAPS & SENTRIES</h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="p-4 rounded-lg bg-secondary/50 border border-primary/20">
-                              <div className="flex items-center justify-between mb-2">
-                                <p className="font-medium flex items-center gap-2">
-                                  <Target className="w-4 h-4 text-red-400" />
-                                  Arrow Traps
-                                </p>
-                                <Badge variant="outline" className="text-xs">Level {roomLevels["defenses"] || 1}</Badge>
-                              </div>
-                              <p className="text-xs text-muted-foreground mb-3">Deals {(roomLevels["defenses"] || 1) * 50} damage to raiders.</p>
-                              <Progress value={(roomLevels["defenses"] || 1) * 10} className="h-1.5" />
-                            </div>
-                            <div className="p-4 rounded-lg bg-secondary/50 border border-primary/20">
-                              <div className="flex items-center justify-between mb-2">
-                                <p className="font-medium flex items-center gap-2">
-                                  <Zap className="w-4 h-4 text-yellow-400" />
-                                  Magical Wards
-                                </p>
-                                <Badge variant="outline" className="text-xs">Level {roomLevels["defenses"] || 1}</Badge>
-                              </div>
-                              <p className="text-xs text-muted-foreground mb-3">Reduces gold lost by {(roomLevels["defenses"] || 1) * 5}%.</p>
-                              <Progress value={(roomLevels["defenses"] || 1) * 10} className="h-1.5" />
-                            </div>
-                            {currentTier >= 4 && (
-                              <>
-                                <div className="p-4 rounded-lg bg-secondary/50 border border-orange-500/20">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <p className="font-medium flex items-center gap-2">
-                                      <Flame className="w-4 h-4 text-orange-400" />
-                                      Fire Pits
-                                    </p>
-                                    <Badge variant="outline" className="text-xs bg-orange-500/10">Tier 4+</Badge>
-                                  </div>
-                                  <p className="text-xs text-muted-foreground mb-3">Burns {(roomLevels["defenses"] || 1) * 2}% of raider HP over time.</p>
-                                  <Progress value={(roomLevels["defenses"] || 1) * 10} className="h-1.5" />
-                                </div>
-                                <div className="p-4 rounded-lg bg-secondary/50 border border-blue-500/20">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <p className="font-medium flex items-center gap-2">
-                                      <Shield className="w-4 h-4 text-blue-400" />
-                                      Reinforced Walls
-                                    </p>
-                                    <Badge variant="outline" className="text-xs bg-blue-500/10">Tier 4+</Badge>
-                                  </div>
-                                  <p className="text-xs text-muted-foreground mb-3">+{(roomLevels["defenses"] || 1) * 100} base defense rating.</p>
-                                  <Progress value={(roomLevels["defenses"] || 1) * 10} className="h-1.5" />
-                                </div>
-                              </>
-                            )}
-                            {currentTier >= 5 && (
-                              <>
-                                <div className="p-4 rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <p className="font-medium flex items-center gap-2">
-                                      <Sparkles className="w-4 h-4 text-purple-400" />
-                                      Arcane Sentinels
-                                    </p>
-                                    <Badge className="text-xs bg-purple-600">Tier 5</Badge>
-                                  </div>
-                                  <p className="text-xs text-muted-foreground mb-3">Summons {Math.floor((roomLevels["defenses"] || 1) / 2) + 1} magical guardians.</p>
-                                  <Progress value={(roomLevels["defenses"] || 1) * 10} className="h-1.5" />
-                                </div>
-                                <div className="p-4 rounded-lg bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/30">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <p className="font-medium flex items-center gap-2">
-                                      <Crown className="w-4 h-4 text-yellow-400" />
-                                      Dragon's Wrath
-                                    </p>
-                                    <Badge className="text-xs bg-yellow-600">Tier 5</Badge>
-                                  </div>
-                                  <p className="text-xs text-muted-foreground mb-3">Ultimate defense - 25% chance to instantly defeat raiders.</p>
-                                  <Progress value={100} className="h-1.5" />
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="space-y-4 pt-4 border-t border-border/50">
-                          <h4 className="text-sm font-semibold text-muted-foreground">HIRE GUARDS</h4>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="p-4 rounded-lg bg-secondary/50 border border-border hover:border-primary/50 transition-colors cursor-pointer">
-                              <div className="flex items-center gap-3 mb-2">
-                                <Users className="w-8 h-8 text-green-400" />
-                                <div>
-                                  <p className="font-medium">Militia</p>
-                                  <p className="text-xs text-muted-foreground">Basic guards</p>
-                                </div>
-                              </div>
-                              <p className="text-xs mb-2">+100 Defense Rating</p>
-                              <Button size="sm" variant="outline" className="w-full">
-                                <Coins className="w-3 h-3 mr-1" /> 50,000/day
-                              </Button>
-                            </div>
-                            <div className={`p-4 rounded-lg bg-secondary/50 border ${currentTier >= 4 ? 'border-border hover:border-primary/50 cursor-pointer' : 'border-border/30 opacity-50'} transition-colors`}>
-                              <div className="flex items-center gap-3 mb-2">
-                                <Swords className="w-8 h-8 text-blue-400" />
-                                <div>
-                                  <p className="font-medium">Knights</p>
-                                  <p className="text-xs text-muted-foreground">Elite warriors</p>
-                                </div>
-                              </div>
-                              <p className="text-xs mb-2">+500 Defense Rating</p>
-                              <Button size="sm" variant="outline" className="w-full" disabled={currentTier < 4}>
-                                {currentTier >= 4 ? <><Coins className="w-3 h-3 mr-1" /> 250,000/day</> : <><Lock className="w-3 h-3 mr-1" /> Tier 4</>}
-                              </Button>
-                            </div>
-                            <div className={`p-4 rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10 border ${currentTier >= 5 ? 'border-purple-500/30 hover:border-purple-500/50 cursor-pointer' : 'border-border/30 opacity-50'} transition-colors`}>
-                              <div className="flex items-center gap-3 mb-2">
-                                <Sparkles className="w-8 h-8 text-purple-400" />
-                                <div>
-                                  <p className="font-medium">Archmages</p>
-                                  <p className="text-xs text-muted-foreground">Legendary mages</p>
-                                </div>
-                              </div>
-                              <p className="text-xs mb-2">+2000 Defense Rating</p>
-                              <Button size="sm" variant="outline" className="w-full" disabled={currentTier < 5}>
-                                {currentTier >= 5 ? <><Coins className="w-3 h-3 mr-1" /> 1,000,000/day</> : <><Lock className="w-3 h-3 mr-1" /> Tier 5</>}
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-center text-muted-foreground py-6">
-                        <Shield className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                        <p>Defense systems unlock at Tier 3 (Stone Keep)</p>
-                        <p className="text-sm mt-2">Upgrade your base to access traps, guards, and magical wards.</p>
-                        <p className="text-xs mt-4 text-yellow-400">Requires: 5,000,000 gold + Expert rank</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-              
-              <TabsContent value="automation" className="mt-4">
-                <Card>
-                  <CardContent className="p-6">
-                    <h3 className="font-serif text-lg font-semibold mb-4">Automation Settings</h3>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-                        <div>
-                          <p className="font-medium">Auto-Collect Resources</p>
-                          <p className="text-xs text-muted-foreground">Automatically gather nearby resources</p>
-                        </div>
-                        <Button variant="outline" size="sm">Enable</Button>
-                      </div>
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-                        <div>
-                          <p className="font-medium">Auto-Craft Items</p>
-                          <p className="text-xs text-muted-foreground">Queue items for automatic crafting</p>
-                        </div>
-                        <Button variant="outline" size="sm">Enable</Button>
-                      </div>
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-                        <div>
-                          <p className="font-medium">Auto-Train Stats</p>
-                          <p className="text-xs text-muted-foreground">Passive stat training while offline</p>
-                        </div>
-                        <Button variant="outline" size="sm" disabled>
-                          <Lock className="w-3 h-3 mr-1" /> Tier 4
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="recipes" className="mt-4">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-serif text-lg font-semibold flex items-center gap-2">
-                      <Hammer className="w-5 h-5 text-orange-400" />
-                      Crafting Recipes
-                    </h3>
-                    <Badge variant="secondary">{craftingRecipes.length} recipes</Badge>
-                  </div>
-                  {craftingRecipes.length === 0 ? (
-                    <Card>
-                      <CardContent className="p-6 text-center text-muted-foreground">
-                        <Hammer className="w-12 h-12 mx-auto mb-4 opacity-40" />
-                        <p>No crafting recipes available yet.</p>
-                        <p className="text-sm mt-2">Advance your rank to unlock recipes.</p>
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {craftingRecipes.map((recipe) => {
-                        const canCraft = (account?.rank && recipe.requiredRank) ?
-                          playerRanks.indexOf(account.rank as any) >= playerRanks.indexOf(recipe.requiredRank as any) : false;
-                        return (
-                          <Card key={recipe.id} className={!canCraft ? "opacity-60" : ""}>
-                            <CardHeader className="pb-2">
-                              <div className="flex items-center justify-between">
-                                <CardTitle className="text-sm">{recipe.name}</CardTitle>
-                                <Badge variant="outline" className="text-xs capitalize">{recipe.tier}</Badge>
-                              </div>
-                              {recipe.description && (
-                                <CardDescription className="text-xs">{recipe.description}</CardDescription>
-                              )}
-                            </CardHeader>
-                            <CardContent className="pt-0">
-                              <div className="space-y-2">
-                                <div className="text-xs text-muted-foreground">
-                                  <span className="font-medium">Required Rank:</span>{" "}
-                                  <span className={canCraft ? "text-green-400" : "text-red-400"}>{recipe.requiredRank}</span>
-                                </div>
-                                <div className="text-xs">
-                                  <span className="font-medium text-muted-foreground">Ingredients:</span>
-                                  <div className="mt-1 space-y-0.5">
-                                    {recipe.ingredients.map((ing, i) => (
-                                      <div key={i} className="flex items-center gap-1 text-muted-foreground">
-                                        <span>×{ing.quantity}</span>
-                                        <span className="capitalize">{ing.itemId.replace(/_/g, " ")}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                                {recipe.goldCost > 0 && (
-                                  <div className="text-xs flex items-center gap-1 text-yellow-400">
-                                    <Coins className="w-3 h-3" />
-                                    {recipe.goldCost.toLocaleString()} gold
-                                  </div>
-                                )}
-                                <Button
-                                  size="sm"
-                                  className="w-full mt-2"
-                                  disabled={!canCraft || craftItemMutation.isPending}
-                                  onClick={() => craftItemMutation.mutate(recipe.id)}
-                                >
-                                  <Hammer className="w-3 h-3 mr-1" />
-                                  {!canCraft ? `Requires ${recipe.requiredRank}` : "Craft"}
-                                </Button>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="raids" className="mt-4">
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-serif text-lg font-semibold flex items-center gap-2">
-                        <Swords className="w-5 h-5 text-red-500" />
-                        NPC Raids
-                      </h3>
-                      <Button 
-                        onClick={handleTriggerRaid} 
-                        disabled={isRaiding}
-                        variant="destructive"
-                      >
-                        {isRaiding ? "Defending..." : "Trigger Raid"}
-                      </Button>
-                    </div>
-                    
-                    {raidResult && (
-                      <div className={`p-4 rounded-lg mb-4 ${raidResult.result === "victory" ? "bg-green-500/10 border border-green-500/30" : "bg-red-500/10 border border-red-500/30"}`}>
-                        <p className="font-medium">{raidResult.message}</p>
-                        {raidResult.rewards && (
-                          <p className="text-sm text-muted-foreground mt-1">
-                            Rewards: {raidResult.rewards.gold.toLocaleString()} gold, {raidResult.rewards.exp} exp
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="space-y-3">
-                      <p className="text-sm text-muted-foreground mb-3">
-                        Raids scale with your rank. Higher ranks unlock harder raids with better rewards.
-                      </p>
-                      {raidEvents.map((raid: any) => (
-                        <div key={raid.id} className="p-3 rounded-lg bg-secondary/50 flex justify-between items-center">
-                          <div>
-                            <p className="font-medium">{raid.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              Unlocks at Rank {playerRanks[raid.minRank || 0]} | Difficulty: {"⭐".repeat(raid.difficulty)}
-                            </p>
-                          </div>
-                          <div className="text-right text-sm">
-                            <p className="text-yellow-500">{raid.rewards.gold.toLocaleString()} gold</p>
-                            <p className="text-blue-500">{raid.rewards.exp} exp</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="events" className="mt-4">
-                <Card>
-                  <CardContent className="p-6">
-                    <h3 className="font-serif text-lg font-semibold flex items-center gap-2 mb-4">
-                      <Calendar className="w-5 h-5 text-purple-500" />
-                      Weekly Events
-                    </h3>
-                    
-                    {weeklyEvent?.active && (
-                      <div className={`p-4 rounded-lg mb-4 ${weeklyEvent.active.type === "hero" ? "bg-yellow-500/10 border border-yellow-500/30" : "bg-purple-500/10 border border-purple-500/30"}`}>
-                        <div className="flex items-center gap-2 mb-2">
-                          <Badge variant={weeklyEvent.active.type === "hero" ? "default" : "secondary"}>
-                            {weeklyEvent.active.type === "hero" ? "Hero Event" : "Joker Event"}
-                          </Badge>
-                          <span className="font-semibold">{weeklyEvent.active.name}</span>
-                        </div>
-                        <p className="text-sm">{weeklyEvent.active.description}</p>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Next event in: {Math.floor(weeklyEvent.nextEventIn / (1000 * 60 * 60 * 24))} days
-                        </p>
-                      </div>
-                    )}
-
-                    <div className="space-y-3">
-                      <h4 className="text-sm font-medium text-muted-foreground">All Weekly Events</h4>
-                      {weeklyEvent?.allEvents?.map((event: any) => (
-                        <div 
-                          key={event.id} 
-                          className={`p-3 rounded-lg bg-secondary/50 ${event.id === weeklyEvent.active?.id ? "ring-2 ring-primary" : ""}`}
-                        >
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge variant={event.type === "hero" ? "default" : "outline"} className="text-xs">
-                              {event.type === "hero" ? "Hero" : "Joker"}
-                            </Badge>
-                            <span className="font-medium">{event.name}</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground">{event.description}</p>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="mt-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <Users className="w-4 h-4 text-blue-500" />
-                          <span className="font-medium">Visitor System</span>
-                        </div>
-                        <Button size="sm" variant="outline" onClick={() => setVisitDialog(true)}>
-                          Visit Player Base
-                        </Button>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Visit other players' bases to see their trophies (80% visible). Upgrade your base to impress visitors!
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="settings" className="mt-4">
-                <Card>
-                  <CardContent className="p-6">
-                    <h3 className="font-serif text-lg font-semibold flex items-center gap-2 mb-4">
-                      <Home className="w-5 h-5 text-primary" />
-                      Base Automation Settings
-                    </h3>
-                    <p className="text-sm text-muted-foreground mb-6">
-                      Configure automatic features for your base. Higher tier bases unlock more automation.
-                    </p>
-
-                    <div className="space-y-6">
-                      <div className="p-4 rounded-lg bg-secondary/50 border border-border">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-3">
-                            <Package className="w-5 h-5 text-green-500" />
-                            <div>
-                              <p className="font-medium">Auto-Loot</p>
-                              <p className="text-xs text-muted-foreground">Automatically collect drops from battles</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className={`text-sm ${currentTier >= 2 ? 'text-green-500' : 'text-muted-foreground'}`}>
-                              {currentTier >= 2 ? 'Enabled' : 'Tier 2 Required'}
-                            </span>
-                            {currentTier >= 2 && <Sparkles className="w-4 h-4 text-green-500" />}
-                          </div>
-                        </div>
-                        {currentTier >= 2 && (
-                          <div className="mt-3 text-xs text-muted-foreground">
-                            All battle rewards are automatically added to your inventory.
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="p-4 rounded-lg bg-secondary/50 border border-border">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-3">
-                            <Hammer className="w-5 h-5 text-blue-500" />
-                            <div>
-                              <p className="font-medium">Auto-Gather</p>
-                              <p className="text-xs text-muted-foreground">Passively gather resources over time</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className={`text-sm ${currentTier >= 3 ? 'text-green-500' : 'text-muted-foreground'}`}>
-                              {currentTier >= 3 ? 'Enabled' : 'Tier 3 Required'}
-                            </span>
-                            {currentTier >= 3 && <Sparkles className="w-4 h-4 text-green-500" />}
-                          </div>
-                        </div>
-                        {currentTier >= 3 && (
-                          <div className="mt-3 text-xs text-muted-foreground">
-                            Your base generates {(currentTier * 100).toLocaleString()} gold and {currentTier * 5} training points per hour.
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="p-4 rounded-lg bg-secondary/50 border border-border">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-3">
-                            <Dumbbell className="w-5 h-5 text-orange-500" />
-                            <div>
-                              <p className="font-medium">Auto-Train Pets</p>
-                              <p className="text-xs text-muted-foreground">Pets gain experience while you're away</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className={`text-sm ${currentTier >= 4 ? 'text-green-500' : 'text-muted-foreground'}`}>
-                              {currentTier >= 4 ? 'Enabled' : 'Tier 4 Required'}
-                            </span>
-                            {currentTier >= 4 && <Sparkles className="w-4 h-4 text-green-500" />}
-                          </div>
-                        </div>
-                        {currentTier >= 4 && (
-                          <div className="mt-3 text-xs text-muted-foreground">
-                            All pets gain {currentTier * 10} experience points per hour.
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-3">
-                            <Crown className="w-5 h-5 text-purple-500" />
-                            <div>
-                              <p className="font-medium">Auto-Defend</p>
-                              <p className="text-xs text-muted-foreground">Maximum defense automation</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className={`text-sm ${currentTier >= 5 ? 'text-green-500' : 'text-muted-foreground'}`}>
-                              {currentTier >= 5 ? 'Enabled' : 'Tier 5 Required'}
-                            </span>
-                            {currentTier >= 5 && <Sparkles className="w-4 h-4 text-purple-500" />}
-                          </div>
-                        </div>
-                        {currentTier >= 5 && (
-                          <div className="mt-3 text-xs text-muted-foreground">
-                            Your fortress automatically repels weak raiders and triggers counter-attacks.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
-          </div>
-
-          <div className="lg:col-span-1">
-            <Card>
-              <CardHeader>
-                <CardTitle className="font-serif">Base Tiers</CardTitle>
-                <CardDescription>Upgrade path for your home</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {baseTiers.map((tier) => (
-                  <div 
-                    key={tier.tier}
-                    className={`p-3 rounded-lg border ${
-                      tier.tier === currentTier 
-                        ? "border-primary bg-primary/10" 
-                        : tier.tier < currentTier 
-                          ? "border-green-500/30 bg-green-500/5"
-                          : "border-border"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium">{tier.name}</span>
-                      <Badge variant={tier.tier <= currentTier ? "default" : "outline"}>
-                        Tier {tier.tier}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground">{tier.description}</p>
-                    {tier.tier > currentTier && (
-                      <div className="mt-2 text-xs">
-                        <span className="text-yellow-400">
-                          {tier.requirements.gold.toLocaleString()} Gold | {tier.requirements.rank}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card className="mt-4">
-              <CardHeader>
-                <CardTitle className="font-serif">Quick Stats</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Storage Capacity</span>
-                  <span>{100 * (roomLevels.storage || 1)} / 1000</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Defense Rating</span>
-                  <span>{10 * (roomLevels.defenses || 0)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Rooms Unlocked</span>
-                  <span>{currentTierData.rooms.length} / 7</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Room Max Level</span>
-                  <span>{ROOM_MAX_LEVEL_BY_TIER[currentTier] || 3}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Vault Gold</span>
-                  <span className="text-yellow-500">{((account as any).vaultGold || 0).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Training</span>
-                  <span className={trainingStatus?.active ? "text-orange-500" : "text-muted-foreground"}>
-                    {trainingStatus?.active ? `${trainingStatus.stat} (${trainingStatus.elapsedHours}h)` : "Idle"}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Current Skin</span>
-                  <span className="capitalize">{(account as any).baseSkin || "default"}</span>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        <Dialog open={skinDialog} onOpenChange={setSkinDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Palette className="w-5 h-5" />
-                Base Skins
-              </DialogTitle>
-              <DialogDescription>
-                Choose a cosmetic skin for your base. Some skins cost gold.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="flex items-center justify-between p-3 rounded-md bg-yellow-500/10 border border-yellow-500/20">
-                <span className="text-sm font-medium flex items-center gap-2">
-                  <Coins className="w-4 h-4 text-yellow-500" />
-                  Your Gold
-                </span>
-                <span className="font-mono font-bold text-yellow-500">{(account?.gold || 0).toLocaleString()}</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {baseSkins.map(skin => {
-                  const isCurrentSkin = (account as any).baseSkin === skin.id || (!((account as any).baseSkin) && skin.id === "default");
-                  const canAfford = skin.cost === 0 || (account?.gold || 0) >= skin.cost || isCurrentSkin;
-                  return (
-                    <Button
-                      key={skin.id}
-                      variant={isCurrentSkin ? "default" : "outline"}
-                      className="flex flex-col items-center py-3 h-auto"
-                      disabled={isSettingSkin || (!canAfford && !isCurrentSkin)}
-                      onClick={() => handleSetSkin(skin.id)}
-                    >
-                      <span className="font-medium">{skin.name}</span>
-                      {skin.cost > 0 && !isCurrentSkin && (
-                        <span className="text-xs text-yellow-500">{skin.cost.toLocaleString()} gold</span>
-                      )}
-                      {isCurrentSkin && <span className="text-xs text-green-400">Equipped</span>}
-                    </Button>
-                  );
-                })}
-              </div>
+              )}
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setSkinDialog(false)}>Close</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenBuilding(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-        <Dialog open={trophyDialog} onOpenChange={setTrophyDialog}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Trophy className="w-5 h-5 text-yellow-500" />
-                Trophies ({trophyData?.earned.length || 0} / {trophyData?.available.length || 0})
-              </DialogTitle>
-              <DialogDescription>
-                Earn trophies by completing achievements. They're visible to visitors!
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4 max-h-96 overflow-y-auto">
-              <div className="space-y-2">
-                <h4 className="text-sm font-semibold text-green-400">Earned Trophies</h4>
-                {trophyData?.earned.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No trophies earned yet</p>
-                ) : (
-                  <div className="grid gap-2">
-                    {trophyData?.earned.map(trophy => (
-                      <div key={trophy.id} className="p-3 rounded-lg bg-green-500/10 border border-green-500/30">
-                        <div className="flex items-center gap-2">
-                          <Trophy className="w-4 h-4 text-yellow-500" />
-                          <span className="font-medium">{trophy.name}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">{trophy.description}</p>
+      {/* Training Grounds Dialog */}
+      <Dialog open={openBuilding === "training"} onOpenChange={(open) => !open && setOpenBuilding(null)}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Dumbbell className="w-5 h-5 text-purple-500" />
+              Training Grounds
+            </DialogTitle>
+            <DialogDescription>Train your stats while offline. Accumulates XP while away.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {(() => {
+              const room = baseRooms.find(r => r.id === "training")!;
+              const level = getRoomLevel("training");
+              const maxLevel = ROOM_MAX_LEVEL_BY_TIER[currentTier] || 3;
+              const progress = (level / maxLevel) * 100;
+              const upgradeCost = ROOM_UPGRADE_BASE_COST["training"] * level;
+              return (
+                <>
+                  <div className="flex items-center justify-between">
+                    <Badge>Level {level} / {maxLevel}</Badge>
+                  </div>
+                  <Progress value={progress} className="h-2" />
+                  <div className="space-y-1">
+                    {room.benefits.map((b, i) => (
+                      <div key={i} className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Sparkles className="w-3 h-3 text-primary" />{b}
                       </div>
                     ))}
                   </div>
+                  <Button
+                    className="w-full"
+                    disabled={level >= maxLevel}
+                    onClick={() => handleUpgradeRoom("training")}
+                  >
+                    <Coins className="w-4 h-4 mr-2" />
+                    {level >= maxLevel ? "Max Level" : `Upgrade (${upgradeCost.toLocaleString()} Gold)`}
+                  </Button>
+                </>
+              );
+            })()}
+
+            <div className="border-t border-border pt-4">
+              {currentTier >= 3 ? (
+                <div>
+                  <h3 className="font-semibold mb-3 flex items-center gap-2">
+                    <Dumbbell className="w-4 h-4" /> Offline Training
+                  </h3>
+                  {trainingStatus?.active ? (
+                    <div className="space-y-3">
+                      <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/30">
+                        <p>Training: <strong>{trainingStatus.stat}</strong></p>
+                        <p className="text-sm text-muted-foreground">Started: {trainingStatus.startedAt ? new Date(trainingStatus.startedAt).toLocaleTimeString() : "Unknown"}</p>
+                        <p className="text-sm">Accumulated XP: <strong>{trainingStatus.accumulatedXp || 0}</strong></p>
+                        <p className="text-xs text-muted-foreground">Rate: {trainingStatus.xpPerHour} XP/hour</p>
+                      </div>
+                      <Button
+                        className="w-full"
+                        onClick={() => collectTrainingMutation.mutate()}
+                        disabled={collectTrainingMutation.isPending}
+                      >
+                        Collect Training ({trainingStatus.accumulatedXp || 0} XP)
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <p className="text-sm text-muted-foreground">Select a stat to train while offline (Max 24h):</p>
+                      <div className="flex flex-wrap gap-2">
+                        {["Str", "Def", "Spd", "Int", "Luck"].map(stat => (
+                          <Button
+                            key={stat}
+                            variant={selectedTrainingStat === stat ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setSelectedTrainingStat(stat)}
+                          >
+                            {stat}
+                          </Button>
+                        ))}
+                      </div>
+                      <Button
+                        className="w-full"
+                        onClick={() => startTrainingMutation.mutate(selectedTrainingStat)}
+                        disabled={startTrainingMutation.isPending}
+                      >
+                        Start Training {selectedTrainingStat}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center text-muted-foreground py-4">
+                  <Lock className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">Offline training unlocks at Tier 3 (Keep)</p>
+                  <p className="text-xs mt-1">Upgrade your base to train stats while offline.</p>
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenBuilding(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Secure Vault Dialog */}
+      <Dialog open={openBuilding === "vault"} onOpenChange={(open) => !open && setOpenBuilding(null)}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Coins className="w-5 h-5 text-yellow-500" />
+              Secure Vault
+            </DialogTitle>
+            <DialogDescription>Store gold safely and earn daily interest.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {(() => {
+              const room = baseRooms.find(r => r.id === "vault")!;
+              const level = getRoomLevel("vault");
+              const maxLevel = ROOM_MAX_LEVEL_BY_TIER[currentTier] || 3;
+              const progress = (level / maxLevel) * 100;
+              const upgradeCost = ROOM_UPGRADE_BASE_COST["vault"] * level;
+              return (
+                <>
+                  <div className="flex items-center justify-between">
+                    <Badge>Level {level} / {maxLevel}</Badge>
+                  </div>
+                  <Progress value={progress} className="h-2" />
+                  <div className="space-y-1">
+                    {room.benefits.map((b, i) => (
+                      <div key={i} className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Sparkles className="w-3 h-3 text-primary" />{b}
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    className="w-full"
+                    disabled={level >= maxLevel}
+                    onClick={() => handleUpgradeRoom("vault")}
+                  >
+                    <Coins className="w-4 h-4 mr-2" />
+                    {level >= maxLevel ? "Max Level" : `Upgrade (${upgradeCost.toLocaleString()} Gold)`}
+                  </Button>
+                </>
+              );
+            })()}
+
+            <div className="border-t border-border pt-4">
+              {currentTier >= 4 ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                      <p className="text-xs text-muted-foreground">Vault Gold</p>
+                      <p className="text-lg font-bold text-yellow-500">{(vaultStatus?.vaultGold || 0).toLocaleString()}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-secondary/50">
+                      <p className="text-xs text-muted-foreground">Capacity</p>
+                      <p className="text-lg font-bold">{(vaultStatus?.maxCapacity || 0).toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                    <p className="text-xs text-muted-foreground">Daily Interest</p>
+                    <p className="text-sm font-medium text-green-500">
+                      +{(vaultStatus?.dailyInterest || 0).toLocaleString()} gold/day ({((vaultStatus?.interestRate || 0) * 100).toFixed(1)}%)
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={vaultAmount}
+                      onChange={(e) => setVaultAmount(e.target.value)}
+                      placeholder="Amount"
+                      className="flex-1 px-3 py-2 rounded-md border bg-background text-sm"
+                    />
+                    <Button size="sm" onClick={handleVaultDeposit} disabled={!vaultAmount}>Deposit</Button>
+                    <Button size="sm" variant="outline" onClick={handleVaultWithdraw} disabled={!vaultAmount}>Withdraw</Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Gold in the vault is protected from raids and PvP losses. Interest is calculated on login.
+                  </p>
+                </div>
+              ) : (
+                <div className="text-center text-muted-foreground py-4">
+                  <Lock className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">Vault operations unlock at Tier 4 (Manor)</p>
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenBuilding(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Defense Tower Dialog */}
+      <Dialog open={openBuilding === "defenses"} onOpenChange={(open) => !open && setOpenBuilding(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="w-5 h-5 text-slate-400" />
+              Defense Tower
+            </DialogTitle>
+            <DialogDescription>Arrow Traps, Magic Wards, and elite guards.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {(() => {
+              const room = baseRooms.find(r => r.id === "defenses")!;
+              const level = getRoomLevel("defenses");
+              const maxLevel = ROOM_MAX_LEVEL_BY_TIER[currentTier] || 3;
+              const progress = (level / maxLevel) * 100;
+              const upgradeCost = ROOM_UPGRADE_BASE_COST["defenses"] * level;
+              return (
+                <>
+                  <div className="flex items-center justify-between">
+                    <Badge>Level {level} / {maxLevel}</Badge>
+                    <span className="text-sm text-muted-foreground">Defense Rating: {level * 10}</span>
+                  </div>
+                  <Progress value={progress} className="h-2" />
+                  <div className="space-y-1">
+                    {room.benefits.map((b, i) => (
+                      <div key={i} className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Sparkles className="w-3 h-3 text-primary" />{b}
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    className="w-full"
+                    disabled={level >= maxLevel}
+                    onClick={() => handleUpgradeRoom("defenses")}
+                  >
+                    <Coins className="w-4 h-4 mr-2" />
+                    {level >= maxLevel ? "Max Level" : `Upgrade (${upgradeCost.toLocaleString()} Gold)`}
+                  </Button>
+                </>
+              );
+            })()}
+
+            {currentTier >= 3 ? (
+              <div className="border-t border-border pt-4 space-y-4">
+                <h4 className="text-sm font-semibold text-muted-foreground">TRAPS & SENTRIES</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-lg bg-secondary/50 border border-primary/20">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="font-medium flex items-center gap-2"><Target className="w-4 h-4 text-red-400" />Arrow Traps</p>
+                      <Badge variant="outline" className="text-xs">Level {getRoomLevel("defenses")}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-3">Deals {getRoomLevel("defenses") * 50} damage to raiders.</p>
+                    <Progress value={getRoomLevel("defenses") * 10} className="h-1.5" />
+                  </div>
+                  <div className="p-4 rounded-lg bg-secondary/50 border border-primary/20">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="font-medium flex items-center gap-2"><Zap className="w-4 h-4 text-yellow-400" />Magical Wards</p>
+                      <Badge variant="outline" className="text-xs">Level {getRoomLevel("defenses")}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-3">Reduces gold lost by {getRoomLevel("defenses") * 5}%.</p>
+                    <Progress value={getRoomLevel("defenses") * 10} className="h-1.5" />
+                  </div>
+                  {currentTier >= 4 && (
+                    <>
+                      <div className="p-4 rounded-lg bg-secondary/50 border border-orange-500/20">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="font-medium flex items-center gap-2"><Flame className="w-4 h-4 text-orange-400" />Fire Pits</p>
+                          <Badge variant="outline" className="text-xs bg-orange-500/10">Tier 4+</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-3">Burns {getRoomLevel("defenses") * 2}% of raider HP over time.</p>
+                        <Progress value={getRoomLevel("defenses") * 10} className="h-1.5" />
+                      </div>
+                      <div className="p-4 rounded-lg bg-secondary/50 border border-blue-500/20">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="font-medium flex items-center gap-2"><Shield className="w-4 h-4 text-blue-400" />Reinforced Walls</p>
+                          <Badge variant="outline" className="text-xs bg-blue-500/10">Tier 4+</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-3">+{getRoomLevel("defenses") * 100} base defense rating.</p>
+                        <Progress value={getRoomLevel("defenses") * 10} className="h-1.5" />
+                      </div>
+                    </>
+                  )}
+                  {currentTier >= 5 && (
+                    <>
+                      <div className="p-4 rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="font-medium flex items-center gap-2"><Sparkles className="w-4 h-4 text-purple-400" />Arcane Sentinels</p>
+                          <Badge className="text-xs bg-purple-600">Tier 5</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-3">Summons {Math.floor(getRoomLevel("defenses") / 2) + 1} magical guardians.</p>
+                        <Progress value={getRoomLevel("defenses") * 10} className="h-1.5" />
+                      </div>
+                      <div className="p-4 rounded-lg bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/30">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="font-medium flex items-center gap-2"><Crown className="w-4 h-4 text-yellow-400" />Dragon's Wrath</p>
+                          <Badge className="text-xs bg-yellow-600">Tier 5</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-3">Ultimate defense — 25% chance to instantly defeat raiders.</p>
+                        <Progress value={100} className="h-1.5" />
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <h4 className="text-sm font-semibold text-muted-foreground pt-2">HIRE GUARDS</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-lg bg-secondary/50 border border-border hover:border-primary/50 transition-colors cursor-pointer">
+                    <div className="flex items-center gap-3 mb-2">
+                      <Users className="w-8 h-8 text-green-400" />
+                      <div>
+                        <p className="font-medium">Militia</p>
+                        <p className="text-xs text-muted-foreground">Basic guards</p>
+                      </div>
+                    </div>
+                    <p className="text-xs mb-2">+100 Defense Rating</p>
+                    <Button size="sm" variant="outline" className="w-full">
+                      <Coins className="w-3 h-3 mr-1" /> 50,000/day
+                    </Button>
+                  </div>
+                  <div className={`p-4 rounded-lg bg-secondary/50 border ${currentTier >= 4 ? 'border-border hover:border-primary/50 cursor-pointer' : 'border-border/30 opacity-50'} transition-colors`}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <Swords className="w-8 h-8 text-blue-400" />
+                      <div>
+                        <p className="font-medium">Knights</p>
+                        <p className="text-xs text-muted-foreground">Elite warriors</p>
+                      </div>
+                    </div>
+                    <p className="text-xs mb-2">+500 Defense Rating</p>
+                    <Button size="sm" variant="outline" className="w-full" disabled={currentTier < 4}>
+                      {currentTier >= 4 ? <><Coins className="w-3 h-3 mr-1" /> 250,000/day</> : <><Lock className="w-3 h-3 mr-1" /> Tier 4</>}
+                    </Button>
+                  </div>
+                  <div className={`p-4 rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10 border ${currentTier >= 5 ? 'border-purple-500/30 hover:border-purple-500/50 cursor-pointer' : 'border-border/30 opacity-50'} transition-colors`}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <Crown className="w-8 h-8 text-purple-400" />
+                      <div>
+                        <p className="font-medium">Dragon Guard</p>
+                        <p className="text-xs text-muted-foreground">Legendary protectors</p>
+                      </div>
+                    </div>
+                    <p className="text-xs mb-2">+2000 Defense Rating</p>
+                    <Button size="sm" variant="outline" className="w-full" disabled={currentTier < 5}>
+                      {currentTier >= 5 ? <><Coins className="w-3 h-3 mr-1" /> 1,000,000/day</> : <><Lock className="w-3 h-3 mr-1" /> Tier 5</>}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="border-t border-border pt-4 text-center text-muted-foreground py-4">
+                <Shield className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">Defense systems unlock at Tier 3 (Keep)</p>
+                <p className="text-xs mt-1">Upgrade your base to access traps and guards.</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenBuilding(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* War Room (Raids) Dialog */}
+      <Dialog open={openBuilding === "raids"} onOpenChange={(open) => !open && setOpenBuilding(null)}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Target className="w-5 h-5 text-red-500" />
+              War Room — NPC Raids
+            </DialogTitle>
+            <DialogDescription>Test your defenses against waves of attackers.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">Raids scale with your rank. Defend for gold and XP!</p>
+              <Button onClick={handleTriggerRaid} disabled={isRaiding} variant="destructive" size="sm">
+                {isRaiding ? "Defending..." : "Trigger Raid"}
+              </Button>
+            </div>
+
+            {raidResult && (
+              <div className={`p-4 rounded-lg ${raidResult.result === "victory" ? "bg-green-500/10 border border-green-500/30" : "bg-red-500/10 border border-red-500/30"}`}>
+                <p className="font-medium">{raidResult.message}</p>
+                {raidResult.rewards && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Rewards: {raidResult.rewards.gold.toLocaleString()} gold, {raidResult.rewards.exp} exp
+                  </p>
                 )}
               </div>
-              <div className="space-y-2">
-                <h4 className="text-sm font-semibold text-muted-foreground">Available Trophies</h4>
+            )}
+
+            <div className="space-y-3">
+              {raidEvents.map((raid: any) => (
+                <div key={raid.id} className="p-3 rounded-lg bg-secondary/50 flex justify-between items-center">
+                  <div>
+                    <p className="font-medium">{raid.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Unlocks at Rank {playerRanks[raid.minRank || 0]} | Difficulty: {"⭐".repeat(raid.difficulty)}
+                    </p>
+                  </div>
+                  <div className="text-right text-sm">
+                    <p className="text-yellow-500">{raid.rewards.gold.toLocaleString()} gold</p>
+                    <p className="text-blue-500">{raid.rewards.exp} exp</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenBuilding(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Events Hall Dialog */}
+      <Dialog open={openBuilding === "events"} onOpenChange={(open) => !open && setOpenBuilding(null)}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-purple-500" />
+              Events Hall
+            </DialogTitle>
+            <DialogDescription>Weekly events and visitor system.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {weeklyEvent?.active && (
+              <div className={`p-4 rounded-lg ${weeklyEvent.active.type === "hero" ? "bg-yellow-500/10 border border-yellow-500/30" : "bg-purple-500/10 border border-purple-500/30"}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <Badge variant={weeklyEvent.active.type === "hero" ? "default" : "secondary"}>
+                    {weeklyEvent.active.type === "hero" ? "Hero Event" : "Joker Event"}
+                  </Badge>
+                  <span className="font-semibold">{weeklyEvent.active.name}</span>
+                </div>
+                <p className="text-sm">{weeklyEvent.active.description}</p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Next event in: {Math.floor(weeklyEvent.nextEventIn / (1000 * 60 * 60 * 24))} days
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium text-muted-foreground">All Weekly Events</h4>
+              {weeklyEvent?.allEvents?.map((event: any) => (
+                <div
+                  key={event.id}
+                  className={`p-3 rounded-lg bg-secondary/50 ${event.id === weeklyEvent.active?.id ? "ring-2 ring-primary" : ""}`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge variant={event.type === "hero" ? "default" : "outline"} className="text-xs">
+                      {event.type === "hero" ? "Hero" : "Joker"}
+                    </Badge>
+                    <span className="font-medium">{event.name}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{event.description}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="border-t border-border pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-blue-500" />
+                  <span className="font-medium">Visitor System</span>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => { setOpenBuilding(null); setVisitDialog(true); }}>
+                  Visit Player Base
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Visit other players' bases to see their trophies (80% visible). Upgrade your base to impress visitors!
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenBuilding(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Base Skins Dialog */}
+      <Dialog open={skinDialog} onOpenChange={setSkinDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Palette className="w-5 h-5" />
+              Base Skins
+            </DialogTitle>
+            <DialogDescription>
+              Choose a cosmetic skin for your base. Some skins cost gold.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex items-center justify-between p-3 rounded-md bg-yellow-500/10 border border-yellow-500/20">
+              <span className="text-sm font-medium flex items-center gap-2">
+                <Coins className="w-4 h-4 text-yellow-500" />
+                Your Gold
+              </span>
+              <span className="font-mono font-bold text-yellow-500">{(account?.gold || 0).toLocaleString()}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {baseSkins.map(skin => {
+                const isCurrentSkin = (account as any).baseSkin === skin.id || (!((account as any).baseSkin) && skin.id === "default");
+                const canAfford = skin.cost === 0 || (account?.gold || 0) >= skin.cost || isCurrentSkin;
+                return (
+                  <Button
+                    key={skin.id}
+                    variant={isCurrentSkin ? "default" : "outline"}
+                    className="flex flex-col items-center py-3 h-auto"
+                    disabled={isSettingSkin || (!canAfford && !isCurrentSkin)}
+                    onClick={() => handleSetSkin(skin.id)}
+                  >
+                    <span className="font-medium">{skin.name}</span>
+                    {skin.cost > 0 && !isCurrentSkin && (
+                      <span className="text-xs text-yellow-500">{skin.cost.toLocaleString()} gold</span>
+                    )}
+                    {isCurrentSkin && <span className="text-xs text-green-400">Equipped</span>}
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSkinDialog(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Trophies Dialog */}
+      <Dialog open={trophyDialog} onOpenChange={setTrophyDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-yellow-500" />
+              Trophies ({trophyData?.earned.length || 0} / {trophyData?.available.length || 0})
+            </DialogTitle>
+            <DialogDescription>
+              Earn trophies by completing achievements. They're visible to visitors!
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4 max-h-96 overflow-y-auto">
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold text-green-400">Earned Trophies</h4>
+              {trophyData?.earned.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No trophies earned yet</p>
+              ) : (
                 <div className="grid gap-2">
-                  {trophyData?.available.filter(t => !trophyData.earned.find(e => e.id === t.id)).map(trophy => (
-                    <div key={trophy.id} className="p-3 rounded-lg bg-secondary/30 border border-secondary/50 opacity-60">
+                  {trophyData?.earned.map(trophy => (
+                    <div key={trophy.id} className="p-3 rounded-lg bg-green-500/10 border border-green-500/30">
                       <div className="flex items-center gap-2">
-                        <Lock className="w-4 h-4 text-muted-foreground" />
+                        <Trophy className="w-4 h-4 text-yellow-500" />
                         <span className="font-medium">{trophy.name}</span>
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">{trophy.description}</p>
                     </div>
                   ))}
                 </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setTrophyDialog(false)}>Close</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={visitDialog} onOpenChange={(open) => { setVisitDialog(open); if (!open) setVisitorData(null); }}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-blue-500" />
-                Visit Player Base
-              </DialogTitle>
-              <DialogDescription>
-                Select a player to visit their base and see their trophies (80% visibility).
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              {!visitorData ? (
-                <>
-                  <p className="text-sm text-muted-foreground">Online Players:</p>
-                  <div className="grid gap-2 max-h-60 overflow-y-auto">
-                    {onlinePlayers.filter((p: any) => p.id !== account?.id).length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No other players online</p>
-                    ) : (
-                      onlinePlayers.filter((p: any) => p.id !== account?.id).map((player: any) => (
-                        <Button
-                          key={player.id}
-                          variant="outline"
-                          className="justify-between"
-                          onClick={() => handleVisitBase(player.id)}
-                          disabled={isLoadingVisit}
-                        >
-                          <span>{player.username}</span>
-                          <Badge variant="outline">{player.rank}</Badge>
-                        </Button>
-                      ))
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div className="space-y-4">
-                  <div className="p-4 rounded-lg bg-gradient-to-r from-primary/10 to-secondary/10 border">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-semibold text-lg">{visitorData.ownerName}'s Base</h3>
-                      <Badge>{visitorData.ownerRank}</Badge>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <span className="text-muted-foreground">Race:</span>
-                        <span className="ml-2 capitalize">{visitorData.ownerRace}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Base Tier:</span>
-                        <span className="ml-2">{visitorData.baseTier}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Base Skin:</span>
-                        <span className="ml-2 capitalize">{visitorData.baseSkin}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Total Trophies:</span>
-                        <span className="ml-2">{visitorData.trophyCount}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium flex items-center gap-2">
-                        <Trophy className="w-4 h-4 text-yellow-500" />
-                        Visible Trophies
-                      </h4>
-                      <span className="text-xs text-muted-foreground">{visitorData.visibilityNote}</span>
-                    </div>
-                    {visitorData.trophies?.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No trophies visible</p>
-                    ) : (
-                      <div className="grid gap-2 max-h-40 overflow-y-auto">
-                        {visitorData.trophies?.map((trophyId: string) => (
-                          <div key={trophyId} className="p-2 rounded bg-yellow-500/10 border border-yellow-500/30 flex items-center gap-2">
-                            <Trophy className="w-4 h-4 text-yellow-500" />
-                            <span className="text-sm capitalize">{trophyId.replace(/_/g, " ")}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <Button variant="outline" onClick={() => setVisitorData(null)} className="w-full">
-                    Back to Player List
-                  </Button>
-                </div>
               )}
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => { setVisitDialog(false); setVisitorData(null); }}>Close</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-        </div>
-      </div>
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold text-muted-foreground">Available Trophies</h4>
+              <div className="grid gap-2">
+                {trophyData?.available.filter(t => !trophyData.earned.find(e => e.id === t.id)).map(trophy => (
+                  <div key={trophy.id} className="p-3 rounded-lg bg-secondary/30 border border-secondary/50 opacity-60">
+                    <div className="flex items-center gap-2">
+                      <Lock className="w-4 h-4 text-muted-foreground" />
+                      <span className="font-medium">{trophy.name}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">{trophy.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTrophyDialog(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Visit Player Base Dialog */}
+      <Dialog open={visitDialog} onOpenChange={(open) => { setVisitDialog(open); if (!open) setVisitorData(null); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-blue-500" />
+              Visit Player Base
+            </DialogTitle>
+            <DialogDescription>
+              Select a player to visit their base and see their trophies (80% visibility).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {!visitorData ? (
+              <>
+                <p className="text-sm text-muted-foreground">Online Players:</p>
+                <div className="grid gap-2 max-h-60 overflow-y-auto">
+                  {onlinePlayers.filter((p: any) => p.id !== account?.id).length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No other players online</p>
+                  ) : (
+                    onlinePlayers.filter((p: any) => p.id !== account?.id).map((player: any) => (
+                      <Button
+                        key={player.id}
+                        variant="outline"
+                        className="justify-between"
+                        onClick={() => handleVisitBase(player.id)}
+                        disabled={isLoadingVisit}
+                      >
+                        <span>{player.username}</span>
+                        <Badge variant="outline">{player.rank}</Badge>
+                      </Button>
+                    ))
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="space-y-4">
+                <div className="p-4 rounded-lg bg-gradient-to-r from-primary/10 to-secondary/10 border">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold text-lg">{visitorData.ownerName}'s Base</h3>
+                    <Badge>{visitorData.ownerRank}</Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div><span className="text-muted-foreground">Race:</span><span className="ml-2 capitalize">{visitorData.ownerRace}</span></div>
+                    <div><span className="text-muted-foreground">Base Tier:</span><span className="ml-2">{visitorData.baseTier}</span></div>
+                    <div><span className="text-muted-foreground">Base Skin:</span><span className="ml-2 capitalize">{visitorData.baseSkin}</span></div>
+                    <div><span className="text-muted-foreground">Total Trophies:</span><span className="ml-2">{visitorData.trophyCount}</span></div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-medium flex items-center gap-2">
+                      <Trophy className="w-4 h-4 text-yellow-500" />
+                      Visible Trophies
+                    </h4>
+                    <span className="text-xs text-muted-foreground">{visitorData.visibilityNote}</span>
+                  </div>
+                  {visitorData.trophies?.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No trophies visible</p>
+                  ) : (
+                    <div className="grid gap-2 max-h-40 overflow-y-auto">
+                      {visitorData.trophies?.map((trophyId: string) => (
+                        <div key={trophyId} className="p-2 rounded bg-yellow-500/10 border border-yellow-500/30 flex items-center gap-2">
+                          <Trophy className="w-4 h-4 text-yellow-500" />
+                          <span className="text-sm capitalize">{trophyId.replace(/_/g, " ")}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <Button variant="outline" onClick={() => setVisitorData(null)} className="w-full">
+                  Back to Player List
+                </Button>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setVisitDialog(false); setVisitorData(null); }}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </ZoneScene>
   );
 }
