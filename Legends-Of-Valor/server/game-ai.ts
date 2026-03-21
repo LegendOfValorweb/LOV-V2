@@ -6,9 +6,21 @@ import { eq } from "drizzle-orm";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
 
+const GEMINI_MODEL = "gemini-1.5-flash";
+
+// Simple in-memory rate limiter: max 1 request per 4 seconds per account
+const lastRequestTime = new Map<string, number>();
+function isRateLimited(accountId: string): boolean {
+  const now = Date.now();
+  const last = lastRequestTime.get(accountId) ?? 0;
+  if (now - last < 4000) return true;
+  lastRequestTime.set(accountId, now);
+  return false;
+}
+
 function getModel(systemInstruction: string) {
   return genAI.getGenerativeModel({
-    model: "gemini-2.0-flash",
+    model: GEMINI_MODEL,
     systemInstruction,
     generationConfig: {
       temperature: 0.8,
@@ -390,8 +402,19 @@ ${personality}
 `;
 
     const systemInstruction = GAME_SYSTEM_PROMPT + "\n\n" + playerContext;
+    if (isRateLimited(accountId)) {
+      const fallback = getFallbackResponse(account.username);
+      const newHistory = [
+        ...conversationHistory,
+        { role: "user" as const, content: playerMessage },
+        { role: "assistant" as const, content: fallback },
+      ].slice(-50);
+      try { await updatePlayerStoryline(accountId, { conversationHistory: newHistory }); } catch (_) {}
+      return { message: fallback, rewardRequests: [], adminRequests: [] };
+    }
+
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
+      model: GEMINI_MODEL,
       systemInstruction,
       generationConfig: { temperature: 0.8, maxOutputTokens: 500 },
     });
@@ -521,7 +544,7 @@ Keep it friendly, comprehensive but not overwhelming. About 300-400 words.`;
 
   try {
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
+      model: GEMINI_MODEL,
       systemInstruction: GAME_SYSTEM_PROMPT,
       generationConfig: { temperature: 0.7, maxOutputTokens: 600 },
     });
