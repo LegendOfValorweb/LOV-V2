@@ -2349,7 +2349,7 @@ export async function registerRoutes(
       // Get pets and birds for both players to add their stats
       const { pets, birds } = await import("@shared/schema");
       
-      // Helper to get total combat stats including pets and birds
+      // Helper to get total combat stats including equipped gear, pets, and birds
       const getTotalCombatStats = async (account: typeof challenger) => {
         const baseStats = account.stats as any || {};
         const stats = {
@@ -2359,6 +2359,27 @@ export async function registerRoutes(
           Int: baseStats.Int || 10,
           Luck: baseStats.Luck || 10,
         };
+
+        // Add equipped item stats (weapon, armor, accessories)
+        const inventory = await storage.getInventoryByAccount(account.id);
+        const equipped = (account.equipped || {}) as Record<string, string | null | undefined>;
+        const usedInvIds = new Set<string>();
+        for (const slot of ["weapon", "armor", "accessory1", "accessory2"]) {
+          const itemId = equipped[slot];
+          if (!itemId) continue;
+          const invItem = inventory.find(i => i.itemId === itemId && !usedInvIds.has(i.id));
+          if (invItem) {
+            usedInvIds.add(invItem.id);
+            if (invItem.stats) {
+              const s = invItem.stats as Record<string, unknown>;
+              stats.Str += Number(s.Str) || 0;
+              stats.Def += Number(s.Def) || 0;
+              stats.Spd += Number(s.Spd) || 0;
+              stats.Int += Number(s.Int) || 0;
+              stats.Luck += Number(s.Luck) || 0;
+            }
+          }
+        }
         
         // Add equipped pet stats
         if (account.equippedPetId) {
@@ -2368,7 +2389,6 @@ export async function registerRoutes(
             stats.Str += petStats.Str || 0;
             stats.Spd += petStats.Spd || 0;
             stats.Luck += petStats.Luck || 0;
-            // ElementalPower adds to Int
             stats.Int += petStats.ElementalPower || 0;
           }
         }
@@ -2384,7 +2404,7 @@ export async function registerRoutes(
         return stats;
       };
       
-      // Initialize combat state - HP scales with all stats including pets/birds
+      // Initialize combat state - HP scales with all stats including equipped gear, pets, and birds
       const challengerStats = await getTotalCombatStats(challenger);
       const challengedStats = await getTotalCombatStats(challenged);
       const calcHP = (stats: any) => {
@@ -2564,7 +2584,7 @@ export async function registerRoutes(
           : !combatState.challengerAction;
         
         if (isNPCAccount(opponentAccount.username) && npcNeedsAction) {
-          // Helper to get total combat stats including pets and birds
+          // Helper to get total combat stats including equipped gear, pets, and birds
           const getNPCTotalStats = async (account: typeof opponentAccount) => {
             const baseStats = account.stats as any || {};
             const stats = {
@@ -2574,6 +2594,27 @@ export async function registerRoutes(
               Int: baseStats.Int || 10,
               Luck: baseStats.Luck || 10,
             };
+
+            // Add equipped item stats
+            const inventory = await storage.getInventoryByAccount(account.id);
+            const equipped = (account.equipped || {}) as Record<string, string | null | undefined>;
+            const usedInvIds = new Set<string>();
+            for (const slot of ["weapon", "armor", "accessory1", "accessory2"]) {
+              const itemId = equipped[slot];
+              if (!itemId) continue;
+              const invItem = inventory.find(i => i.itemId === itemId && !usedInvIds.has(i.id));
+              if (invItem) {
+                usedInvIds.add(invItem.id);
+                if (invItem.stats) {
+                  const s = invItem.stats as Record<string, unknown>;
+                  stats.Str += Number(s.Str) || 0;
+                  stats.Def += Number(s.Def) || 0;
+                  stats.Spd += Number(s.Spd) || 0;
+                  stats.Int += Number(s.Int) || 0;
+                  stats.Luck += Number(s.Luck) || 0;
+                }
+              }
+            }
             
             if (account.equippedPetId) {
               const [equippedPet] = await db.select().from(pets).where(eq(pets.id, account.equippedPetId));
@@ -2642,7 +2683,7 @@ export async function registerRoutes(
           return res.status(404).json({ error: "Player not found" });
         }
         
-        // Get total combat stats including pets and birds
+        // Get total combat stats including equipped gear, pets, and birds
         const { pets, birds } = await import("@shared/schema");
         
         const getTotalCombatStats = async (account: typeof challenger) => {
@@ -2654,6 +2695,27 @@ export async function registerRoutes(
             Int: baseStats.Int || 10,
             Luck: baseStats.Luck || 10,
           };
+
+          // Add equipped item stats (weapon, armor, accessories)
+          const inventory = await storage.getInventoryByAccount(account.id);
+          const equipped = (account.equipped || {}) as Record<string, string | null | undefined>;
+          const usedInvIds = new Set<string>();
+          for (const slot of ["weapon", "armor", "accessory1", "accessory2"]) {
+            const itemId = equipped[slot];
+            if (!itemId) continue;
+            const invItem = inventory.find(i => i.itemId === itemId && !usedInvIds.has(i.id));
+            if (invItem) {
+              usedInvIds.add(invItem.id);
+              if (invItem.stats) {
+                const s = invItem.stats as Record<string, unknown>;
+                stats.Str += Number(s.Str) || 0;
+                stats.Def += Number(s.Def) || 0;
+                stats.Spd += Number(s.Spd) || 0;
+                stats.Int += Number(s.Int) || 0;
+                stats.Luck += Number(s.Luck) || 0;
+              }
+            }
+          }
           
           // Add equipped pet stats
           if (account.equippedPetId) {
@@ -10017,7 +10079,8 @@ export async function registerRoutes(
       }
       
       const enemyPower = floor * 10 + level;
-      const playerPower = Object.values(account.stats || { Str: 10 }).reduce((a, b) => a + b, 0);
+      const totalPlayerStats = await getPlayerTotalStats(account.id);
+      const playerPower = Object.values(totalPlayerStats).reduce((a, b) => a + b, 0);
       const won = playerPower >= enemyPower * 0.8 || Math.random() > 0.3;
       
       if (!won) {
