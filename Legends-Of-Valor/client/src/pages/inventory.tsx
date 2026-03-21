@@ -180,11 +180,19 @@ export default function Inventory() {
 
   const equippedItems = useMemo(() => {
     if (!account) return { weapon: null, armor: null, accessory1: null, accessory2: null };
-    const findInvItem = (itemId: string | null) => {
-      if (!itemId) return null;
-      const inv = inventory.find(i => i.itemId === itemId);
+    const usedIds = new Set<string>();
+    const findInvItem = (equippedId: string | null) => {
+      if (!equippedId) return null;
+      // Try UUID match first, then fall back to itemId for legacy accounts
+      let inv = inventory.find(i => i.id === equippedId && !usedIds.has(i.id));
+      if (!inv) {
+        inv = inventory.find(i => i.itemId === equippedId && !usedIds.has(i.id));
+      }
       if (!inv) return null;
-      return { item: getItemById(inv.itemId)!, invItem: inv };
+      usedIds.add(inv.id);
+      const item = getItemById(inv.itemId);
+      if (!item) return null;
+      return { item, invItem: inv };
     };
     return {
       weapon: findInvItem(account.equipped?.weapon),
@@ -245,26 +253,32 @@ export default function Inventory() {
 
   const handleEquip = async (item: { inventoryId: string; id: string }, slot: string) => {
     if (!account) return;
-    const newEquipped = { ...account.equipped, [slot]: item.id };
+    const previousEquipped = account.equipped;
+    const newEquipped = { ...account.equipped, [slot]: item.inventoryId };
     try {
-      await apiRequest("PATCH", `/api/accounts/${account.id}`, { equipped: newEquipped });
-      setAccount({ ...account, equipped: newEquipped });
+      const res = await apiRequest("PATCH", `/api/accounts/${account.id}`, { equipped: newEquipped });
+      const updatedAccount = await res.json();
+      setAccount(updatedAccount);
       setEquipDialog(null);
       await refreshInventory();
     } catch (error) {
       console.error("Failed to equip item:", error);
+      setAccount({ ...account, equipped: previousEquipped });
     }
   };
 
   const handleUnequip = async (slot: string) => {
     if (!account) return;
+    const previousEquipped = account.equipped;
     const newEquipped = { ...account.equipped, [slot]: null };
     try {
-      await apiRequest("PATCH", `/api/accounts/${account.id}`, { equipped: newEquipped });
-      setAccount({ ...account, equipped: newEquipped });
+      const res = await apiRequest("PATCH", `/api/accounts/${account.id}`, { equipped: newEquipped });
+      const updatedAccount = await res.json();
+      setAccount(updatedAccount);
       await refreshInventory();
     } catch (error) {
       console.error("Failed to unequip item:", error);
+      setAccount({ ...account, equipped: previousEquipped });
     }
   };
 
@@ -349,7 +363,7 @@ export default function Inventory() {
   }, []);
 
   const handleItemClick = useCallback((item: typeof inventoryItems[0]) => {
-    setSelectedItem(prev => prev?.item.id === item.id ? null : { item, invItem: item.invItem });
+    setSelectedItem(prev => prev?.invItem.id === item.inventoryId ? null : { item, invItem: item.invItem });
   }, []);
 
   const getCurrentEquippedForSlot = useCallback((type: string) => {
@@ -532,7 +546,7 @@ export default function Inventory() {
                     className={cn(
                       "rpg-inv-slot",
                       `rpg-inv-slot-rarity-${item.tier}`,
-                      selectedItem?.item.id === item.id && "rpg-inv-slot-selected"
+                      selectedItem?.invItem.id === item.inventoryId && "rpg-inv-slot-selected"
                     )}
                     onClick={() => handleItemClick(item)}
                     onMouseEnter={(e) => handleItemHover(e, item, item.invItem)}
@@ -572,7 +586,7 @@ export default function Inventory() {
                 </div>
                 <div style={{ padding: "8px 12px", display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button
-                    onClick={() => handleQuickEquip(inventoryItems.find(i => i.id === selectedItem.item.id)!)}
+                    onClick={() => handleQuickEquip(inventoryItems.find(i => i.inventoryId === selectedItem.invItem.id)!)}
                     className="rpg-button"
                     style={{ padding: "4px 12px", fontSize: "0.7rem" }}
                   >

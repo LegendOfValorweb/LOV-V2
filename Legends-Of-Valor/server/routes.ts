@@ -337,6 +337,29 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  // Helper: resolve equipped inventory items by UUID (new) or itemId (legacy fallback).
+  // Returns deduplicated items per slot; call once per equipped object to avoid double-counting.
+  function resolveEquippedItems(
+    equipped: Record<string, string | null | undefined>,
+    inventory: { id: string; itemId: string; stats?: unknown }[],
+  ): Array<{ id: string; itemId: string; stats?: unknown }> {
+    const usedIds = new Set<string>();
+    const result: Array<{ id: string; itemId: string; stats?: unknown }> = [];
+    for (const slot of ["weapon", "armor", "accessory1", "accessory2"]) {
+      const equippedId = equipped[slot];
+      if (!equippedId) continue;
+      let item = inventory.find(i => i.id === equippedId && !usedIds.has(i.id));
+      if (!item) {
+        item = inventory.find(i => i.itemId === equippedId && !usedIds.has(i.id));
+      }
+      if (item) {
+        usedIds.add(item.id);
+        result.push(item);
+      }
+    }
+    return result;
+  }
+
   // Unified helper: compute full stat object including equipped items and pet bonuses
   const getPlayerTotalStats = async (accountId: string): Promise<{
     Str: number; Def: number; Spd: number; Int: number; Luck: number; Pot: number;
@@ -357,22 +380,15 @@ export async function registerRoutes(
     const inventory = await storage.getInventoryByAccount(accountId);
     const equipped = (account.equipped || {}) as Record<string, string | null | undefined>;
 
-    const usedInventoryIds = new Set<string>();
-    for (const slot of ["weapon", "armor", "accessory1", "accessory2"]) {
-      const equippedItemId = equipped[slot];
-      if (!equippedItemId) continue;
-      const invItem = inventory.find(i => i.itemId === equippedItemId && !usedInventoryIds.has(i.id));
-      if (invItem) {
-        usedInventoryIds.add(invItem.id);
-        if (invItem.stats) {
-          const s = invItem.stats as Record<string, unknown>;
-          total.Str += Number(s.Str) || 0;
-          total.Def += Number(s.Def) || 0;
-          total.Spd += Number(s.Spd) || 0;
-          total.Int += Number(s.Int) || 0;
-          total.Luck += Number(s.Luck) || 0;
-          total.Pot += Number(s.Pot) || 0;
-        }
+    for (const invItem of resolveEquippedItems(equipped, inventory)) {
+      if (invItem.stats) {
+        const s = invItem.stats as Record<string, unknown>;
+        total.Str += Number(s.Str) || 0;
+        total.Def += Number(s.Def) || 0;
+        total.Spd += Number(s.Spd) || 0;
+        total.Int += Number(s.Int) || 0;
+        total.Luck += Number(s.Luck) || 0;
+        total.Pot += Number(s.Pot) || 0;
       }
     }
 
@@ -1037,6 +1053,50 @@ export async function registerRoutes(
       });
       
       const body = updateSchema.parse(req.body);
+
+      // Validate and normalize equipped values to inventory UUIDs
+      if (body.equipped) {
+        const accountId = req.params.id;
+        const inventory = await storage.getInventoryByAccount(accountId);
+        const inventoryById = new Map(inventory.map(i => [i.id, i]));
+        // Build map of itemId -> list of owned inventory items (for legacy per-slot resolution)
+        const inventoryByItemId = new Map<string, Array<typeof inventory[0]>>();
+        for (const item of inventory) {
+          const existing = inventoryByItemId.get(item.itemId);
+          if (existing) {
+            existing.push(item);
+          } else {
+            inventoryByItemId.set(item.itemId, [item]);
+          }
+        }
+        const normalized: Record<string, string | null> = {};
+        const assignedUUIDs = new Set<string>();
+        const equippedSlotKeys: Array<keyof typeof body.equipped> = ["weapon", "armor", "accessory1", "accessory2"];
+        for (const slot of equippedSlotKeys) {
+          const value: string | null = body.equipped[slot];
+          if (!value) {
+            normalized[slot] = null;
+          } else if (inventoryById.has(value)) {
+            // Already a valid UUID — check for cross-slot duplication
+            if (assignedUUIDs.has(value)) {
+              return res.status(400).json({ error: `Equipped item in slot '${slot}' is already equipped in another slot` });
+            }
+            assignedUUIDs.add(value);
+            normalized[slot] = value;
+          } else {
+            // Legacy itemId — resolve to an unassigned owned inventory UUID
+            const candidates = inventoryByItemId.get(value);
+            const candidate = candidates?.find(c => !assignedUUIDs.has(c.id));
+            if (!candidate) {
+              return res.status(400).json({ error: `Equipped item in slot '${slot}' is not in your inventory` });
+            }
+            assignedUUIDs.add(candidate.id);
+            normalized[slot] = candidate.id;
+          }
+        }
+        body.equipped = normalized as typeof body.equipped;
+      }
+
       const account = await storage.updateAccount(req.params.id, body);
       if (!account) {
         return res.status(404).json({ error: "Account not found" });
@@ -1713,9 +1773,9 @@ export async function registerRoutes(
         return res.status(403).json({ error: "This item doesn't belong to you" });
       }
 
-      // Check if item is equipped — equipped slots store itemId (e.g. "normal-0"), not inventory UUID
+      // Check if item is equipped — slots may store UUID (new) or itemId (legacy)
       const equippedSlots = Object.values(account.equipped || {}) as (string | null | undefined)[];
-      if (equippedSlots.includes(inventoryItem.itemId)) {
+      if (equippedSlots.includes(inventoryItem.id) || equippedSlots.includes(inventoryItem.itemId)) {
         return res.status(400).json({ error: "Cannot sell an equipped item. Unequip it first." });
       }
 
@@ -2363,21 +2423,14 @@ export async function registerRoutes(
         // Add equipped item stats (weapon, armor, accessories)
         const inventory = await storage.getInventoryByAccount(account.id);
         const equipped = (account.equipped || {}) as Record<string, string | null | undefined>;
-        const usedInvIds = new Set<string>();
-        for (const slot of ["weapon", "armor", "accessory1", "accessory2"]) {
-          const itemId = equipped[slot];
-          if (!itemId) continue;
-          const invItem = inventory.find(i => i.itemId === itemId && !usedInvIds.has(i.id));
-          if (invItem) {
-            usedInvIds.add(invItem.id);
-            if (invItem.stats) {
-              const s = invItem.stats as Record<string, unknown>;
-              stats.Str += Number(s.Str) || 0;
-              stats.Def += Number(s.Def) || 0;
-              stats.Spd += Number(s.Spd) || 0;
-              stats.Int += Number(s.Int) || 0;
-              stats.Luck += Number(s.Luck) || 0;
-            }
+        for (const invItem of resolveEquippedItems(equipped, inventory)) {
+          if (invItem.stats) {
+            const s = invItem.stats as Record<string, unknown>;
+            stats.Str += Number(s.Str) || 0;
+            stats.Def += Number(s.Def) || 0;
+            stats.Spd += Number(s.Spd) || 0;
+            stats.Int += Number(s.Int) || 0;
+            stats.Luck += Number(s.Luck) || 0;
           }
         }
         
@@ -2598,21 +2651,14 @@ export async function registerRoutes(
             // Add equipped item stats
             const inventory = await storage.getInventoryByAccount(account.id);
             const equipped = (account.equipped || {}) as Record<string, string | null | undefined>;
-            const usedInvIds = new Set<string>();
-            for (const slot of ["weapon", "armor", "accessory1", "accessory2"]) {
-              const itemId = equipped[slot];
-              if (!itemId) continue;
-              const invItem = inventory.find(i => i.itemId === itemId && !usedInvIds.has(i.id));
-              if (invItem) {
-                usedInvIds.add(invItem.id);
-                if (invItem.stats) {
-                  const s = invItem.stats as Record<string, unknown>;
-                  stats.Str += Number(s.Str) || 0;
-                  stats.Def += Number(s.Def) || 0;
-                  stats.Spd += Number(s.Spd) || 0;
-                  stats.Int += Number(s.Int) || 0;
-                  stats.Luck += Number(s.Luck) || 0;
-                }
+            for (const invItem of resolveEquippedItems(equipped, inventory)) {
+              if (invItem.stats) {
+                const s = invItem.stats as Record<string, unknown>;
+                stats.Str += Number(s.Str) || 0;
+                stats.Def += Number(s.Def) || 0;
+                stats.Spd += Number(s.Spd) || 0;
+                stats.Int += Number(s.Int) || 0;
+                stats.Luck += Number(s.Luck) || 0;
               }
             }
             
@@ -2699,21 +2745,14 @@ export async function registerRoutes(
           // Add equipped item stats (weapon, armor, accessories)
           const inventory = await storage.getInventoryByAccount(account.id);
           const equipped = (account.equipped || {}) as Record<string, string | null | undefined>;
-          const usedInvIds = new Set<string>();
-          for (const slot of ["weapon", "armor", "accessory1", "accessory2"]) {
-            const itemId = equipped[slot];
-            if (!itemId) continue;
-            const invItem = inventory.find(i => i.itemId === itemId && !usedInvIds.has(i.id));
-            if (invItem) {
-              usedInvIds.add(invItem.id);
-              if (invItem.stats) {
-                const s = invItem.stats as Record<string, unknown>;
-                stats.Str += Number(s.Str) || 0;
-                stats.Def += Number(s.Def) || 0;
-                stats.Spd += Number(s.Spd) || 0;
-                stats.Int += Number(s.Int) || 0;
-                stats.Luck += Number(s.Luck) || 0;
-              }
+          for (const invItem of resolveEquippedItems(equipped, inventory)) {
+            if (invItem.stats) {
+              const s = invItem.stats as Record<string, unknown>;
+              stats.Str += Number(s.Str) || 0;
+              stats.Def += Number(s.Def) || 0;
+              stats.Spd += Number(s.Spd) || 0;
+              stats.Int += Number(s.Int) || 0;
+              stats.Luck += Number(s.Luck) || 0;
             }
           }
           
