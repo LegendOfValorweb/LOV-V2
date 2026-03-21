@@ -2993,10 +2993,11 @@ export default function Admin() {
                     {worldBossData?.status === 'active' ? (
                       <div className="p-3 rounded bg-red-950/30 border border-red-500/30">
                         <div className="font-semibold text-red-400 mb-1">⚔️ {worldBossData.name} — ACTIVE</div>
-                        <div className="text-sm text-muted-foreground">HP: {(worldBossData.currentHp || 0).toLocaleString()} / {(worldBossData.maxHp || 0).toLocaleString()}</div>
+                        <div className="text-sm text-muted-foreground">HP: {(worldBossData.hp || 0).toLocaleString()} / {(worldBossData.maxHp || 0).toLocaleString()}</div>
                         <div className="w-full bg-muted rounded-full h-2 mt-2 overflow-hidden">
-                          <div className="bg-red-500 h-full transition-all" style={{ width: `${Math.max(0, (worldBossData.currentHp / worldBossData.maxHp) * 100)}%` }} />
+                          <div className="bg-red-500 h-full transition-all" style={{ width: `${Math.max(0, ((worldBossData.hp || 0) / (worldBossData.maxHp || 1)) * 100)}%` }} />
                         </div>
+                        <div className="text-xs text-muted-foreground mt-1">Location: {worldBossData.location} · Expires: {worldBossData.expiresAt ? new Date(worldBossData.expiresAt).toLocaleTimeString() : "N/A"}</div>
                       </div>
                     ) : (
                       <div className="p-3 rounded bg-muted/30 border border-border text-muted-foreground text-sm">No active world boss</div>

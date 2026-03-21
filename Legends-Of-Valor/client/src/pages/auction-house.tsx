@@ -50,7 +50,12 @@ export default function AuctionHouse() {
   const [minIncrement, setMinIncrement] = useState(1);
 
   const { data: auctions = [], isLoading: isAuctionsLoading } = useQuery<Auction[]>({
-    queryKey: ["/api/auctions", { type: activeTab }],
+    queryKey: ["/api/auctions", activeTab],
+    queryFn: async () => {
+      const res = await fetch(`/api/auctions?type=${activeTab}`);
+      if (!res.ok) throw new Error("Failed to fetch auctions");
+      return res.json();
+    },
     refetchInterval: 10000,
   });
 
@@ -68,6 +73,7 @@ export default function AuctionHouse() {
     if (!selectedItemForAuction) return;
     try {
       await apiRequest("POST", "/api/auctions", {
+        accountId: account.id,
         itemId: selectedItemForAuction,
         itemType,
         startingPrice,
@@ -86,7 +92,7 @@ export default function AuctionHouse() {
 
   const handleBid = async (auctionId: string, amount: number) => {
     try {
-      await apiRequest("POST", `/api/auctions/${auctionId}/bid`, { amount });
+      await apiRequest("POST", `/api/auctions/${auctionId}/bid`, { accountId: account.id, amount });
       toast({ title: "Bid placed successfully!" });
       queryClient.invalidateQueries({ queryKey: ["/api/auctions"] });
       refetchAccount?.();

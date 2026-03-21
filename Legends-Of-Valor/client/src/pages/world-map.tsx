@@ -351,6 +351,9 @@ export default function WorldMap() {
   const [isGathering, setIsGathering] = useState(false);
   const [gatherResult, setGatherResult] = useState<any>(null);
   const [zoneResources, setZoneResources] = useState<any>(null);
+  const [worldBossDialog, setWorldBossDialog] = useState(false);
+  const [worldBossAttacking, setWorldBossAttacking] = useState(false);
+  const [worldBossResult, setWorldBossResult] = useState<any>(null);
   const mapRef = useRef<HTMLDivElement>(null);
   const welcomeAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -421,6 +424,40 @@ export default function WorldMap() {
     },
     enabled: !!account,
   });
+
+  const { data: worldBossData, refetch: refetchWorldBoss } = useQuery<any>({
+    queryKey: ["/api/world-boss"],
+    queryFn: async () => {
+      const res = await fetch("/api/world-boss");
+      if (!res.ok) return null;
+      return res.json();
+    },
+    refetchInterval: 15000,
+  });
+
+  const handleAttackWorldBoss = async () => {
+    if (!account) return;
+    setWorldBossAttacking(true);
+    setWorldBossResult(null);
+    try {
+      const res = await fetch("/api/world-boss/attack", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountId: account.id }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setWorldBossResult(data);
+        refetchWorldBoss();
+      } else {
+        toast({ title: "Attack failed", description: data.error, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Failed to attack world boss", variant: "destructive" });
+    } finally {
+      setWorldBossAttacking(false);
+    }
+  };
 
   const isPageLoading = isZonesLoading || isArchetypesLoading || isSkinsLoading;
 
@@ -630,6 +667,81 @@ export default function WorldMap() {
       {showTutorial && (
         <TutorialOverlay onComplete={() => setShowTutorial(false)} />
       )}
+
+      {worldBossData?.status === "active" && (
+        <div className="absolute top-0 left-0 right-0 z-[90] bg-gradient-to-r from-red-950 via-red-900 to-red-950 border-b-2 border-red-500 px-4 py-2 flex items-center justify-between animate-pulse">
+          <div className="flex items-center gap-3">
+            <Skull className="w-5 h-5 text-red-400 shrink-0" />
+            <div>
+              <span className="font-serif font-bold text-red-300">⚠ WORLD BOSS ACTIVE: {worldBossData.name}</span>
+              <div className="flex items-center gap-2 mt-0.5">
+                <div className="w-40 h-1.5 bg-red-950 rounded-full overflow-hidden">
+                  <div className="bg-red-500 h-full transition-all" style={{ width: `${Math.max(0, (worldBossData.hp / worldBossData.maxHp) * 100)}%` }} />
+                </div>
+                <span className="text-xs text-red-300">{((worldBossData.hp / worldBossData.maxHp) * 100).toFixed(1)}% HP</span>
+              </div>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            className="bg-red-600 hover:bg-red-700 text-white font-bold animate-none shrink-0"
+            onClick={() => { setWorldBossDialog(true); setWorldBossResult(null); }}
+          >
+            <Swords className="w-4 h-4 mr-1" /> Challenge Boss
+          </Button>
+        </div>
+      )}
+
+      <Dialog open={worldBossDialog} onOpenChange={setWorldBossDialog}>
+        <DialogContent className="bg-slate-900 border-red-500/50 text-slate-100 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-red-400 font-serif text-xl flex items-center gap-2">
+              <Skull className="w-5 h-5" /> {worldBossData?.name || "World Boss"}
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              {worldBossData?.location} — A server-wide threat
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {worldBossData && (
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-red-300">Boss HP</span>
+                  <span className="text-slate-300">{(worldBossData.hp || 0).toLocaleString()} / {(worldBossData.maxHp || 0).toLocaleString()}</span>
+                </div>
+                <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden">
+                  <div className="bg-red-500 h-full transition-all" style={{ width: `${Math.max(0, ((worldBossData.hp || 0) / (worldBossData.maxHp || 1)) * 100)}%` }} />
+                </div>
+                <p className="text-xs text-slate-500 mt-1">Expires: {worldBossData.expiresAt ? new Date(worldBossData.expiresAt).toLocaleTimeString() : "N/A"}</p>
+              </div>
+            )}
+            {worldBossResult && (
+              <div className={`p-3 rounded border ${worldBossResult.isDefeated ? "bg-yellow-900/30 border-yellow-500/50" : "bg-slate-800 border-slate-700"}`}>
+                {worldBossResult.isDefeated ? (
+                  <p className="text-yellow-400 font-bold text-center">🏆 WORLD BOSS DEFEATED!</p>
+                ) : (
+                  <>
+                    <p className="text-green-400 font-semibold">⚔️ You dealt <span className="text-amber-300">{(worldBossResult.damage || 0).toLocaleString()}</span> damage!</p>
+                    <p className="text-slate-400 text-sm mt-1">Boss HP remaining: {(worldBossResult.currentHp || 0).toLocaleString()}</p>
+                  </>
+                )}
+              </div>
+            )}
+            <p className="text-xs text-slate-500 italic">Every attack chips away at the boss. All players share the damage pool. Defeating it grants legendary rewards!</p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setWorldBossDialog(false)}>Close</Button>
+            <Button
+              className="bg-red-600 hover:bg-red-700"
+              onClick={handleAttackWorldBoss}
+              disabled={worldBossAttacking || worldBossData?.status !== "active"}
+            >
+              {worldBossAttacking ? "Attacking..." : "⚔️ Attack!"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {isTraveling && (
         <div className="absolute inset-0 z-[100] bg-black/80 flex flex-col items-center justify-center transition-opacity duration-300">
           <div className="text-center space-y-4">
