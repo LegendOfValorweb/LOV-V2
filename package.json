@@ -5,7 +5,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "cd Legends-Of-Valor && npm install && npm run build",
-    "start": "cd Legends-Of-Valor && npm run start"
+    "start": "cd Legends-Of-Valor && npm run start",
+    "build:backend": "cd Legends-Of-Valor && npm install --include=dev && npm run build:backend",
+    "start:backend": "cd Legends-Of-Valor && npm run start:backend"
   },
   "keywords": [],
   "author": "",
