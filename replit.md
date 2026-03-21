@@ -12,6 +12,17 @@ Legends of Valor is a browser-based RPG game where players can:
 - Chat with an AI Game Master for personalized storylines
 - Participate in skill auctions and events
 
+## Home Base (Whiteout Survival-Style)
+
+The `/base` page is the post-login landing for players. It features:
+- **CSS-drawn building portraits** — 10 unique building illustrations for Town Hall, Storage, Rest Area, Weapon Locker, Crafting Workshop, Training Grounds, Defense Tower, Vault, War Room, and Events Hall. Each is drawn with layered divs/gradients using no external images.
+- **Visible level upgrades** — buildings grow taller, gain more windows, side towers, chimneys, and flags. Level tier (0–3) changes the illustration. Stars (★) at the bottom show level progress (Lv1 = 1★, max = 5★). Level badge shows Lv# or MAX in gold.
+- **Sky gradients** — each building card has a unique atmospheric sky gradient (purple for Town Hall, warm brown for Storage, fiery orange for Crafting, etc.).
+- **Glow effects** — glowing windows, forge openings, vault gold, and border glows based on the building's color theme.
+- **Lock overlays** — locked buildings (not yet available at the player's base tier) are shown with lock icon and tier requirement.
+- **Portrait layout** — 5-column grid over the base backdrop image, scrollable.
+- **Per-building dialogs** — tapping any unlocked portrait opens a full dialog with that building's functionality.
+
 ## Tech Stack
 
 - **Frontend**: React 18 with Vite, TailwindCSS, shadcn/ui components

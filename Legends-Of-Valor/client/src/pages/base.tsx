@@ -204,6 +204,368 @@ interface TrophyData {
   description: string;
 }
 
+type LevelTier = 0 | 1 | 2 | 3;
+
+function BuildingSketch({ id, tier, unlocked, glowColor }: { id: string; tier: LevelTier; unlocked: boolean; glowColor: string }) {
+  const g = (i: number) => `0 0 ${i * 4}px ${glowColor}`;
+  const op = unlocked ? 1 : 0.22;
+
+  const sketches: Record<string, React.ReactNode> = {
+    town_hall: (
+      <div style={{ position: "relative", height: 82, width: "100%", opacity: op }}>
+        {tier >= 1 && (<>
+          <div style={{ position:"absolute", bottom:6, left:"6%", width:12, height: tier>=2?48:36, background:"linear-gradient(to right,#5a3580,#3d2060)" }}>
+            <div style={{ position:"absolute", top:-4, display:"flex", gap:2 }}>
+              {[0,1].map(i=><div key={i} style={{ width:4, height:4, background:"#7a50a0" }} />)}
+            </div>
+            <div style={{ position:"absolute", top:6, left:"50%", transform:"translateX(-50%)", width:5, height:7, background:"#ffd700", opacity:0.7, borderRadius:"3px 3px 0 0" }} />
+          </div>
+          <div style={{ position:"absolute", bottom:6, right:"6%", width:12, height: tier>=2?48:36, background:"linear-gradient(to right,#5a3580,#3d2060)" }}>
+            <div style={{ position:"absolute", top:-4, display:"flex", gap:2 }}>
+              {[0,1].map(i=><div key={i} style={{ width:4, height:4, background:"#7a50a0" }} />)}
+            </div>
+            <div style={{ position:"absolute", top:6, left:"50%", transform:"translateX(-50%)", width:5, height:7, background:"#ffd700", opacity:0.7, borderRadius:"3px 3px 0 0" }} />
+          </div>
+        </>)}
+        <div style={{ position:"absolute", bottom:6, left:"50%", transform:"translateX(-50%)", width: tier>=2?34:26, height: tier>=2?65:52, background:"linear-gradient(to right,#6040a0,#4a2d7a)", boxShadow: tier>=2?g(3):g(1) }}>
+          <div style={{ position:"absolute", top:-5, left:0, right:0, display:"flex", justifyContent:"space-around" }}>
+            {[0,1,2,3].map(i=><div key={i} style={{ width:5, height:5, background:"#7a50b0" }} />)}
+          </div>
+          <div style={{ position:"absolute", top:8, left:4, width:7, height:10, background:"#ffd700", opacity:0.85, borderRadius:"4px 4px 0 0", boxShadow:"0 0 5px #ffd700" }} />
+          <div style={{ position:"absolute", top:8, right:4, width:7, height:10, background:"#ffd700", opacity:0.85, borderRadius:"4px 4px 0 0", boxShadow:"0 0 5px #ffd700" }} />
+          {tier>=2&&<><div style={{ position:"absolute", top:24, left:4, width:7, height:10, background:"#ffd700", opacity:0.55, borderRadius:"4px 4px 0 0" }} /><div style={{ position:"absolute", top:24, right:4, width:7, height:10, background:"#ffd700", opacity:0.55, borderRadius:"4px 4px 0 0" }} /></>}
+          {tier>=3&&<><div style={{ position:"absolute", top:40, left:4, width:7, height:10, background:"#ffd700", opacity:0.35, borderRadius:"4px 4px 0 0" }} /><div style={{ position:"absolute", top:40, right:4, width:7, height:10, background:"#ffd700", opacity:0.35, borderRadius:"4px 4px 0 0" }} /></>}
+          <div style={{ position:"absolute", bottom:0, left:"50%", transform:"translateX(-50%)", width:11, height:16, background:"#1a0a2e", borderRadius:"50% 50% 0 0/100% 100% 0 0" }} />
+          <div style={{ position:"absolute", top:-20, left:"50%", transform:"translateX(-50%)", width:2, height:16, background:"#aaa" }}>
+            <div style={{ position:"absolute", top:0, left:2, width:12, height:8, background: tier>=3?"#ffd700":"#cc2200", clipPath:"polygon(0 0,100% 50%,0 100%)" }} />
+          </div>
+        </div>
+        <div style={{ position:"absolute", bottom:2, left:"5%", right:"5%", height:5, background:"linear-gradient(to right,#3d2060,#5a3580,#3d2060)", borderRadius:2 }} />
+      </div>
+    ),
+
+    storage: (
+      <div style={{ position:"relative", height:82, width:"100%", opacity:op }}>
+        {tier>=1&&<div style={{ position:"absolute", bottom:6, right:"4%", width:16, height: tier>=2?34:26, background:"linear-gradient(to right,#8a6040,#5a3820)" }}>
+          <div style={{ position:"absolute", top:-9, left:0, right:0, height:0, borderLeft:"8px solid transparent", borderRight:"8px solid transparent", borderBottom:"10px solid #6a4a2a" }} />
+        </div>}
+        <div style={{ position:"absolute", bottom:6, left: tier>=1?"8%":"18%", width: tier>=2?40:34, background:"linear-gradient(to right,#9a7050,#6a4830)" }}>
+          <div style={{ width:"100%", height: tier>=2?50:40, position:"relative" }}>
+            <div style={{ position:"absolute", top:-(tier>=2?18:14), left:0, right:0, height:0, borderLeft:`${tier>=2?20:17}px solid transparent`, borderRight:`${tier>=2?20:17}px solid transparent`, borderBottom:`${tier>=2?18:14}px solid #7a5a30` }} />
+            <div style={{ position:"absolute", bottom:0, left:"50%", transform:"translateX(-50%)", width:16, height:22, background:"#3a2010", borderRadius:"3px 3px 0 0", display:"flex", gap:1, padding:2 }}>
+              <div style={{ flex:1, background:"#5a3820", borderRadius:2 }} />
+              <div style={{ flex:1, background:"#5a3820", borderRadius:2 }} />
+            </div>
+            <div style={{ position:"absolute", top:5, left:"50%", transform:"translateX(-50%)", width:8, height:8, background:"#fbbf24", opacity:0.6, borderRadius:"50%" }} />
+            {tier>=2&&<><div style={{ position:"absolute", top:15, left:4, width:6, height:8, background:"#fbbf24", opacity:0.45, borderRadius:2 }} /><div style={{ position:"absolute", top:15, right:4, width:6, height:8, background:"#fbbf24", opacity:0.45, borderRadius:2 }} /></>}
+          </div>
+        </div>
+        <div style={{ position:"absolute", bottom:6, left:"2%", width:10, height:10, background:"#7a5020", border:"1px solid #5a3810" }} />
+        <div style={{ position:"absolute", bottom:16, left:"2%", width:10, height:10, background:"#8a6030", border:"1px solid #6a4820" }} />
+        <div style={{ position:"absolute", bottom:2, left:"5%", right:"5%", height:5, background:"linear-gradient(to right,#5a3820,#8a6040,#5a3820)", borderRadius:2 }} />
+      </div>
+    ),
+
+    rest: (
+      <div style={{ position:"relative", height:82, width:"100%", opacity:op }}>
+        <div style={{ position:"absolute", bottom:6, left:"10%", width: tier>=2?42:36 }}>
+          <div style={{ width:"100%", height: tier>=2?50:40, background:"linear-gradient(to right,#c4883a,#8a5a1a)", position:"relative" }}>
+            <div style={{ position:"absolute", top:-(tier>=2?18:14), left:-4, right:-4, height:0, borderLeft:`${tier>=2?25:22}px solid transparent`, borderRight:`${tier>=2?25:22}px solid transparent`, borderBottom:`${tier>=2?18:14}px solid #6a4010` }} />
+            <div style={{ position:"absolute", top:8, left:4, width:8, height:10, background:"#ff9a30", opacity:0.9, borderRadius:"4px 4px 0 0", boxShadow:"0 0 8px #ff6600" }} />
+            <div style={{ position:"absolute", top:8, right:4, width:8, height:10, background:"#ff9a30", opacity:0.9, borderRadius:"4px 4px 0 0", boxShadow:"0 0 8px #ff6600" }} />
+            {tier>=2&&<div style={{ position:"absolute", top:8, left:"50%", transform:"translateX(-50%)", width:8, height:10, background:"#ff9a30", opacity:0.7, borderRadius:"4px 4px 0 0", boxShadow:"0 0 6px #ff6600" }} />}
+            <div style={{ position:"absolute", bottom:0, left:"50%", transform:"translateX(-50%)", width:12, height:18, background:"#4a2808", borderRadius:"4px 4px 0 0" }} />
+            {tier>=1&&<div style={{ position:"absolute", top:4, left:-13, width:11, height:10, background:"#8a5010", border:"1px solid #6a3a08", borderRadius:2, display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <div style={{ width:6, height:6, background:"#ffd700", borderRadius:"50%", opacity:0.8 }} />
+            </div>}
+          </div>
+        </div>
+        <div style={{ position:"absolute", bottom: tier>=2?52:42, right:"18%", width:5, height:14, background:"#666" }}>
+          <div style={{ position:"absolute", top:-6, left:-1, width:7, height:7, background:"rgba(200,200,200,0.4)", borderRadius:"50%" }} />
+          <div style={{ position:"absolute", top:-10, left:2, width:5, height:5, background:"rgba(200,200,200,0.25)", borderRadius:"50%" }} />
+        </div>
+        {tier>=2&&<div style={{ position:"absolute", bottom:52, left:"20%", width:4, height:12, background:"#777" }}>
+          <div style={{ position:"absolute", top:-5, left:-1, width:6, height:6, background:"rgba(200,200,200,0.3)", borderRadius:"50%" }} />
+        </div>}
+        {tier>=1&&<div style={{ position:"absolute", bottom:24, left:"6%", width:4, height:8, background:"#888" }}>
+          <div style={{ position:"absolute", top:-4, left:-2, width:8, height:8, background:"#ffbb00", opacity:0.85, borderRadius:"50%", boxShadow:"0 0 8px #ff8800" }} />
+        </div>}
+        <div style={{ position:"absolute", bottom:2, left:"5%", right:"5%", height:5, background:"linear-gradient(to right,#6a4010,#c48030,#6a4010)", borderRadius:2 }} />
+      </div>
+    ),
+
+    weapon_locker: (
+      <div style={{ position:"relative", height:82, width:"100%", opacity:op }}>
+        {tier>=1&&<div style={{ position:"absolute", bottom:6, left:0, width:10, height: tier>=2?40:28, background:"linear-gradient(to right,#2a3a5a,#1a2a4a)" }}>
+          {tier>=2&&<div style={{ position:"absolute", top:-4, display:"flex", gap:2 }}>{[0,1].map(i=><div key={i} style={{ width:4, height:4, background:"#3a4a6a" }} />)}</div>}
+        </div>}
+        <div style={{ position:"absolute", bottom:6, left: tier>=1?"16%":"14%", width: tier>=2?36:30, height: tier>=2?58:46, background:"linear-gradient(to right,#3a4a6a,#1a2a4a)" }}>
+          <div style={{ position:"absolute", top:-5, left:0, right:0, display:"flex", justifyContent:"space-around" }}>
+            {[0,1,2,3,4].map(i=><div key={i} style={{ width:4, height:5, background:"#4a5a7a" }} />)}
+          </div>
+          <div style={{ position:"absolute", top:8, left:"50%", transform:"translateX(-50%)", width:4, height:12, background:"#0a1020", borderRadius:1 }} />
+          {tier>=1&&<><div style={{ position:"absolute", top:8, left:5, width:3, height:10, background:"#0a1020", borderRadius:1 }} /><div style={{ position:"absolute", top:8, right:5, width:3, height:10, background:"#0a1020", borderRadius:1 }} /></>}
+          {tier>=2&&<><div style={{ position:"absolute", top:26, left:5, width:3, height:10, background:"#0a1020", borderRadius:1 }} /><div style={{ position:"absolute", top:26, right:5, width:3, height:10, background:"#0a1020", borderRadius:1 }} /></>}
+          <div style={{ position:"absolute", bottom:0, left:"50%", transform:"translateX(-50%)", width:14, height:20, background:"#0a1020", borderRadius:"2px 2px 0 0", border:"1px solid #4a5a6a" }}>
+            <div style={{ position:"absolute", top:4, left:"50%", transform:"translateX(-50%)", width:4, height:4, background:"#60a5fa", borderRadius:"50%", boxShadow:"0 0 4px #3b82f6" }} />
+          </div>
+          {tier>=1&&<div style={{ position:"absolute", top:6, right:-10, width:2, height:20, background:"#aac", transform:"rotate(20deg)", transformOrigin:"bottom center" }}>
+            <div style={{ position:"absolute", top:0, left:-4, width:10, height:2, background:"#8ab" }} />
+          </div>}
+          {tier>=2&&<div style={{ position:"absolute", bottom:6, left:-9, width:2, height:18, background:"#aac", transform:"rotate(-20deg)", transformOrigin:"bottom center" }}>
+            <div style={{ position:"absolute", top:0, left:-3, width:8, height:2, background:"#7ab" }} />
+          </div>}
+        </div>
+        {tier>=2&&<div style={{ position:"absolute", bottom:3, left:"14%", right:"8%", height:4, background:"#3b82f6", opacity:0.25, borderRadius:2, boxShadow:"0 0 8px #3b82f6" }} />}
+        <div style={{ position:"absolute", bottom:2, left:"5%", right:"5%", height:5, background:"linear-gradient(to right,#1a2a4a,#3a4a6a,#1a2a4a)", borderRadius:2 }} />
+      </div>
+    ),
+
+    crafting: (
+      <div style={{ position:"relative", height:82, width:"100%", opacity:op }}>
+        <div style={{ position:"absolute", bottom:6, left:"10%", width: tier>=2?42:34, height: tier>=2?50:40, background:"linear-gradient(to right,#5a2800,#3a1800)" }}>
+          <div style={{ position:"absolute", top:0, left:0, right:0, height:4, background:"#7a3a00" }} />
+          <div style={{ position:"absolute", bottom:6, left:"50%", transform:"translateX(-50%)", width:16, height:18, background:"#ff5500", borderRadius:"50% 50% 0 0/40% 40% 0 0", boxShadow:"0 0 14px #ff3300, inset 0 0 8px #ffcc00" }}>
+            <div style={{ position:"absolute", bottom:0, left:"18%", right:"18%", height:"65%", background:"#ffee00", opacity:0.75, borderRadius:"40% 40% 0 0" }} />
+          </div>
+          <div style={{ position:"absolute", top:8, left:4, width:6, height:8, background:"#ff8800", opacity:0.6, borderRadius:2, boxShadow:"0 0 4px #ff6600" }} />
+          {tier>=2&&<div style={{ position:"absolute", top:8, right:4, width:6, height:8, background:"#ff8800", opacity:0.6, borderRadius:2, boxShadow:"0 0 4px #ff6600" }} />}
+          <div style={{ position:"absolute", bottom:0, left:4, width:8, height:12, background:"#1a0800", borderRadius:"2px 2px 0 0" }} />
+        </div>
+        <div style={{ position:"absolute", bottom: tier>=2?54:44, left:"18%", width:6, height:18, background:"#444" }}>
+          <div style={{ position:"absolute", top:-3, left:-2, right:-2, height:5, background:"#555", borderRadius:2 }} />
+          <div style={{ position:"absolute", top:-9, left:0, width:6, height:6, background:"rgba(255,140,0,0.55)", borderRadius:"50%", boxShadow:"0 0 8px rgba(255,80,0,0.7)" }} />
+        </div>
+        {tier>=1&&<div style={{ position:"absolute", bottom: tier>=2?54:44, left:"30%", width:5, height:14, background:"#555" }}>
+          <div style={{ position:"absolute", top:-6, left:0, width:5, height:6, background:"rgba(255,100,0,0.45)", borderRadius:"50%", boxShadow:"0 0 6px rgba(255,60,0,0.6)" }} />
+        </div>}
+        {tier>=3&&<div style={{ position:"absolute", bottom:56, right:"20%", width:4, height:12, background:"#555" }}>
+          <div style={{ position:"absolute", top:-4, left:0, width:4, height:4, background:"rgba(255,120,0,0.5)", borderRadius:"50%", boxShadow:"0 0 5px rgba(255,80,0,0.5)" }} />
+        </div>}
+        {tier>=1&&<div style={{ position:"absolute", bottom:6, right:"6%", width:10, height:8, background:"#333", borderRadius:"40% 40% 0 0" }}>
+          <div style={{ position:"absolute", bottom:0, left:"10%", right:"10%", height:3, background:"#555", borderRadius:1 }} />
+        </div>}
+        <div style={{ position:"absolute", bottom:2, left:"5%", right:"5%", height:5, background:"linear-gradient(to right,#3a1800,#7a4000,#3a1800)", borderRadius:2 }} />
+      </div>
+    ),
+
+    training: (
+      <div style={{ position:"relative", height:82, width:"100%", opacity:op }}>
+        <div style={{ position:"absolute", bottom:6, left:"16%", width: tier>=2?36:28 }}>
+          <div style={{ width:"100%", height: tier>=2?44:34, background:"linear-gradient(to right,#3a4a10,#2a3408)", position:"relative" }}>
+            <div style={{ position:"absolute", top:-(tier>=2?14:10), left:0, right:0, height:0, borderLeft:`${tier>=2?18:14}px solid transparent`, borderRight:`${tier>=2?18:14}px solid transparent`, borderBottom:`${tier>=2?14:10}px solid #4a5a18` }} />
+            <div style={{ position:"absolute", top:8, left:"50%", transform:"translateX(-50%)", width:10, height:8, background:"#a3e635", opacity:0.5, borderRadius:2, boxShadow:"0 0 4px #84cc16" }} />
+            <div style={{ position:"absolute", bottom:0, left:"50%", transform:"translateX(-50%)", width:10, height:14, background:"#1a2208", borderRadius:"2px 2px 0 0" }} />
+          </div>
+        </div>
+        <div style={{ position:"absolute", bottom:6, right:"6%", width:4, height:30, background:"#5a3820" }}>
+          <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:16, height:16, background:"#cc2200", borderRadius:"50%", border:"2px solid #ff4400" }}>
+            <div style={{ position:"absolute", top:3, left:3, width:7, height:7, background:"#ffcc00", borderRadius:"50%", boxShadow:"0 0 4px #ffaa00" }} />
+          </div>
+        </div>
+        {tier>=1&&<div style={{ position:"absolute", bottom:6, left:"5%", width:3, height:24, background:"#6a4030" }}>
+          <div style={{ position:"absolute", top:-9, left:"50%", transform:"translateX(-50%)", width:11, height:11, background:"#8a6040", borderRadius:"50%" }} />
+          <div style={{ position:"absolute", top:-5, left:-7, width:17, height:3, background:"#7a5030" }} />
+        </div>}
+        {tier>=2&&<div style={{ position:"absolute", bottom:6, left:"2%", width:8, height:16, background:"#5a3010", borderRadius:1 }}>
+          <div style={{ position:"absolute", top:2, left:"50%", transform:"translateX(-50%)", width:2, height:12, background:"#aaa" }} />
+          <div style={{ position:"absolute", top:2, left:1, width:2, height:10, background:"#aaa", transform:"rotate(15deg)" }} />
+        </div>}
+        <div style={{ position:"absolute", bottom:2, left:"5%", right:"5%", height:5, background:"linear-gradient(to right,#2a3408,#5a6a20,#2a3408)", borderRadius:2 }} />
+      </div>
+    ),
+
+    defenses: (
+      <div style={{ position:"relative", height:82, width:"100%", opacity:op }}>
+        {tier>=1&&<div style={{ position:"absolute", bottom:6, left:0, right:0, height: tier>=2?22:16, background:"linear-gradient(to bottom,#3a3a4a,#1a1a2a)" }}>
+          <div style={{ position:"absolute", top:-4, left:0, right:0, display:"flex", justifyContent:"space-around" }}>
+            {[0,1,2,3,4,5,6,7].map(i=><div key={i} style={{ width:4, height:4, background:"#4a4a5a" }} />)}
+          </div>
+        </div>}
+        <div style={{ position:"absolute", bottom: tier>=1?22:6, left:"50%", transform:"translateX(-50%)", width: tier>=2?22:18, height: tier>=2?54:44, background:"linear-gradient(to right,#4a4a5a,#2a2a3a)", boxShadow: tier>=2?g(2):g(1) }}>
+          <div style={{ position:"absolute", top:-5, left:0, right:0, display:"flex", justifyContent:"space-around" }}>
+            {[0,1,2].map(i=><div key={i} style={{ width:5, height:5, background:"#5a5a6a" }} />)}
+          </div>
+          {Array.from({ length: Math.min(tier+2,4) }).map((_,i)=>(
+            <div key={i} style={{ position:"absolute", top:8+i*10, left:"50%", transform:"translateX(-50%)", width:3, height:8, background:"#0a0a1a" }} />
+          ))}
+          {tier>=2&&<div style={{ position:"absolute", top:-2, left:"50%", transform:"translateX(-50%)", width:6, height:6, background:"#dc2626", borderRadius:"50%", boxShadow:"0 0 8px #dc2626" }} />}
+        </div>
+        {tier>=3&&<><div style={{ position:"absolute", bottom:28, left:"6%", width:10, height:28, background:"#3a3a4a" }}>
+          <div style={{ position:"absolute", top:-3, display:"flex", gap:1 }}>{[0,1].map(i=><div key={i} style={{ width:4, height:3, background:"#5a5a6a" }} />)}</div>
+        </div><div style={{ position:"absolute", bottom:28, right:"6%", width:10, height:28, background:"#3a3a4a" }}>
+          <div style={{ position:"absolute", top:-3, display:"flex", gap:1 }}>{[0,1].map(i=><div key={i} style={{ width:4, height:3, background:"#5a5a6a" }} />)}</div>
+        </div></>}
+        <div style={{ position:"absolute", bottom:2, left:"5%", right:"5%", height:5, background:"linear-gradient(to right,#1a1a2a,#3a3a4a,#1a1a2a)", borderRadius:2 }} />
+      </div>
+    ),
+
+    vault: (
+      <div style={{ position:"relative", height:82, width:"100%", opacity:op }}>
+        <div style={{ position:"absolute", bottom:6, left:"8%", width: tier>=2?46:36, height: tier>=2?52:42, background:"linear-gradient(to right,#6a5020,#3a2c10)", boxShadow: tier>=2?g(3):g(1) }}>
+          <div style={{ position:"absolute", top:0, left:0, right:0, height:5, background:"#7a6030" }} />
+          {Array.from({ length: tier+2 }).map((_,i)=>(
+            <div key={i} style={{ position:"absolute", top:12+i*9, left:0, right:0, height:3, background:"#4a3a18", opacity:0.8 }} />
+          ))}
+          <div style={{ position:"absolute", top:7, left:"50%", transform:"translateX(-50%)", width:10, height:12, background:"#fbbf24", borderRadius:2, boxShadow:"0 0 12px #d97706, 0 0 24px rgba(217,119,6,0.4)" }} />
+          {tier>=2&&<><div style={{ position:"absolute", top:7, left:5, width:7, height:10, background:"#fbbf24", opacity:0.38, borderRadius:2, boxShadow:"0 0 5px #d97706" }} /><div style={{ position:"absolute", top:7, right:5, width:7, height:10, background:"#fbbf24", opacity:0.38, borderRadius:2, boxShadow:"0 0 5px #d97706" }} /></>}
+          <div style={{ position:"absolute", bottom:0, left:"50%", transform:"translateX(-50%)", width:16, height:22, background:"#2a1c08", border:"2px solid #7a6030", borderBottom:"none" }}>
+            <div style={{ position:"absolute", top:"28%", left:"50%", transform:"translateX(-50%)", width:8, height:8, background:"#fbbf24", borderRadius:"50%", boxShadow:"0 0 5px #d97706" }} />
+          </div>
+        </div>
+        {tier>=1&&<><div style={{ position:"absolute", bottom:6, right:"4%", width:8, height:8, background:"#fbbf24", borderRadius:"50%", boxShadow:"0 0 5px #d97706" }} /><div style={{ position:"absolute", bottom:6, right:"14%", width:6, height:6, background:"#fbbf24", borderRadius:"50%", opacity:0.7 }} /><div style={{ position:"absolute", bottom:12, right:"6%", width:5, height:5, background:"#fbbf24", borderRadius:"50%", opacity:0.5 }} /></>}
+        <div style={{ position:"absolute", bottom:2, left:"5%", right:"5%", height:5, background:"linear-gradient(to right,#3a2c10,#7a6030,#3a2c10)", borderRadius:2 }} />
+      </div>
+    ),
+
+    raids: (
+      <div style={{ position:"relative", height:82, width:"100%", opacity:op }}>
+        <div style={{ position:"absolute", bottom:6, left:"12%", width: tier>=2?40:32 }}>
+          <div style={{ width:"100%", height: tier>=2?46:36, background:"linear-gradient(to right,#7a2020,#4a1010)", position:"relative" }}>
+            <div style={{ position:"absolute", top:-(tier>=2?20:16), left:-4, right:-4, height:0, borderLeft:`${tier>=2?24:20}px solid transparent`, borderRight:`${tier>=2?24:20}px solid transparent`, borderBottom:`${tier>=2?20:16}px solid #9a2a2a` }} />
+            <div style={{ position:"absolute", top:-(tier>=2?36:28), left:"50%", transform:"translateX(-50%)", width:2, height:18, background:"#888" }}>
+              <div style={{ position:"absolute", top:-6, left:-3, width:8, height:8, background:"#cc4400", clipPath:"polygon(50% 0%,0% 100%,100% 100%)" }} />
+            </div>
+            {tier>=1&&<><div style={{ position:"absolute", top:-(tier>=2?28:22), left:"22%", width:1, height:12, background:"#777" }}>
+              <div style={{ position:"absolute", top:0, left:1, width:8, height:5, background:"#cc2200", clipPath:"polygon(0 0,100% 50%,0 100%)" }} />
+            </div><div style={{ position:"absolute", top:-(tier>=2?28:22), right:"22%", width:1, height:12, background:"#777" }}>
+              <div style={{ position:"absolute", top:0, right:1, width:8, height:5, background:"#cc2200", clipPath:"polygon(100% 0,0% 50%,100% 100%)" }} />
+            </div></>}
+            <div style={{ position:"absolute", top:8, left:"50%", transform:"translateX(-50%)", width:16, height:10, background:"#cc4420", opacity:0.65, borderRadius:2 }} />
+            <div style={{ position:"absolute", bottom:0, left:"50%", transform:"translateX(-50%)", width:14, height:18, background:"#1a0000", borderRadius:"6px 6px 0 0" }} />
+          </div>
+        </div>
+        {tier>=1&&<><div style={{ position:"absolute", bottom:6, left:"5%", width:3, height:16, background:"#555" }}>
+          <div style={{ position:"absolute", top:-5, left:-2, width:7, height:7, background:"#ff6600", borderRadius:"50%", boxShadow:"0 0 8px #ff4400" }} />
+        </div><div style={{ position:"absolute", bottom:6, right:"5%", width:3, height:16, background:"#555" }}>
+          <div style={{ position:"absolute", top:-5, left:-2, width:7, height:7, background:"#ff6600", borderRadius:"50%", boxShadow:"0 0 8px #ff4400" }} />
+        </div></>}
+        <div style={{ position:"absolute", bottom:2, left:"5%", right:"5%", height:5, background:"linear-gradient(to right,#4a1010,#8a2020,#4a1010)", borderRadius:2 }} />
+      </div>
+    ),
+
+    events: (
+      <div style={{ position:"relative", height:82, width:"100%", opacity:op }}>
+        <div style={{ position:"absolute", bottom:6, left:"6%", width: tier>=2?50:40, height: tier>=2?48:38, background:"linear-gradient(to right,#6030a0,#3a1870)" }}>
+          <div style={{ position:"absolute", top:-(tier>=2?16:12), left:-4, right:-4, height:0, borderLeft:`${tier>=2?29:24}px solid transparent`, borderRight:`${tier>=2?29:24}px solid transparent`, borderBottom:`${tier>=2?16:12}px solid #8040c0` }} />
+          {Array.from({ length: Math.min(tier+2,5) }).map((_,i)=>(
+            <div key={i} style={{ position:"absolute", top:-(tier>=2?20:14)+2, left:`${i*20+4}%`, width:1, height:10, background:"#888" }}>
+              <div style={{ position:"absolute", top:0, left:0, width:6, height:8, background:["#ff6699","#ffcc00","#66ccff","#ff9933","#aa66ff"][i%5], clipPath:"polygon(0 0,100% 0,100% 80%,50% 100%,0 80%)" }} />
+            </div>
+          ))}
+          <div style={{ position:"absolute", top:8, left:5, width:8, height:10, background:"#ff99cc", opacity:0.85, borderRadius:3, boxShadow:"0 0 6px #ff66aa" }} />
+          <div style={{ position:"absolute", top:8, left:"50%", transform:"translateX(-50%)", width:10, height:12, background:"#aa66ff", opacity:0.85, borderRadius:3, boxShadow:"0 0 6px #8833ff" }} />
+          <div style={{ position:"absolute", top:8, right:5, width:8, height:10, background:"#ffcc66", opacity:0.85, borderRadius:3, boxShadow:"0 0 6px #ffaa00" }} />
+          {tier>=2&&<><div style={{ position:"absolute", top:24, left:5, width:7, height:8, background:"#66ccff", opacity:0.6, borderRadius:2 }} /><div style={{ position:"absolute", top:24, right:5, width:7, height:8, background:"#ffcc66", opacity:0.6, borderRadius:2 }} /></>}
+          <div style={{ position:"absolute", bottom:0, left:"50%", transform:"translateX(-50%)", width:16, height:22, background:"#1a0840", borderRadius:"50% 50% 0 0/30% 30% 0 0", border:"1px solid #8040c0" }} />
+        </div>
+        <div style={{ position:"absolute", bottom:2, left:"5%", right:"5%", height:5, background:"linear-gradient(to right,#3a1870,#8040c0,#3a1870)", borderRadius:2 }} />
+      </div>
+    ),
+  };
+
+  return (
+    <div style={{ width:"100%", height:"82px", position:"relative" }}>
+      {sketches[id] ?? <div style={{ textAlign:"center", lineHeight:"82px", fontSize:28 }}>🏛️</div>}
+    </div>
+  );
+}
+
+const SKY_GRADIENTS: Record<string, string> = {
+  town_hall: "linear-gradient(to bottom,#0d0620 0%,#1a0d3d 55%,#2d1654 100%)",
+  storage: "linear-gradient(to bottom,#0d0500 0%,#1a0c06 55%,#2c1810 100%)",
+  rest: "linear-gradient(to bottom,#0d0400 0%,#1c0900 55%,#3d1a05 100%)",
+  weapon_locker: "linear-gradient(to bottom,#060810 0%,#0a1020 55%,#1a1a30 100%)",
+  crafting: "linear-gradient(to bottom,#0a0300 0%,#1a0800 55%,#2d1200 100%)",
+  training: "linear-gradient(to bottom,#060800 0%,#0e1205 55%,#1a1c08 100%)",
+  defenses: "linear-gradient(to bottom,#060608 0%,#0a0c10 55%,#12141e 100%)",
+  vault: "linear-gradient(to bottom,#0a0800 0%,#1a1200 55%,#2d2000 100%)",
+  raids: "linear-gradient(to bottom,#0d0000 0%,#1a0202 55%,#2d0808 100%)",
+  events: "linear-gradient(to bottom,#0d0020 0%,#1a0040 55%,#2d0060 100%)",
+};
+const BORDER_COLORS: Record<string, string> = {
+  town_hall:"rgba(124,58,237,0.85)", storage:"rgba(161,106,48,0.75)", rest:"rgba(234,88,12,0.75)",
+  weapon_locker:"rgba(59,130,246,0.75)", crafting:"rgba(234,88,12,0.85)", training:"rgba(132,204,22,0.75)",
+  defenses:"rgba(220,38,38,0.75)", vault:"rgba(217,119,6,0.85)", raids:"rgba(220,38,38,0.75)", events:"rgba(168,85,247,0.85)",
+};
+const GLOW_COLORS: Record<string, string> = {
+  town_hall:"rgba(124,58,237,0.55)", storage:"rgba(161,106,48,0.45)", rest:"rgba(249,115,22,0.55)",
+  weapon_locker:"rgba(59,130,246,0.55)", crafting:"rgba(234,88,12,0.65)", training:"rgba(132,204,22,0.45)",
+  defenses:"rgba(220,38,38,0.55)", vault:"rgba(217,119,6,0.65)", raids:"rgba(220,38,38,0.55)", events:"rgba(168,85,247,0.65)",
+};
+
+function BuildingPortrait({ building, level, maxLevel, unlocked, onClick }: {
+  building: BuildingDef; level: number; maxLevel: number; unlocked: boolean; onClick: () => void;
+}) {
+  const isMaxLevel = level >= maxLevel;
+  const tier = (level <= 3 ? 0 : level <= 6 ? 1 : level <= 9 ? 2 : 3) as LevelTier;
+  const starCount = Math.min(Math.ceil(level / 2), 5);
+  const hasLevel = building.id !== "town_hall" && building.id !== "raids" && building.id !== "events";
+  const sky = SKY_GRADIENTS[building.id] ?? "linear-gradient(to bottom,#0d0d0d,#1a1a1a)";
+  const border = unlocked ? (BORDER_COLORS[building.id] ?? "rgba(255,255,255,0.2)") : "rgba(255,255,255,0.07)";
+  const glow = GLOW_COLORS[building.id] ?? "rgba(255,255,255,0.2)";
+  const showGlow = unlocked && level >= Math.ceil(maxLevel * 0.5);
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={!unlocked}
+      className={`flex flex-col items-center gap-0.5 w-full focus:outline-none group ${unlocked ? "cursor-pointer" : "cursor-not-allowed"}`}
+    >
+      <div
+        className={`relative w-full rounded-lg overflow-hidden transition-transform duration-150 ${unlocked ? "group-hover:scale-105 group-active:scale-95" : ""}`}
+        style={{
+          height: 110,
+          background: sky,
+          border: `1.5px solid ${border}`,
+          boxShadow: showGlow ? `0 0 12px ${glow}, 0 2px 8px rgba(0,0,0,0.55)` : "0 2px 8px rgba(0,0,0,0.55)",
+        }}
+      >
+        <BuildingSketch id={building.id} tier={tier} unlocked={unlocked} glowColor={glow} />
+
+        {unlocked && hasLevel && (
+          <div className="absolute top-1 right-1">
+            <span style={{
+              fontSize: "9px", fontWeight: "bold", padding: "1px 4px", borderRadius: 4, display: "block",
+              background: isMaxLevel ? "rgba(255,215,0,0.95)" : "rgba(0,0,0,0.8)",
+              color: isMaxLevel ? "#000" : "#fff",
+              border: `1px solid ${isMaxLevel ? "rgba(255,215,0,0.6)" : "rgba(255,255,255,0.15)"}`,
+            }}>
+              {isMaxLevel ? "MAX" : `Lv${level}`}
+            </span>
+          </div>
+        )}
+
+        {unlocked && hasLevel && (
+          <div className="absolute bottom-1 left-0 right-0 text-center" style={{ lineHeight: 1 }}>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <span key={i} style={{ fontSize: "7px", color: i < starCount ? "#ffd700" : "rgba(255,215,0,0.18)" }}>★</span>
+            ))}
+          </div>
+        )}
+
+        {unlocked && isMaxLevel && (
+          <div className="absolute inset-0 animate-pulse rounded-lg" style={{ background: `radial-gradient(ellipse at 50% 110%,${glow} 0%,transparent 65%)` }} />
+        )}
+
+        {!unlocked && (
+          <div className="absolute inset-0 bg-black/68 flex flex-col items-center justify-center gap-1 rounded-lg">
+            <Lock className="w-5 h-5 text-white/35" />
+            <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.3)" }}>Tier {building.unlockTier}</span>
+          </div>
+        )}
+      </div>
+      <span style={{
+        fontSize: "9px", color: unlocked ? "#e5e7eb" : "rgba(255,255,255,0.28)",
+        textShadow: "0 1px 3px rgba(0,0,0,0.95)", textAlign: "center", lineHeight: 1.2,
+        display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", width: "100%",
+      }}>
+        {building.name}
+      </span>
+    </button>
+  );
+}
+
 export default function Base() {
   const [, navigate] = useLocation();
   const { account, setAccount } = useGame();
@@ -542,69 +904,50 @@ export default function Base() {
       ambientClass="zone-ambient-shop"
       overlayOpacity={0.35}
     >
-      <div className="h-full flex flex-col p-3">
-        <div className="flex-shrink-0 mb-3">
-          <div className="flex items-center justify-between">
-            <div className="rpg-panel px-3 py-1.5 flex items-center gap-2">
-              <Castle className="w-5 h-5 text-primary" />
-              <span className="rpg-heading text-sm">{currentTierData?.name || "Your Base"}</span>
-              <Badge variant="secondary" className="text-xs">Tier {currentTier}</Badge>
-            </div>
+      <div className="h-full flex flex-col">
+        {/* HUD bar */}
+        <div className="flex-shrink-0 flex items-center justify-between px-3 py-2 bg-black/60 backdrop-blur-sm border-b border-white/10">
+          <div className="flex items-center gap-2">
+            <Castle className="w-4 h-4 text-yellow-400" />
+            <span className="text-sm font-bold text-white">{currentTierData?.name || "Base"}</span>
+            <Badge variant="secondary" className="text-[10px] h-4 px-1.5">Tier {currentTier}</Badge>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Coins className="w-3.5 h-3.5 text-yellow-400" />
+            <span className="text-xs text-yellow-300 font-semibold">{(account?.gold || 0).toLocaleString()}</span>
           </div>
         </div>
 
-        <div className="relative flex-1 rounded-xl overflow-hidden mb-3 min-h-0" style={{ minHeight: "320px" }}>
+        {/* Base scene with backdrop */}
+        <div className="relative flex-1 overflow-hidden" style={{ minHeight: 0 }}>
           <img
             src={skinPath}
             alt="Base"
             className="absolute inset-0 w-full h-full object-cover"
             onError={(e) => { (e.target as HTMLImageElement).src = "/backdrops/base.png"; }}
           />
-          <div className="absolute inset-0 bg-black/40" />
+          <div className="absolute inset-0 bg-black/55" />
 
-          <div className="absolute inset-0 p-3 grid grid-cols-5 gap-2 content-start">
-            {ALL_BUILDINGS.map((building) => {
-              const unlocked = isBuildingUnlocked(building);
-              return (
-                <button
-                  key={building.id}
-                  onClick={() => unlocked && setOpenBuilding(building.id)}
-                  className={`flex flex-col items-center gap-1 p-2 rounded-lg border transition-all group relative
-                    ${unlocked
-                      ? "border-white/20 bg-black/50 hover:bg-black/70 hover:border-white/50 cursor-pointer"
-                      : "border-white/10 bg-black/30 opacity-50 cursor-not-allowed"
-                    }`}
-                  title={unlocked ? building.name : getUnlockLabel(building)}
-                >
-                  {!unlocked && (
-                    <div className="absolute inset-0 flex items-center justify-center rounded-lg">
-                      <Lock className="w-4 h-4 text-white/60" />
-                    </div>
-                  )}
-                  <div className={`p-1.5 rounded-md bg-gradient-to-br ${building.color} ${!unlocked ? "opacity-30" : ""}`}>
-                    {building.icon}
-                  </div>
-                  <span className="text-white text-xs font-medium leading-tight text-center line-clamp-2 hidden sm:block">
-                    {building.name}
-                  </span>
-                  {unlocked && building.id !== "town_hall" && building.id !== "raids" && building.id !== "events" && (
-                    <Badge className="text-[10px] h-4 px-1 bg-primary/80">
-                      Lv.{getRoomLevel(building.id)}
-                    </Badge>
-                  )}
-                  {!unlocked && (
-                    <span className="text-white/40 text-[10px] leading-tight text-center hidden sm:block">
-                      Tier {building.unlockTier}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+          {/* Building portrait grid */}
+          <div className="absolute inset-0 overflow-y-auto p-2 pt-3">
+            <div className="grid grid-cols-5 gap-1.5">
+              {ALL_BUILDINGS.map((building) => {
+                const unlocked = isBuildingUnlocked(building);
+                const level = getRoomLevel(building.id);
+                const maxLevel = ROOM_MAX_LEVEL_BY_TIER[currentTier] || 3;
+                return (
+                  <BuildingPortrait
+                    key={building.id}
+                    building={building}
+                    level={level}
+                    maxLevel={maxLevel}
+                    unlocked={unlocked}
+                    onClick={() => unlocked && setOpenBuilding(building.id)}
+                  />
+                );
+              })}
+            </div>
           </div>
-        </div>
-
-        <div className="flex-shrink-0 text-xs text-center text-muted-foreground">
-          Tap a building to open it — locked buildings show what tier unlocks them
         </div>
       </div>
 
