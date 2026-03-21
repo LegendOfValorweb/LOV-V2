@@ -1,13 +1,21 @@
-import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { storage } from "./storage";
 import { db } from "./db";
 import { playerStorylines, aiAdminRequests } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
+
+function getModel(systemInstruction: string) {
+  return genAI.getGenerativeModel({
+    model: "gemini-2.0-flash",
+    systemInstruction,
+    generationConfig: {
+      temperature: 0.8,
+      maxOutputTokens: 500,
+    },
+  });
+}
 
 const PERSONALITY_MODIFIERS: Record<string, string> = {
   friendly: `Your personality is FRIENDLY — but not naive. You are a warm, world-weary mentor who has seen enough loss to know that every victory matters. Celebrate the player's achievements with genuine relief and joy, as though you feared they might not make it. Use encouraging language that carries earned weight — not hollow cheerfulness, but the warmth of someone who has fought alongside them. Favor expressions like "You've done what few dare attempt" or "I knew you had it in you — though I'll admit, my heart was in my throat." Speak with heart, but never forget the darkness that surrounds you both.`,
@@ -153,33 +161,35 @@ export interface AIResponse {
   adminRequests: Array<{ type: string; message: string }>;
 }
 
+// Convert stored history (OpenAI format) to Gemini chat history format
+function toGeminiHistory(history: ChatMessage[]) {
+  return history.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+}
+
 // Generate welcome introduction for new/returning players
 export async function generateWelcomeIntro(accountId: string): Promise<string> {
   const account = await storage.getAccount(accountId);
   if (!account) return "Welcome, adventurer!";
-  
+
   const storyline = await getPlayerStoryline(accountId);
-  const isNewPlayer = storyline.currentChapter === 1 && Object.keys(storyline.storyProgress || {}).length === 0;
-  
+  const isNewPlayer =
+    storyline.currentChapter === 1 &&
+    Object.keys(storyline.storyProgress || {}).length === 0;
+
   const introPrompt = isNewPlayer
     ? `A new hero named ${account.username} has just arrived in the realm. They are a ${account.rank} with ${account.gold} gold. Give them a brief, exciting welcome (2-3 sentences) introducing them to the Legends of Valor world and encouraging them to explore the shop, fight NPCs in the tower, and chat with you for quests.`
     : `${account.username} (${account.rank}, Floor ${account.npcFloor}) has returned to the realm. Give them a brief welcome back (2-3 sentences) mentioning their progress and suggesting what they might do next.`;
-  
+
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-5-mini",
-      messages: [
-        { role: "system", content: GAME_SYSTEM_PROMPT },
-        { role: "user", content: introPrompt }
-      ],
-      max_tokens: 200,
-      temperature: 0.8,
-    });
-    
-    return response.choices[0]?.message?.content || "Welcome to Legends of Valor, hero!";
+    const model = getModel(GAME_SYSTEM_PROMPT);
+    const result = await model.generateContent(introPrompt);
+    return result.response.text() || "Welcome to Legends of Valor, hero!";
   } catch (error) {
     console.error("Failed to generate welcome intro:", error);
-    return isNewPlayer 
+    return isNewPlayer
       ? `Welcome to Legends of Valor, ${account.username}! Explore the shop, battle through the NPC Tower, and chat with me for personalized quests!`
       : `Welcome back, ${account.username}! Ready to continue your adventure on Floor ${account.npcFloor}?`;
   }
@@ -187,17 +197,23 @@ export async function generateWelcomeIntro(accountId: string): Promise<string> {
 
 // Get or create player storyline
 export async function getPlayerStoryline(accountId: string) {
-  const [existing] = await db.select().from(playerStorylines).where(eq(playerStorylines.accountId, accountId));
+  const [existing] = await db
+    .select()
+    .from(playerStorylines)
+    .where(eq(playerStorylines.accountId, accountId));
   if (existing) return existing;
-  
-  const [created] = await db.insert(playerStorylines).values({
-    accountId,
-    currentChapter: 1,
-    storyProgress: {},
-    conversationHistory: [],
-    pendingRewards: [],
-  }).returning();
-  
+
+  const [created] = await db
+    .insert(playerStorylines)
+    .values({
+      accountId,
+      currentChapter: 1,
+      storyProgress: {},
+      conversationHistory: [],
+      pendingRewards: [],
+    })
+    .returning();
+
   return created;
 }
 
@@ -214,18 +230,16 @@ export async function updatePlayerStoryline(
     pendingRewards: Array<{ type: string; amount: number; reason: string }>;
   }>
 ) {
-  // First ensure the player has a storyline entry
-  const existing = await db.select().from(playerStorylines).where(eq(playerStorylines.accountId, accountId));
-  
+  const existing = await db
+    .select()
+    .from(playerStorylines)
+    .where(eq(playerStorylines.accountId, accountId));
+
   if (existing.length === 0) {
-    // Create a new storyline entry first
-    await db.insert(playerStorylines).values({
-      accountId,
-      ...updates,
-    });
+    await db.insert(playerStorylines).values({ accountId, ...updates });
   } else {
-    // Update existing
-    await db.update(playerStorylines)
+    await db
+      .update(playerStorylines)
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(playerStorylines.accountId, accountId));
   }
@@ -235,82 +249,103 @@ export async function updatePlayerStoryline(
 function parseAIResponse(response: string): AIResponse {
   const rewardRequests: Array<{ type: string; amount: number; reason: string }> = [];
   const adminRequests: Array<{ type: string; message: string }> = [];
-  
-  // Extract reward requests
-  const rewardMatches = Array.from(response.matchAll(/\[REWARD_REQUEST:\s*({[^}]+})\]/g));
+
+  const rewardMatches = Array.from(
+    response.matchAll(/\[REWARD_REQUEST:\s*({[^}]+})\]/g)
+  );
   for (const match of rewardMatches) {
     try {
-      const reward = JSON.parse(match[1]);
-      rewardRequests.push(reward);
+      rewardRequests.push(JSON.parse(match[1]));
     } catch (e) {
       console.error("Failed to parse reward request:", e);
     }
   }
-  
-  // Extract admin requests
-  const adminMatches = Array.from(response.matchAll(/\[ADMIN_REQUEST:\s*({[^}]+})\]/g));
+
+  const adminMatches = Array.from(
+    response.matchAll(/\[ADMIN_REQUEST:\s*({[^}]+})\]/g)
+  );
   for (const match of adminMatches) {
     try {
-      const request = JSON.parse(match[1]);
-      adminRequests.push(request);
+      adminRequests.push(JSON.parse(match[1]));
     } catch (e) {
       console.error("Failed to parse admin request:", e);
     }
   }
-  
-  // Clean response of special commands for display
+
   const cleanMessage = response
     .replace(/\[REWARD_REQUEST:\s*{[^}]+}\]/g, "")
     .replace(/\[ADMIN_REQUEST:\s*{[^}]+}\]/g, "")
     .trim();
-  
+
   return { message: cleanMessage, rewardRequests, adminRequests };
 }
 
 // Get current story act based on floor progress
-export function getStoryAct(npcFloor: number): { act: number; name: string; description: string } {
-  if (npcFloor <= 15) return { act: 1, name: "The Awakening", description: "Rising adventurer discovering the world" };
-  if (npcFloor <= 35) return { act: 2, name: "The Fractured Realms", description: "The Void Covenant rises" };
-  if (npcFloor <= 50) return { act: 3, name: "The Hell Zone", description: "The final battle approaches" };
-  return { act: 4, name: "The Convergence War", description: "Endgame - face your destiny" };
+export function getStoryAct(npcFloor: number): {
+  act: number;
+  name: string;
+  description: string;
+} {
+  if (npcFloor <= 15)
+    return {
+      act: 1,
+      name: "The Awakening",
+      description: "Rising adventurer discovering the world",
+    };
+  if (npcFloor <= 35)
+    return {
+      act: 2,
+      name: "The Fractured Realms",
+      description: "The Void Covenant rises",
+    };
+  if (npcFloor <= 50)
+    return {
+      act: 3,
+      name: "The Hell Zone",
+      description: "The final battle approaches",
+    };
+  return {
+    act: 4,
+    name: "The Convergence War",
+    description: "Endgame - face your destiny",
+  };
 }
 
 // Update player's guide personality
-export async function setGuidePersonality(accountId: string, personality: string): Promise<boolean> {
+export async function setGuidePersonality(
+  accountId: string,
+  personality: string
+): Promise<boolean> {
   const validPersonalities = ["friendly", "sarcastic", "serious", "mysterious"];
   if (!validPersonalities.includes(personality)) return false;
-  
   await updatePlayerStoryline(accountId, { guidePersonality: personality });
   return true;
 }
 
 // Get tutorial content for new players
-export async function getTutorialContent(accountId: string, topic: string): Promise<string> {
+export async function getTutorialContent(
+  accountId: string,
+  topic: string
+): Promise<string> {
   const account = await storage.getAccount(accountId);
   if (!account) return "Welcome, adventurer!";
-  
+
   const tutorialPrompt = TUTORIAL_PROMPTS[topic] || TUTORIAL_PROMPTS.newPlayer;
   const storyline = await getPlayerStoryline(accountId);
   const personality = PERSONALITY_MODIFIERS[storyline.guidePersonality || "friendly"];
-  
+
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-5-mini",
-      messages: [
-        { role: "system", content: GAME_SYSTEM_PROMPT + "\n\n" + personality },
-        { role: "user", content: `${tutorialPrompt}\n\nPlayer name: ${account.username}` }
-      ],
-      max_tokens: 400,
-      temperature: 0.7,
-    });
-    return response.choices[0]?.message?.content || "Let me guide you through the basics...";
+    const model = getModel(GAME_SYSTEM_PROMPT + "\n\n" + personality);
+    const result = await model.generateContent(
+      `${tutorialPrompt}\n\nPlayer name: ${account.username}`
+    );
+    return result.response.text() || "Let me guide you through the basics...";
   } catch (error) {
     console.error("Tutorial error:", error);
     return "Welcome! Visit the World Map to explore zones. The Shop has gear, and the Mystic Tower offers combat challenges.";
   }
 }
 
-// Main chat function
 // In-character fallback responses when the AI service is unavailable
 const FALLBACK_RESPONSES = [
   "The threads of fate grow tangled tonight, and my sight dims. Yet hear me — your journey is far from over. Press forward, {name}. The tower does not wait for hesitation.",
@@ -327,14 +362,13 @@ function getFallbackResponse(playerName: string): string {
   return template.replace(/{name}/g, playerName);
 }
 
+// Main chat function
 export async function chatWithGameAI(
   accountId: string,
   playerMessage: string
 ): Promise<AIResponse> {
   const account = await storage.getAccount(accountId);
-  if (!account) {
-    throw new Error("Account not found");
-  }
+  if (!account) throw new Error("Account not found");
 
   const storyline = await getPlayerStoryline(accountId);
   const conversationHistory = storyline.conversationHistory as ChatMessage[];
@@ -342,8 +376,7 @@ export async function chatWithGameAI(
   try {
     const personality = PERSONALITY_MODIFIERS[storyline.guidePersonality || "friendly"];
     const storyAct = getStoryAct(account.npcFloor);
-    
-    // Build context about player
+
     const playerContext = `
 Player: ${account.username}
 Rank: ${account.rank}
@@ -355,36 +388,32 @@ Current Story Chapter: ${storyline.currentChapter}
 
 ${personality}
 `;
-    
-    // Build messages for API
-    const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
-      { role: "system", content: GAME_SYSTEM_PROMPT + "\n\n" + playerContext },
-      ...conversationHistory.slice(-20).map(m => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      })),
-      { role: "user", content: playerMessage },
-    ];
-    
-    const response = await openai.chat.completions.create({
-      model: "gpt-5-mini",
-      messages,
-      temperature: 0.8,
-      max_tokens: 500,
+
+    const systemInstruction = GAME_SYSTEM_PROMPT + "\n\n" + playerContext;
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      systemInstruction,
+      generationConfig: { temperature: 0.8, maxOutputTokens: 500 },
     });
-    
-    const aiMessage = response.choices[0]?.message?.content || getFallbackResponse(account.username);
+
+    // Build Gemini-format history from last 20 messages (must alternate user/model)
+    const rawHistory = conversationHistory.slice(-20);
+    const geminiHistory = toGeminiHistory(rawHistory);
+
+    const chat = model.startChat({ history: geminiHistory });
+    const result = await chat.sendMessage(playerMessage);
+    const aiMessage = result.response.text() || getFallbackResponse(account.username);
     const parsed = parseAIResponse(aiMessage);
-    
+
     // Update conversation history
     const newHistory = [
       ...conversationHistory,
       { role: "user" as const, content: playerMessage },
       { role: "assistant" as const, content: parsed.message },
     ].slice(-50);
-    
+
     await updatePlayerStoryline(accountId, { conversationHistory: newHistory });
-    
+
     // Handle reward requests
     for (const reward of parsed.rewardRequests) {
       await db.insert(aiAdminRequests).values({
@@ -394,12 +423,16 @@ ${personality}
         aiResponse: aiMessage,
         metadata: reward,
       });
-      
-      const pendingRewards = (storyline.pendingRewards as Array<{ type: string; amount: number; reason: string }>) || [];
+      const pendingRewards =
+        (storyline.pendingRewards as Array<{
+          type: string;
+          amount: number;
+          reason: string;
+        }>) || [];
       pendingRewards.push(reward);
       await updatePlayerStoryline(accountId, { pendingRewards });
     }
-    
+
     // Handle admin requests
     for (const request of parsed.adminRequests) {
       await db.insert(aiAdminRequests).values({
@@ -409,12 +442,11 @@ ${personality}
         aiResponse: aiMessage,
       });
     }
-    
+
     return parsed;
   } catch (error) {
-    console.error("ChatGPT Error:", error);
-    
-    // Log error for admin
+    console.error("Gemini AI Error:", error);
+
     try {
       await db.insert(aiAdminRequests).values({
         accountId,
@@ -423,26 +455,20 @@ ${personality}
         metadata: { originalMessage: playerMessage },
       });
     } catch (_) {}
-    
-    // Use in-character fallback so the conversation still feels alive
+
     const fallbackMessage = getFallbackResponse(account.username);
-    
-    // ALWAYS save to conversation history so the frontend can display it
+
     const newHistory = [
       ...conversationHistory,
       { role: "user" as const, content: playerMessage },
       { role: "assistant" as const, content: fallbackMessage },
     ].slice(-50);
-    
+
     try {
       await updatePlayerStoryline(accountId, { conversationHistory: newHistory });
     } catch (_) {}
-    
-    return {
-      message: fallbackMessage,
-      rewardRequests: [],
-      adminRequests: [],
-    };
+
+    return { message: fallbackMessage, rewardRequests: [], adminRequests: [] };
   }
 }
 
@@ -457,7 +483,8 @@ export async function resolveAdminRequest(
   status: "approved" | "rejected" | "answered",
   resolvedBy: string
 ) {
-  await db.update(aiAdminRequests)
+  await db
+    .update(aiAdminRequests)
     .set({ status, resolvedBy, resolvedAt: new Date() })
     .where(eq(aiAdminRequests.id, requestId));
 }
@@ -467,43 +494,16 @@ export async function getPlayerAIRequests(accountId: string) {
   return db.select().from(aiAdminRequests).where(eq(aiAdminRequests.accountId, accountId));
 }
 
-// Text-to-Speech voice response
-export async function generateVoiceResponse(text: string): Promise<Buffer | null> {
-  try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-audio",
-      modalities: ["text", "audio"],
-      audio: { voice: "onyx", format: "mp3" },
-      messages: [
-        {
-          role: "system",
-          content: `You are the Voice of Fate — an ancient, omniscient Game Master who has witnessed the rise and fall of empires. Deliver the following text exactly as written, word for word, but speak it with the full weight of a master storyteller:
-
-- Speak slowly and with gravitas. Let silence breathe between sentences.
-- Your voice carries centuries of wisdom and danger. Every word matters.
-- On phrases describing power, victory, or consequence — let your voice deepen and resonate with intensity.
-- On phrases describing mystery or the unknown — soften slightly, as if sharing a dangerous secret.
-- On names, titles, or dramatic revelations — pause just before them, then deliver them with deliberate force.
-- Never rush. You are timeless. The world waits on your words.
-- Speak as though the very air in the room has grown still to listen.`,
-        },
-        { role: "user", content: text.slice(0, 4096) },
-      ],
-    });
-    const audioData = (response.choices[0]?.message as any)?.audio?.data ?? "";
-    if (!audioData) return null;
-    return Buffer.from(audioData, "base64");
-  } catch (error) {
-    console.error("TTS Error:", error);
-    return null;
-  }
+// Voice response — not supported via Gemini text API; returns null gracefully
+export async function generateVoiceResponse(_text: string): Promise<Buffer | null> {
+  return null;
 }
 
 // Full game walkthrough for new players
 export async function generateFullWalkthrough(accountId: string): Promise<string> {
   const account = await storage.getAccount(accountId);
   if (!account) return "Welcome, adventurer!";
-  
+
   const walkthroughPrompt = `Give ${account.username} a complete walkthrough of Legends of Valor. Cover:
 
 1. **World Map** - The central hub after login. Click zones to travel.
@@ -520,17 +520,16 @@ export async function generateFullWalkthrough(accountId: string): Promise<string
 Keep it friendly, comprehensive but not overwhelming. About 300-400 words.`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-5-mini",
-      messages: [
-        { role: "system", content: GAME_SYSTEM_PROMPT },
-        { role: "user", content: walkthroughPrompt }
-      ],
-      max_tokens: 600,
-      temperature: 0.7,
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      systemInstruction: GAME_SYSTEM_PROMPT,
+      generationConfig: { temperature: 0.7, maxOutputTokens: 600 },
     });
-    
-    return response.choices[0]?.message?.content || "Welcome to Legends of Valor! Explore the World Map to begin your adventure.";
+    const result = await model.generateContent(walkthroughPrompt);
+    return (
+      result.response.text() ||
+      "Welcome to Legends of Valor! Explore the World Map to begin your adventure."
+    );
   } catch (error) {
     console.error("Walkthrough error:", error);
     return `Welcome to Legends of Valor, ${account.username}!
