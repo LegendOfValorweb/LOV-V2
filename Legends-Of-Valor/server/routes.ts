@@ -15443,6 +15443,18 @@ export async function registerRoutes(
   app.post("/api/accounts/logout", authMiddleware, async (req: AuthRequest, res) => {
     try {
       if (req.user) {
+        // Combat-logout timer: prevent logging out immediately after combat
+        if (req.user.lastCombatTime) {
+          const lastCombat = new Date(req.user.lastCombatTime).getTime();
+          const now = Date.now();
+          const COMBAT_LOGOUT_WAIT = 30 * 1000;
+          if (now - lastCombat < COMBAT_LOGOUT_WAIT) {
+            return res.status(403).json({
+              error: "In Combat",
+              message: `You must wait ${Math.ceil((COMBAT_LOGOUT_WAIT - (now - lastCombat)) / 1000)}s after combat before logging out.`,
+            });
+          }
+        }
         await db.update(accounts).set({ currentSessionId: null }).where(eq(accounts.id, req.user.id));
         activeSessions.delete(req.user.id);
       }
