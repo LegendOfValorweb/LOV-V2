@@ -1303,6 +1303,32 @@ export const insertGuildInviteSchema = createInsertSchema(guildInvites).omit({ i
 export type InsertGuildInvite = z.infer<typeof insertGuildInviteSchema>;
 export type GuildInvite = typeof guildInvites.$inferSelect;
 
+export const guildApplicationStatuses = ["pending", "approved", "rejected"] as const;
+export type GuildApplicationStatus = typeof guildApplicationStatuses[number];
+
+export const guildApplications = pgTable("guild_applications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  guildId: varchar("guild_id").notNull().references(() => guilds.id, { onDelete: "cascade" }),
+  applicantId: varchar("applicant_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
+  status: text("status").notNull().$type<GuildApplicationStatus>().default("pending"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const guildApplicationsRelations = relations(guildApplications, ({ one }) => ({
+  guild: one(guilds, {
+    fields: [guildApplications.guildId],
+    references: [guilds.id],
+  }),
+  applicant: one(accounts, {
+    fields: [guildApplications.applicantId],
+    references: [accounts.id],
+  }),
+}));
+
+export const insertGuildApplicationSchema = createInsertSchema(guildApplications).omit({ id: true, createdAt: true });
+export type InsertGuildApplication = z.infer<typeof insertGuildApplicationSchema>;
+export type GuildApplication = typeof guildApplications.$inferSelect;
+
 // Skill Auction System
 export const skillAuctions = pgTable("skill_auctions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

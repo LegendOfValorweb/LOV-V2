@@ -1,4 +1,4 @@
-import { accounts, inventoryItems, events, eventRegistrations, challenges, pets, leaderboardCache, quests, questAssignments, guilds, guildMembers, guildInvites, guildChat, guildVaultLogs, skillAuctions, skillBids, playerSkills, activityFeed, guildBattles, trades, tradeItems, tradeHistory, soulLinks, type Account, type InsertAccount, type InventoryItem, type InsertInventoryItem, type PlayerStats, type Equipped, type PlayerRank, type Event, type InsertEvent, type EventRegistration, type InsertEventRegistration, type Challenge, type InsertChallenge, type ChallengeStatus, type Pet, type InsertPet, type PetStats, type PetTier, type LeaderboardCache, type LeaderboardEntry, type Quest, type InsertQuest, type QuestAssignment, type InsertQuestAssignment, type QuestAssignmentStatus, type QuestRewards, type Guild, type InsertGuild, type GuildMember, type InsertGuildMember, type GuildInvite, type InsertGuildInvite, type GuildBank, type GuildRole, type GuildVaultLog, type InsertGuildVaultLog, type SkillAuction, type InsertSkillAuction, type SkillBid, type InsertSkillBid, type PlayerSkill, type InsertPlayerSkill, type ActivityFeed, type InsertActivityFeed, type GuildBattle, type InsertGuildBattle, type GuildBattleStatus, type Trade, type InsertTrade, type TradeItem, type InsertTradeItem, type TradeStatus, type TradeHistory, type InsertTradeHistory, type SoulLink, type InsertSoulLink, type SoulLinkStatus, type GuildChatMessage, type InsertGuildChat } from "@shared/schema";
+import { accounts, inventoryItems, events, eventRegistrations, challenges, pets, leaderboardCache, quests, questAssignments, guilds, guildMembers, guildInvites, guildChat, guildVaultLogs, guildApplications, skillAuctions, skillBids, playerSkills, activityFeed, guildBattles, trades, tradeItems, tradeHistory, soulLinks, type Account, type InsertAccount, type InventoryItem, type InsertInventoryItem, type PlayerStats, type Equipped, type PlayerRank, type Event, type InsertEvent, type EventRegistration, type InsertEventRegistration, type Challenge, type InsertChallenge, type ChallengeStatus, type Pet, type InsertPet, type PetStats, type PetTier, type LeaderboardCache, type LeaderboardEntry, type Quest, type InsertQuest, type QuestAssignment, type InsertQuestAssignment, type QuestAssignmentStatus, type QuestRewards, type Guild, type InsertGuild, type GuildMember, type InsertGuildMember, type GuildInvite, type InsertGuildInvite, type GuildBank, type GuildRole, type GuildVaultLog, type InsertGuildVaultLog, type GuildApplication, type InsertGuildApplication, type GuildApplicationStatus, type SkillAuction, type InsertSkillAuction, type SkillBid, type InsertSkillBid, type PlayerSkill, type InsertPlayerSkill, type ActivityFeed, type InsertActivityFeed, type GuildBattle, type InsertGuildBattle, type GuildBattleStatus, type Trade, type InsertTrade, type TradeItem, type InsertTradeItem, type TradeStatus, type TradeHistory, type InsertTradeHistory, type SoulLink, type InsertSoulLink, type SoulLinkStatus, type GuildChatMessage, type InsertGuildChat } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, desc, asc, sql } from "drizzle-orm";
 import type { Stats } from "@shared/schema";
@@ -96,6 +96,13 @@ export interface IStorage {
   getGuildInvitesByAccount(accountId: string): Promise<GuildInvite[]>;
   getGuildInvitesByGuild(guildId: string): Promise<GuildInvite[]>;
   deleteGuildInvite(id: string): Promise<void>;
+
+  createGuildApplication(application: InsertGuildApplication): Promise<GuildApplication>;
+  getGuildApplication(id: string): Promise<GuildApplication | undefined>;
+  getPendingGuildApplicationByApplicant(applicantId: string): Promise<GuildApplication | undefined>;
+  getGuildApplicationsByGuild(guildId: string): Promise<GuildApplication[]>;
+  updateGuildApplicationStatus(id: string, status: GuildApplicationStatus): Promise<GuildApplication | undefined>;
+  deleteGuildApplication(id: string): Promise<void>;
   
   // Skill auction methods
   createSkillAuction(auction: InsertSkillAuction): Promise<SkillAuction>;
@@ -647,6 +654,39 @@ export class DatabaseStorage implements IStorage {
 
   async deleteGuildInvite(id: string): Promise<void> {
     await db.delete(guildInvites).where(eq(guildInvites.id, id));
+  }
+
+  async createGuildApplication(application: InsertGuildApplication): Promise<GuildApplication> {
+    const insert = { guildId: application.guildId, applicantId: application.applicantId, status: application.status };
+    const [newApplication] = await db.insert(guildApplications).values([insert]).returning();
+    return newApplication;
+  }
+
+  async getGuildApplication(id: string): Promise<GuildApplication | undefined> {
+    const [application] = await db.select().from(guildApplications).where(eq(guildApplications.id, id));
+    return application || undefined;
+  }
+
+  async getPendingGuildApplicationByApplicant(applicantId: string): Promise<GuildApplication | undefined> {
+    const [application] = await db.select().from(guildApplications).where(
+      and(eq(guildApplications.applicantId, applicantId), eq(guildApplications.status, "pending"))
+    );
+    return application || undefined;
+  }
+
+  async getGuildApplicationsByGuild(guildId: string): Promise<GuildApplication[]> {
+    return db.select().from(guildApplications).where(
+      and(eq(guildApplications.guildId, guildId), eq(guildApplications.status, "pending"))
+    ).orderBy(desc(guildApplications.createdAt));
+  }
+
+  async updateGuildApplicationStatus(id: string, status: GuildApplicationStatus): Promise<GuildApplication | undefined> {
+    const [application] = await db.update(guildApplications).set({ status }).where(eq(guildApplications.id, id)).returning();
+    return application || undefined;
+  }
+
+  async deleteGuildApplication(id: string): Promise<void> {
+    await db.delete(guildApplications).where(eq(guildApplications.id, id));
   }
 
   // Skill auction methods

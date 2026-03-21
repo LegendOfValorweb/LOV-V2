@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Shield, Users, Crown, LogOut, ShoppingBag, Package, Swords, Calendar,
   Target, ScrollText, Trophy, Heart, Coins, Gem, Sparkles, Plus, X, 
-  UserPlus, Building2, Vault, Castle, ArrowLeftRight, Send
+  UserPlus, Building2, Vault, Castle, ArrowLeftRight, Send, ClipboardList, Search
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
@@ -165,6 +165,33 @@ interface GuildQuest {
   status: "active" | "completed" | "expired";
   expiresAt: string | null;
   contributions: GuildQuestContribution[];
+}
+
+interface GuildWithMemberCount {
+  id: string;
+  name: string;
+  level: number;
+  memberCount: number;
+}
+
+interface GuildApplicationInfo {
+  id: string;
+  guildId: string;
+  applicantId: string;
+  status: string;
+  createdAt: string;
+  guild?: { id: string; name: string; level: number };
+}
+
+interface GuildApplicationWithApplicant {
+  id: string;
+  guildId: string;
+  applicantId: string;
+  status: string;
+  createdAt: string;
+  applicantName: string;
+  applicantLevel: string;
+  applicantClass: string | null;
 }
 
 export default function GuildPage() {
@@ -381,6 +408,75 @@ export default function GuildPage() {
   });
 
   const isMaster = guild?.masterId === account?.id;
+
+  // Guild Applications (for unguilded players)
+  const { data: myApplication } = useQuery<GuildApplicationInfo | null>({
+    queryKey: ["/api/accounts", account?.id, "guild-application"],
+    enabled: !!account && !guild,
+  });
+
+  const { data: browseGuilds = [] } = useQuery<GuildWithMemberCount[]>({
+    queryKey: ["/api/guilds"],
+    enabled: !!account && !guild,
+  });
+
+  const applyToGuildMutation = useMutation({
+    mutationFn: async (guildId: string) => {
+      const res = await apiRequest("POST", `/api/guilds/${guildId}/apply`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts", account?.id, "guild-application"] });
+      toast({ title: "Application submitted!", description: "Wait for the guild master or officer to review your application." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to submit application", variant: "destructive" });
+    },
+  });
+
+  const cancelApplicationMutation = useMutation({
+    mutationFn: async (applicationId: string) => {
+      const res = await apiRequest("DELETE", `/api/guild-applications/${applicationId}`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts", account?.id, "guild-application"] });
+      toast({ title: "Application cancelled" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to cancel application", variant: "destructive" });
+    },
+  });
+
+  // Guild Applications (for masters/officers)
+  const canManageApplications = isMaster || (guild?.members.find(m => m.accountId === account?.id)?.role === "officer");
+
+  const { data: pendingApplications = [] } = useQuery<GuildApplicationWithApplicant[]>({
+    queryKey: ["/api/guilds", guild?.id, "applications"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/guilds/${guild!.id}/applications`);
+      return res.json();
+    },
+    enabled: !!guild && canManageApplications,
+    refetchInterval: 10000,
+  });
+
+  const respondApplicationMutation = useMutation({
+    mutationFn: async (data: { applicationId: string; approve: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/guild-applications/${data.applicationId}/respond`, {
+        approve: data.approve,
+      });
+      return res.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/guilds", guild?.id, "applications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts", account?.id, "guild"] });
+      toast({ title: variables.approve ? "Application approved!" : "Application rejected" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to respond to application", variant: "destructive" });
+    },
+  });
 
   // Guild Battles
   const { data: guildBattles = [] } = useQuery<GuildBattle[]>({
@@ -663,6 +759,92 @@ export default function GuildPage() {
                         </Card>
                       ))}
                     </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* My pending application status */}
+            {myApplication && (
+              <Card className="mb-6">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <ClipboardList className="w-4 h-4 text-yellow-500" />
+                    Pending Application
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                    <div>
+                      <p className="font-medium">{myApplication.guild?.name || "Unknown Guild"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Level {myApplication.guild?.level ?? "?"} guild &middot; Submitted {new Date(myApplication.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => cancelApplicationMutation.mutate(myApplication.id)}
+                      disabled={cancelApplicationMutation.isPending}
+                      data-testid="button-cancel-application"
+                    >
+                      <X className="w-4 h-4 mr-1" />
+                      Cancel
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Browse Guilds */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Search className="w-5 h-5 text-primary" />
+                  Browse Guilds
+                </CardTitle>
+                <CardDescription>
+                  Apply to join an existing guild. You can only have one pending application at a time.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {browseGuilds.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-6">No guilds found. Be the first to create one!</p>
+                ) : (
+                  <div className="space-y-2">
+                    {browseGuilds.map((g) => {
+                      const maxMembers = 2 + (g.level * 3);
+                      const isFull = g.memberCount >= maxMembers;
+                      const alreadyApplied = myApplication?.guildId === g.id;
+                      return (
+                        <div
+                          key={g.id}
+                          className="flex items-center justify-between p-3 rounded-lg border border-border"
+                          data-testid={`guild-browse-${g.id}`}
+                        >
+                          <div>
+                            <p className="font-medium flex items-center gap-2">
+                              <Shield className="w-4 h-4 text-primary" />
+                              {g.name}
+                              <Badge variant="outline" className="border-yellow-500 text-yellow-500 text-[10px]">
+                                Lv {g.level}
+                              </Badge>
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {g.memberCount}/{maxMembers} Members{isFull ? " · Full" : ""}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            disabled={isFull || !!myApplication || applyToGuildMutation.isPending}
+                            onClick={() => applyToGuildMutation.mutate(g.id)}
+                            data-testid={`button-apply-${g.id}`}
+                          >
+                            {alreadyApplied ? "Applied" : isFull ? "Full" : "Apply"}
+                          </Button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
@@ -1474,6 +1656,64 @@ export default function GuildPage() {
                       </div>
                     ))}
                   </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Applications Management Section (for masters/officers) */}
+            {canManageApplications && (
+              <Card className="md:col-span-2">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <ClipboardList className="w-5 h-5 text-blue-400" />
+                    Applications
+                    {pendingApplications.length > 0 && (
+                      <Badge className="ml-1 bg-blue-500 text-white">{pendingApplications.length}</Badge>
+                    )}
+                  </CardTitle>
+                  <CardDescription>Review and respond to pending join applications.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {pendingApplications.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-4">No pending applications.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {pendingApplications.map((app) => (
+                        <div
+                          key={app.id}
+                          className="flex items-center justify-between p-3 rounded-lg border border-border"
+                          data-testid={`application-${app.id}`}
+                        >
+                          <div>
+                            <p className="font-medium">{app.applicantName}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {app.applicantLevel}
+                              {app.applicantClass ? ` · ${app.applicantClass}` : ""}
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => respondApplicationMutation.mutate({ applicationId: app.id, approve: true })}
+                              disabled={respondApplicationMutation.isPending}
+                              data-testid={`button-approve-${app.id}`}
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => respondApplicationMutation.mutate({ applicationId: app.id, approve: false })}
+                              disabled={respondApplicationMutation.isPending}
+                              data-testid={`button-reject-${app.id}`}
+                            >
+                              Reject
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}

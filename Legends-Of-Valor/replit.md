@@ -121,6 +121,18 @@ Legends-Of-Valor/
 - Admin teleport: POST /api/admin/teleport-player sets player respawnLocation
 - Admin force-end challenge: POST /api/admin/challenges/:id/force-end
 
+### Guild Application System
+- `guild_applications` table: applicantId, guildId, status (pending/approved/rejected), createdAt
+- POST /api/guilds/:guildId/apply — unguilded player submits a join application
+- GET /api/accounts/:accountId/guild-application — get player's pending application
+- DELETE /api/guild-applications/:applicationId — cancel own pending application
+- GET /api/guilds/:guildId/applications?requesterId= — list pending applications (leader/officer only)
+- PATCH /api/guild-applications/:applicationId/respond — approve (adds member) or reject (leader/officer only)
+- GET /api/guilds now returns memberCount per guild
+- Browse Guilds section in unguilded Guild Hall: lists all guilds with name, level, member count, Apply button
+- Pending application status card with Cancel button for unguilded players
+- Applications management section (leaders/officers): shows applicants with rank/race, Approve/Reject buttons
+
 ### PHASE 11: Recent Additions (Session 5)
 - Weather spawn modifiers: thunderstorm +boss ×3, rain +elite ×1.8, fog +champion ×2, blizzard +boss ×2
 - Status effects in combat: stun (😵), freeze (🧊), silence (🔇) — 20% boss/champion chance

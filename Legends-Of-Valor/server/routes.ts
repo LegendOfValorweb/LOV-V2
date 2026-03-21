@@ -4776,6 +4776,154 @@ export async function registerRoutes(
     }
   });
 
+  // Submit a guild application (unguilded player -> a guild)
+  app.post("/api/guilds/:guildId/apply", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const applicantId = req.user!.id;
+
+      const guild = await storage.getGuild(req.params.guildId);
+      if (!guild) {
+        return res.status(404).json({ error: "Guild not found" });
+      }
+
+      const existingMembership = await storage.getGuildMember(applicantId);
+      if (existingMembership) {
+        return res.status(400).json({ error: "You are already in a guild" });
+      }
+
+      const existingApplication = await storage.getPendingGuildApplicationByApplicant(applicantId);
+      if (existingApplication) {
+        return res.status(400).json({ error: "You already have a pending application" });
+      }
+
+      const application = await storage.createGuildApplication({ guildId: guild.id, applicantId });
+      res.json(application);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to submit application" });
+    }
+  });
+
+  // Get player's pending application
+  app.get("/api/accounts/:accountId/guild-application", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const applicantId = req.user!.id;
+      if (req.params.accountId !== applicantId) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const application = await storage.getPendingGuildApplicationByApplicant(applicantId);
+      if (!application) {
+        return res.json(null);
+      }
+      const guild = await storage.getGuild(application.guildId);
+      res.json({ ...application, guild });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch application" });
+    }
+  });
+
+  // Cancel a guild application (applicant cancels their own pending application)
+  app.delete("/api/guild-applications/:applicationId", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const applicantId = req.user!.id;
+      const application = await storage.getGuildApplication(req.params.applicationId);
+      if (!application) {
+        return res.status(404).json({ error: "Application not found" });
+      }
+      if (application.applicantId !== applicantId) {
+        return res.status(403).json({ error: "Not your application" });
+      }
+      await storage.deleteGuildApplication(application.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to cancel application" });
+    }
+  });
+
+  // List pending applications for a guild (leader/officer only)
+  app.get("/api/guilds/:guildId/applications", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const requesterId = req.user!.id;
+      const guild = await storage.getGuild(req.params.guildId);
+      if (!guild) {
+        return res.status(404).json({ error: "Guild not found" });
+      }
+      const member = await storage.getGuildMember(requesterId);
+      const isGuildMaster = requesterId === guild.masterId;
+      const isGuildMember = member && member.guildId === guild.id;
+      const role = isGuildMaster ? "leader" : (isGuildMember ? (member.role || "member") : "none");
+      if (role !== "leader" && role !== "officer") {
+        return res.status(403).json({ error: "Only leaders and officers can view applications" });
+      }
+      const applications = await storage.getGuildApplicationsByGuild(req.params.guildId);
+      const allAccounts = await storage.getAllAccounts();
+      const applicationsWithInfo = applications.map(app => {
+        const account = allAccounts.find(a => a.id === app.applicantId);
+        return {
+          ...app,
+          applicantName: account?.username || "Unknown",
+          applicantLevel: account?.rank || "Novice",
+          applicantClass: account?.race ?? null,
+        };
+      });
+      res.json(applicationsWithInfo);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch applications" });
+    }
+  });
+
+  // Approve or reject a guild application (leader/officer only)
+  app.patch("/api/guild-applications/:applicationId/respond", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const { approve } = z.object({ approve: z.boolean() }).parse(req.body);
+      const responderId = req.user!.id;
+      const application = await storage.getGuildApplication(req.params.applicationId);
+      if (!application) {
+        return res.status(404).json({ error: "Application not found" });
+      }
+      const guild = await storage.getGuild(application.guildId);
+      if (!guild) {
+        return res.status(404).json({ error: "Guild not found" });
+      }
+      const member = await storage.getGuildMember(responderId);
+      const isGuildMaster = responderId === guild.masterId;
+      const isGuildMember = member && member.guildId === guild.id;
+      const role = isGuildMaster ? "leader" : (isGuildMember ? (member.role || "member") : "none");
+      if (role !== "leader" && role !== "officer") {
+        return res.status(403).json({ error: "Only leaders and officers can respond to applications" });
+      }
+      if (approve) {
+        const existingMembership = await storage.getGuildMember(application.applicantId);
+        if (existingMembership) {
+          await storage.deleteGuildApplication(application.id);
+          return res.status(400).json({ error: "Player is already in a guild" });
+        }
+        const maxMembers = 2 + (guild.level * 3);
+        const currentMembers = await storage.getGuildMembers(guild.id);
+        if (currentMembers.length >= maxMembers) {
+          return res.status(400).json({ error: "Guild is at maximum capacity" });
+        }
+        await storage.addGuildMember({ guildId: guild.id, accountId: application.applicantId });
+        await storage.deleteGuildApplication(application.id);
+        // Clear any other pending applications this player had
+        const otherApplication = await storage.getPendingGuildApplicationByApplicant(application.applicantId);
+        if (otherApplication) {
+          await storage.deleteGuildApplication(otherApplication.id);
+        }
+        // Clear any guild invites for this player
+        const invites = await storage.getGuildInvitesByAccount(application.applicantId);
+        for (const inv of invites) {
+          await storage.deleteGuildInvite(inv.id);
+        }
+        res.json({ success: true, approved: true });
+      } else {
+        await storage.deleteGuildApplication(application.id);
+        res.json({ success: true, approved: false });
+      }
+    } catch (error) {
+      res.status(500).json({ error: "Failed to respond to application" });
+    }
+  });
+
   // Leave guild
   app.post("/api/guilds/:guildId/leave", async (req, res) => {
     try {
@@ -4946,11 +5094,15 @@ export async function registerRoutes(
     }
   });
 
-  // Get all guilds
+  // Get all guilds (with member counts)
   app.get("/api/guilds", async (_req, res) => {
     try {
       const guilds = await storage.getAllGuilds();
-      res.json(guilds);
+      const guildsWithCounts = await Promise.all(guilds.map(async (g) => {
+        const members = await storage.getGuildMembers(g.id);
+        return { ...g, memberCount: members.length };
+      }));
+      res.json(guildsWithCounts);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch guilds" });
     }
