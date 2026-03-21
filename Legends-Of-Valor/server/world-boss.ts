@@ -98,7 +98,19 @@ export async function spawnWorldBoss(manual: boolean = false): Promise<WorldBoss
   return newBoss;
 }
 
-export async function recordBossDamage(bossId: string, accountId: string, damage: number) {
+export const MAX_ATTACKS_PER_BOSS = 3;
+
+export async function getPlayerBossAttackCount(bossId: string, accountId: string): Promise<number> {
+  const [existing] = await db.select()
+    .from(worldBossDamage)
+    .where(and(
+      eq(worldBossDamage.bossId, bossId),
+      eq(worldBossDamage.accountId, accountId)
+    ));
+  return existing?.attackCount ?? 0;
+}
+
+export async function recordBossDamage(bossId: string, accountId: string, damage: number): Promise<number> {
   const [existing] = await db.select()
     .from(worldBossDamage)
     .where(and(
@@ -106,18 +118,23 @@ export async function recordBossDamage(bossId: string, accountId: string, damage
       eq(worldBossDamage.accountId, accountId)
     ));
 
+  let newAttackCount: number;
   if (existing) {
+    newAttackCount = (existing.attackCount ?? 0) + 1;
     await db.update(worldBossDamage)
       .set({ 
         damage: existing.damage + damage,
+        attackCount: newAttackCount,
         lastHitAt: new Date()
       })
       .where(eq(worldBossDamage.id, existing.id));
   } else {
+    newAttackCount = 1;
     await db.insert(worldBossDamage).values({
       bossId,
       accountId,
       damage,
+      attackCount: 1,
     });
   }
 
@@ -142,6 +159,8 @@ export async function recordBossDamage(bossId: string, accountId: string, damage
         .where(eq(worldBosses.id, bossId));
     }
   }
+
+  return newAttackCount;
 }
 
 async function distributeBossRewards(bossId: string) {

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, Component } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import type { Item, ItemTier, ItemType, Account, PlayerRank, Event, Challenge, Pet, PetTier, PetElement, PetStats } from "@shared/schema";
@@ -4522,10 +4522,30 @@ export default function Admin() {
   );
 }
 
+class AdminPanelErrorBoundary extends Component<{ children: React.ReactNode; label?: string }, { hasError: boolean; error?: string }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error: String(error?.message || error) };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="rounded border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+          <p className="font-semibold">{this.props.label || "Panel"} failed to render.</p>
+          <p className="text-xs mt-1 text-muted-foreground">{this.state.error}</p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function ZoneConquestAdminPanel() {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const { data: conquests = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/admin/zone-conquests"] });
+  const { data: conquests = [], isLoading, error } = useQuery<any[]>({ queryKey: ["/api/admin/zone-conquests"] });
 
   const resetMutation = useMutation({
     mutationFn: async (zoneId: string) => {
@@ -4539,39 +4559,43 @@ function ZoneConquestAdminPanel() {
   });
 
   return (
-    <div className="space-y-4">
-      <h2 className="font-serif text-lg font-semibold flex items-center gap-2">
-        <Crown className="w-5 h-5 text-yellow-400" />
-        Zone Conquest Management
-      </h2>
-      <p className="text-sm text-muted-foreground">Guilds can claim zones by spending 5,000 guild gold. Defense points start at 100 and drop 10 per attack.</p>
-      {isLoading ? (
-        <p className="text-muted-foreground">Loading...</p>
-      ) : conquests.length === 0 ? (
-        <p className="text-muted-foreground">No zones are currently conquered.</p>
-      ) : (
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {conquests.map((c: any) => (
-            <Card key={c.zoneId}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center justify-between">
-                  <span>🗺️ {c.zoneId}</span>
-                  <Badge variant="outline">⚔ {c.defensePoints}/100 HP</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <p className="text-sm">Guild: <span className="font-medium text-amber-400">{c.guildName || "Unclaimed"}</span></p>
-                <p className="text-xs text-muted-foreground">Tax Rate: {c.taxRate}%</p>
-                {c.conqueredAt && <p className="text-xs text-muted-foreground">Conquered: {new Date(c.conqueredAt).toLocaleDateString()}</p>}
-                <Button size="sm" variant="destructive" className="w-full" onClick={() => resetMutation.mutate(c.zoneId)}>
-                  Reset Zone
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
+    <AdminPanelErrorBoundary label="Zone Conquest">
+      <div className="space-y-4">
+        <h2 className="font-serif text-lg font-semibold flex items-center gap-2">
+          <Crown className="w-5 h-5 text-yellow-400" />
+          Zone Conquest Management
+        </h2>
+        <p className="text-sm text-muted-foreground">Guilds can claim zones by spending 5,000 guild gold. Defense points start at 100 and drop 10 per attack.</p>
+        {error ? (
+          <p className="text-destructive text-sm">Failed to load zone conquests.</p>
+        ) : isLoading ? (
+          <p className="text-muted-foreground">Loading...</p>
+        ) : conquests.length === 0 ? (
+          <p className="text-muted-foreground">No zones are currently conquered.</p>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {conquests.map((c: any) => (
+              <Card key={c.zoneId}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center justify-between">
+                    <span>🗺️ {c.zoneId ?? "Unknown Zone"}</span>
+                    <Badge variant="outline">⚔ {c.defensePoints ?? "?"}/100 HP</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <p className="text-sm">Guild: <span className="font-medium text-amber-400">{c.guildName || "Unclaimed"}</span></p>
+                  <p className="text-xs text-muted-foreground">Tax Rate: {c.taxRate ?? 0}%</p>
+                  {c.conqueredAt && <p className="text-xs text-muted-foreground">Conquered: {new Date(c.conqueredAt).toLocaleDateString()}</p>}
+                  <Button size="sm" variant="destructive" className="w-full" onClick={() => resetMutation.mutate(c.zoneId)}>
+                    Reset Zone
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    </AdminPanelErrorBoundary>
   );
 }
 
@@ -4629,8 +4653,7 @@ function BlackMarketAdminPanel() {
 
 function BountiesAdminPanel() {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const { data: bountiesList = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/admin/bounties"] });
+  const { data: bountiesList = [], isLoading, error } = useQuery<any[]>({ queryKey: ["/api/admin/bounties"] });
 
   const cancelMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -4646,42 +4669,46 @@ function BountiesAdminPanel() {
   const statusColor: Record<string, string> = { active: "default", claimed: "secondary", expired: "outline", cancelled: "destructive" };
 
   return (
-    <div className="space-y-4">
-      <h2 className="font-serif text-lg font-semibold flex items-center gap-2">
-        <Target className="w-5 h-5 text-red-400" />
-        Player Bounty Management
-      </h2>
-      {isLoading ? (
-        <p className="text-muted-foreground">Loading...</p>
-      ) : bountiesList.length === 0 ? (
-        <p className="text-muted-foreground">No bounties placed yet.</p>
-      ) : (
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {bountiesList.map((b: any) => (
-            <Card key={b.id}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center justify-between">
-                  <span>🎯 {b.targetName}</span>
-                  <Badge variant={(statusColor[b.status] || "default") as any}>{b.status}</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-xs space-y-1">
-                <p>Reward: <span className="text-amber-400 font-bold">{b.goldReward.toLocaleString()} gold</span></p>
-                <p>Placed by: {b.placedByName}</p>
-                {b.reason && <p className="text-muted-foreground italic">"{b.reason}"</p>}
-                {b.claimedByName && <p>Claimed by: <span className="text-green-400">{b.claimedByName}</span></p>}
-                <p>Expires: {new Date(b.expiresAt).toLocaleDateString()}</p>
-                {b.status === "active" && (
-                  <Button size="sm" variant="destructive" className="w-full mt-2" onClick={() => cancelMutation.mutate(b.id)}>
-                    Cancel Bounty
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
+    <AdminPanelErrorBoundary label="Bounty Management">
+      <div className="space-y-4">
+        <h2 className="font-serif text-lg font-semibold flex items-center gap-2">
+          <Target className="w-5 h-5 text-red-400" />
+          Player Bounty Management
+        </h2>
+        {error ? (
+          <p className="text-destructive text-sm">Failed to load bounties.</p>
+        ) : isLoading ? (
+          <p className="text-muted-foreground">Loading...</p>
+        ) : bountiesList.length === 0 ? (
+          <p className="text-muted-foreground">No bounties placed yet.</p>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {bountiesList.map((b: any) => (
+              <Card key={b.id}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center justify-between">
+                    <span>🎯 {b.targetName ?? "Unknown"}</span>
+                    <Badge variant={(statusColor[b.status] || "default") as any}>{b.status ?? "unknown"}</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="text-xs space-y-1">
+                  <p>Reward: <span className="text-amber-400 font-bold">{(b.goldReward ?? 0).toLocaleString()} gold</span></p>
+                  <p>Placed by: {b.placedByName ?? "Unknown"}</p>
+                  {b.reason && <p className="text-muted-foreground italic">"{b.reason}"</p>}
+                  {b.claimedByName && <p>Claimed by: <span className="text-green-400">{b.claimedByName}</span></p>}
+                  {b.expiresAt && <p>Expires: {new Date(b.expiresAt).toLocaleDateString()}</p>}
+                  {b.status === "active" && (
+                    <Button size="sm" variant="destructive" className="w-full mt-2" onClick={() => cancelMutation.mutate(b.id)}>
+                      Cancel Bounty
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    </AdminPanelErrorBoundary>
   );
 }
 

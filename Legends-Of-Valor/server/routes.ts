@@ -48,7 +48,7 @@ import {
 import { eq, sql, and, lt } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { getActiveWorldBoss, spawnWorldBoss, recordBossDamage } from "./world-boss";
+import { getActiveWorldBoss, spawnWorldBoss, recordBossDamage, MAX_ATTACKS_PER_BOSS, getPlayerBossAttackCount } from "./world-boss";
 import { COOKIE_NAME, COOKIE_OPTIONS, generateToken, authMiddleware, type AuthRequest } from "./auth";
 import { 
   runAutoCombat, 
@@ -14139,6 +14139,21 @@ export async function registerRoutes(
         }
       }
 
+      let npcFightPetElements: { elements: string[]; elementalPower: number } | undefined;
+      if (account.equippedPetId) {
+        const equippedPet = await storage.getPet(account.equippedPetId);
+        if (equippedPet) {
+          const petStats = equippedPet.stats as Record<string, unknown>;
+          const elementalPower = Number(petStats.ElementalPower) || 0;
+          const petEls = equippedPet.elements && equippedPet.elements.length > 0
+            ? equippedPet.elements
+            : equippedPet.element ? [equippedPet.element] : [];
+          if (petEls.length > 0) {
+            npcFightPetElements = { elements: petEls, elementalPower };
+          }
+        }
+      }
+
       const playerCombatant: Combatant = {
         id: accountId,
         name: account.username,
@@ -14148,6 +14163,7 @@ export async function registerRoutes(
         level: playerRankIndex + 1,
         isPlayer: true,
         spell: npcFightSpell,
+        elements: npcFightPetElements,
       };
 
       const npcCombatant: Combatant = {
@@ -15131,11 +15147,28 @@ export async function registerRoutes(
       const boss = await getActiveWorldBoss();
       if (!boss) return res.status(404).json({ error: "No active world boss" });
 
-      const totalStats = await getPlayerTotalStats(accountId);
-      const baseDamage = totalStats.Str + totalStats.Spd + totalStats.Int + totalStats.Luck + totalStats.Pot;
-      const damage = Math.max(1, Math.floor(baseDamage * (0.8 + Math.random() * 0.4)));
+      const currentAttacks = await getPlayerBossAttackCount(boss.id, accountId);
+      if (currentAttacks >= MAX_ATTACKS_PER_BOSS) {
+        return res.status(400).json({
+          error: `You have used all ${MAX_ATTACKS_PER_BOSS} attacks on this boss. Wait for the next one!`,
+          attacksRemaining: 0,
+        });
+      }
 
-      await recordBossDamage(boss.id, accountId, damage);
+      const totalStats = await getPlayerTotalStats(accountId);
+      const damage = Math.max(1, totalStats.Str);
+
+      const newAttackCount = await recordBossDamage(boss.id, accountId, damage);
+      const attacksRemaining = Math.max(0, MAX_ATTACKS_PER_BOSS - newAttackCount);
+
+      const PER_ATTACK_GOLD = 5000;
+      const PER_ATTACK_SOUL_SHARDS = 5;
+      await db.update(accounts)
+        .set({
+          gold: sql`${accounts.gold} + ${PER_ATTACK_GOLD}`,
+          soulShards: sql`${accounts.soulShards} + ${PER_ATTACK_SOUL_SHARDS}`,
+        })
+        .where(eq(accounts.id, accountId));
 
       const updatedBoss = await db.select().from(worldBosses).where(eq(worldBosses.id, boss.id)).limit(1);
 
@@ -15144,6 +15177,8 @@ export async function registerRoutes(
         damage,
         currentHp: updatedBoss[0]?.hp || 0,
         isDefeated: updatedBoss[0]?.status === "defeated",
+        attacksRemaining,
+        reward: { gold: PER_ATTACK_GOLD, soulShards: PER_ATTACK_SOUL_SHARDS },
       });
     } catch (error) {
       console.error("Error attacking world boss:", error);
@@ -15444,12 +15479,12 @@ export async function registerRoutes(
 
   app.post("/api/admin/world-boss/end", async (req, res) => {
     try {
-      const boss = await getActiveWorldBoss();
+      const [boss] = await db.select().from(worldBosses).where(eq(worldBosses.status, "active")).limit(1);
       if (boss) {
         await db.update(worldBosses)
           .set({ status: "expired", expiresAt: new Date() })
           .where(eq(worldBosses.id, boss.id));
-        res.json({ success: true });
+        res.json({ success: true, bossName: boss.name });
       } else {
         res.status(404).json({ error: "No active world boss to end" });
       }
@@ -16684,10 +16719,17 @@ export async function registerRoutes(
   app.get("/api/admin/zone-conquests", async (_req, res) => {
     try {
       const rows = await db.select().from(zoneConquests);
-      const allGuilds = await storage.getAllGuilds ? await storage.getAllGuilds() : [];
+      let allGuilds: any[] = [];
+      try {
+        if (storage.getAllGuilds) {
+          allGuilds = await storage.getAllGuilds();
+        }
+      } catch (_guildErr) {
+        allGuilds = [];
+      }
       const result = rows.map(r => ({
         ...r,
-        guildName: (allGuilds as any[]).find((g: any) => g.id === r.guildId)?.name || null,
+        guildName: allGuilds.find((g: any) => g.id === r.guildId)?.name || null,
       }));
       res.json(result);
     } catch (error) {

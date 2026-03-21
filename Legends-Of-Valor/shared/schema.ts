@@ -513,6 +513,7 @@ export const worldBossDamage = pgTable("world_boss_damage", {
   bossId: varchar("boss_id").notNull().references(() => worldBosses.id, { onDelete: "cascade" }),
   accountId: varchar("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
   damage: bigint("damage", { mode: "number" }).notNull().default(0),
+  attackCount: integer("attack_count").notNull().default(0),
   lastHitAt: timestamp("last_hit_at").notNull().defaultNow(),
 });
 
