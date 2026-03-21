@@ -10280,9 +10280,9 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/hell-zone/battle", authMiddleware, async (req, res) => {
+  app.post("/api/hell-zone/battle", async (req, res) => {
     try {
-      const accountId = (req as any).user?.id;
+      const accountId = req.body?.accountId || (req as any).user?.id;
       if (!accountId) return res.status(401).json({ error: "Unauthorized" });
       const { enemyId } = z.object({ enemyId: z.string().optional() }).parse(req.body);
       
@@ -11529,10 +11529,10 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/zones/:zoneId/battle", authMiddleware, async (req, res) => {
+  app.post("/api/zones/:zoneId/battle", async (req, res) => {
     try {
       const zoneId = req.params.zoneId;
-      const accountId = (req as any).user?.id;
+      const accountId = req.body?.accountId || (req as any).user?.id;
       if (!accountId) return res.status(401).json({ error: "Unauthorized" });
       
       const account = await storage.getAccount(accountId);
@@ -13877,9 +13877,9 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/zones/:zoneId/monster/fight", authMiddleware, async (req, res) => {
+  app.post("/api/zones/:zoneId/monster/fight", async (req, res) => {
     try {
-      const accountId = (req as any).user?.id;
+      const accountId = req.body?.accountId || (req as any).user?.id;
       if (!accountId) return res.status(401).json({ error: "Unauthorized" });
       const account = await storage.getAccount(accountId);
       if (!account) return res.status(404).json({ error: "Account not found" });
@@ -14115,9 +14115,9 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/zones/:zoneId/npc/fight", authMiddleware, async (req, res) => {
+  app.post("/api/zones/:zoneId/npc/fight", async (req, res) => {
     try {
-      const accountId = (req as any).user?.id;
+      const accountId = req.body?.accountId || (req as any).user?.id;
       if (!accountId) return res.status(401).json({ error: "Unauthorized" });
       const zoneId = req.params.zoneId;
 
@@ -14661,10 +14661,10 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/zone-dungeons/:zoneId/fight", authMiddleware, async (req, res) => {
+  app.post("/api/zone-dungeons/:zoneId/fight", async (req, res) => {
     try {
       const { zoneId } = req.params;
-      const accountId = (req as any).user?.id;
+      const accountId = req.body?.accountId || (req as any).user?.id;
       if (!accountId) return res.status(401).json({ error: "Unauthorized" });
 
       const config = getZoneDungeonConfig(zoneId);
