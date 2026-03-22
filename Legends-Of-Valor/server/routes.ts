@@ -10798,6 +10798,28 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/player-total-stats", async (req, res) => {
+    try {
+      const adminId = req.query.adminId as string;
+      if (!adminId) return res.status(401).json({ error: "Admin ID required" });
+      const admin = await storage.getAccount(adminId);
+      if (!admin || admin.role !== "admin") return res.status(403).json({ error: "Admin access required" });
+
+      const accounts = await storage.getAllAccounts();
+      const results = await Promise.all(
+        accounts.map(async (a) => {
+          const stats = await getPlayerTotalStats(a.id);
+          return { id: a.id, totalStats: stats };
+        })
+      );
+      const map: Record<string, typeof results[0]["totalStats"]> = {};
+      for (const r of results) map[r.id] = r.totalStats;
+      res.json(map);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get player total stats" });
+    }
+  });
+
   app.get("/api/admin/all-accounts", async (req, res) => {
     try {
       const adminId = req.query.adminId as string;

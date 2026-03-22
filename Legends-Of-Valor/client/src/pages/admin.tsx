@@ -563,6 +563,18 @@ export default function Admin() {
     queryKey: ["/api/accounts"],
   });
 
+  type StatBlock = { Str: number; Def: number; Spd: number; Int: number; Luck: number; Pot: number };
+  const { data: playerTotalStatsMap = {} } = useQuery<Record<string, StatBlock>>({
+    queryKey: ["/api/admin/player-total-stats", account?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/player-total-stats?adminId=${account?.id}`);
+      if (!res.ok) return {};
+      return res.json();
+    },
+    enabled: !!account?.id && account?.role === "admin",
+    staleTime: 30_000,
+  });
+
   const validLocations = [
     { id: "capital_city", name: "Capital City" },
     { id: "mountain_caverns", name: "Mountain Caverns" },
@@ -950,7 +962,7 @@ export default function Admin() {
       const res = await apiRequest("POST", "/api/admin/set-stats", { adminId: account?.id, accountId, stats });
       return res.json();
     },
-    onSuccess: () => { toast({ title: "Stats updated!" }); queryClient.invalidateQueries({ queryKey: ["/api/accounts"] }); setSetStatsUsername(""); },
+    onSuccess: () => { toast({ title: "Stats updated!" }); queryClient.invalidateQueries({ queryKey: ["/api/accounts"] }); queryClient.invalidateQueries({ queryKey: ["/api/admin/player-total-stats"] }); setSetStatsUsername(""); },
     onError: () => toast({ title: "Error", description: "Failed to set stats", variant: "destructive" }),
   });
 
@@ -1082,24 +1094,10 @@ export default function Admin() {
   }, [selectedTier, searchQuery]);
 
   const calculateTotalStats = (player: Account) => {
-    const base = player.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 };
-    const total = { ...base };
-    
-    if (player.equipped) {
-      Object.values(player.equipped).forEach((itemId) => {
-        if (itemId) {
-          const item = getItemById(itemId);
-          if (item) {
-            Object.entries(item.stats).forEach(([stat, val]) => {
-              if (val && stat in total) {
-                (total as any)[stat] += val;
-              }
-            });
-          }
-        }
-      });
+    if (playerTotalStatsMap[player.id]) {
+      return playerTotalStatsMap[player.id];
     }
-    return total;
+    return player.stats || { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 };
   };
 
   const filteredPlayers = useMemo(() => {
