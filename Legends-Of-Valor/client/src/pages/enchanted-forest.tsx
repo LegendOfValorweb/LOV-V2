@@ -99,7 +99,7 @@ const SPIRIT_ENCOUNTERS = [
 export default function EnchantedForest() {
   useZoneDiscovery("enchanted_forest");
   const [, navigate] = useLocation();
-  const { account, setAccount } = useGame();
+  const { account, setAccount, refreshInventory } = useGame();
   const { toast } = useToast();
   const [isGathering, setIsGathering] = useState<string | null>(null);
   const [gatherProgress, setGatherProgress] = useState(0);
@@ -152,20 +152,27 @@ export default function EnchantedForest() {
       }
 
       try {
-        await apiRequest("POST", `/api/accounts/${account.id}/gather`, {
+        const gatherRes = await apiRequest("POST", `/api/accounts/${account.id}/gather`, {
           zoneId: "enchanted_forest",
           areaId,
         });
-      } catch {}
+        const gatherData = await gatherRes.json();
+        const gathered = gatherData.gathered as { resourceName: string; amount: number }[] | undefined;
+        const desc = gathered && gathered.length > 0
+          ? `Found: ${gathered.map(g => `${g.amount}× ${g.resourceName}`).join(", ")}`
+          : (foundSpecial ? `Found a rare ${area.specialItem}!` : "Gathered some resources!");
+        toast({ title: "Gathering Complete!", description: desc });
+      } catch {
+        toast({
+          title: "Gathering Complete!",
+          description: foundSpecial ? `Found a rare ${area.specialItem}!` : "Gathered some resources!",
+        });
+      }
 
-      toast({
-        title: "Gathering Complete!",
-        description: foundSpecial
-          ? `Found ${area.goldReward.toLocaleString()} gold and a rare ${area.specialItem}!`
-          : `Gathered resources worth ${area.goldReward.toLocaleString()} gold!`,
-      });
-
-      const accRes = await fetch(`/api/accounts/${account.id}`);
+      const [accRes] = await Promise.all([
+        fetch(`/api/accounts/${account.id}`),
+        refreshInventory(),
+      ]);
       if (accRes.ok) setAccount(await accRes.json());
       setIsGathering(null);
       setGatherProgress(0);

@@ -338,6 +338,16 @@ export default function Shop() {
                             return trend ? <span style={{color: trend.color, fontWeight: "bold", fontSize: 10, marginLeft: 2}}>{trend.indicator}</span> : null;
                           })()}
                         </span>
+                        {(() => {
+                          const stats = item.stats as any;
+                          const topStat = ["Str","Def","Spd","Int","Luck","Pot"].map(s => ({ s, v: stats[s] || 0 })).sort((a,b) => b.v - a.v)[0];
+                          if (!topStat || topStat.v === 0) return null;
+                          return (
+                            <span style={{ fontSize: "0.5rem", fontFamily: "var(--font-mono)", color: STAT_COLORS[topStat.s], lineHeight: 1, marginTop: 1 }}>
+                              +{topStat.v} {topStat.s}
+                            </span>
+                          );
+                        })()}
                       </>
                     )}
                   </div>

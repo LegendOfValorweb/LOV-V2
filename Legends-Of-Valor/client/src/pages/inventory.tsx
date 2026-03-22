@@ -2,7 +2,7 @@ import { useMemo, useState, useRef, useCallback, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useGame } from "@/lib/game-context";
-import { getItemById, ALL_ITEMS, TIER_LABELS } from "@/lib/items-data";
+import { getItemById, ALL_ITEMS, TIER_LABELS, getResourceById, RESOURCE_ITEMS, type ResourceItem } from "@/lib/items-data";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -127,7 +127,7 @@ export default function Inventory() {
   const [sellDialog, setSellDialog] = useState<{ inventoryItem: InventoryItem; item: Item } | null>(null);
   const [isSelling, setIsSelling] = useState(false);
   const [isTrainingStat, setIsTrainingStat] = useState(false);
-  const [activeTab, setActiveTab] = useState<"all" | "weapon" | "armor" | "accessory">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "weapon" | "armor" | "accessory" | "resource">("all");
   const [hoveredItem, setHoveredItem] = useState<{ item: Item; invItem?: InventoryItem; pos: { x: number; y: number }; slot?: string } | null>(null);
   const [selectedItem, setSelectedItem] = useState<{ item: Item; invItem: InventoryItem } | null>(null);
 
@@ -173,8 +173,21 @@ export default function Inventory() {
       .filter((item): item is NonNullable<typeof item> => item !== undefined);
   }, [inventory]);
 
+  const resourceInventoryItems = useMemo(() => {
+    const counts: Record<string, { resource: ResourceItem; count: number; invIds: string[] }> = {};
+    for (const inv of inventory) {
+      const res = getResourceById(inv.itemId);
+      if (!res) continue;
+      if (!counts[res.id]) counts[res.id] = { resource: res, count: 0, invIds: [] };
+      counts[res.id].count++;
+      counts[res.id].invIds.push(inv.id);
+    }
+    return Object.values(counts);
+  }, [inventory]);
+
   const filteredInventoryItems = useMemo(() => {
     if (activeTab === "all") return inventoryItems;
+    if (activeTab === "resource") return [];
     return inventoryItems.filter(item => item.type === activeTab);
   }, [inventoryItems, activeTab]);
 
@@ -524,17 +537,57 @@ export default function Inventory() {
               </div>
 
               <div className="rpg-inv-tab-bar">
-                {(["all", "weapon", "armor", "accessory"] as const).map(tab => (
+                {(["all", "weapon", "armor", "accessory", "resource"] as const).map(tab => (
                   <div
                     key={tab}
                     className={cn("rpg-inv-tab", activeTab === tab && "rpg-inv-tab-active")}
                     onClick={() => setActiveTab(tab)}
                   >
-                    {tab === "all" ? "All" : tab === "weapon" ? "⚔ Wpn" : tab === "armor" ? "🛡 Arm" : "💎 Acc"}
+                    {tab === "all" ? "All" : tab === "weapon" ? "⚔ Wpn" : tab === "armor" ? "🛡 Arm" : tab === "accessory" ? "💎 Acc" : `🌿 Res${resourceInventoryItems.length > 0 ? ` (${resourceInventoryItems.reduce((s, r) => s + r.count, 0)})` : ""}`}
                   </div>
                 ))}
               </div>
 
+              {activeTab === "resource" ? (
+                <div style={{ padding: "8px 6px", maxHeight: "calc(100vh - 350px)", overflowY: "auto" }}>
+                  {resourceInventoryItems.length === 0 ? (
+                    <div style={{ textAlign: "center", color: "hsl(45 10% 40%)", fontSize: "0.7rem", padding: "20px 0", fontFamily: "var(--font-serif)", fontStyle: "italic" }}>
+                      No resources gathered yet. Explore zones to gather materials.
+                    </div>
+                  ) : (
+                    resourceInventoryItems.map(({ resource, count }) => {
+                      const rarityColor: Record<string, string> = {
+                        common: "hsl(0 0% 70%)", uncommon: "hsl(142 60% 55%)",
+                        rare: "hsl(210 80% 60%)", epic: "hsl(271 70% 65%)", mythic: "hsl(45 90% 60%)",
+                      };
+                      const color = rarityColor[resource.rarity] || "hsl(0 0% 70%)";
+                      return (
+                        <div key={resource.id} style={{
+                          display: "flex", alignItems: "center", justifyContent: "space-between",
+                          padding: "5px 8px", marginBottom: 3, borderRadius: 3,
+                          background: "hsl(240 8% 11%)", border: `1px solid ${color}33`,
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontSize: "1.1rem" }}>🌿</span>
+                            <div>
+                              <div style={{ fontFamily: "var(--font-serif)", fontSize: "0.75rem", color, fontWeight: 600 }}>{resource.name}</div>
+                              <div style={{ fontSize: "0.6rem", color: "hsl(45 10% 45%)", fontFamily: "var(--font-mono)" }}>
+                                {resource.zone} · {resource.rarity}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.8rem", color: "hsl(45 90% 55%)", fontWeight: 700 }}>×{count}</span>
+                            <span style={{ fontSize: "0.6rem", color: "hsl(45 10% 45%)", fontFamily: "var(--font-mono)" }}>
+                              {(resource.sellPrice * count).toLocaleString()}g
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              ) : (
               <div className="rpg-inv-grid" style={{ gridTemplateColumns: "repeat(8, 48px)" }}>
                 {filteredInventoryItems.map((item) => (
                   <div
@@ -557,6 +610,7 @@ export default function Inventory() {
                   <div key={`empty-${i}`} className="rpg-inv-slot rpg-inv-slot-empty" />
                 ))}
               </div>
+              )}
 
               {carryCapacity && (
                 <div className="rpg-capacity-bar">

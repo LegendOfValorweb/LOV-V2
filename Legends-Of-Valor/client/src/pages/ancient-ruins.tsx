@@ -81,7 +81,7 @@ const ARTIFACT_LORE = [
 export default function AncientRuins() {
   useZoneDiscovery("ancient_ruins");
   const [, navigate] = useLocation();
-  const { account, setAccount } = useGame();
+  const { account, setAccount, refreshInventory } = useGame();
   const { toast } = useToast();
   const [isExploring, setIsExploring] = useState<string | null>(null);
   const [explorationProgress, setExplorationProgress] = useState(0);
@@ -133,7 +133,7 @@ export default function AncientRuins() {
           description: `Discovered ${goldGained.toLocaleString()} gold${loreText ? " and an ancient lore fragment!" : "!"}`,
         });
 
-        const accRes = await fetch(`/api/accounts/${account.id}`);
+        const [accRes] = await Promise.all([fetch(`/api/accounts/${account.id}`), refreshInventory()]);
         if (accRes.ok) setAccount(await accRes.json());
       } catch {
         const goldGained = site.goldReward;
@@ -141,7 +141,7 @@ export default function AncientRuins() {
           title: "Exploration Complete!",
           description: `Discovered ${goldGained.toLocaleString()} gold from the ruins!`,
         });
-        const accRes = await fetch(`/api/accounts/${account.id}`);
+        const [accRes] = await Promise.all([fetch(`/api/accounts/${account.id}`), refreshInventory()]);
         if (accRes.ok) setAccount(await accRes.json());
       } finally {
         setIsExploring(null);

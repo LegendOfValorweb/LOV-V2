@@ -257,3 +257,72 @@ export const TIER_LABELS: Record<string, string> = {
 export function getItemById(id: string): Item | undefined {
   return ALL_ITEMS.find((item) => item.id === id);
 }
+
+export interface ResourceItem {
+  id: string;
+  name: string;
+  rarity: "common" | "uncommon" | "rare" | "epic" | "mythic";
+  sellPrice: number;
+  type: "resource";
+  zone: string;
+}
+
+export const RESOURCE_ITEMS: Record<string, ResourceItem> = {
+  iron_ore: { id: "iron_ore", name: "Iron Ore", rarity: "common", sellPrice: 15, type: "resource", zone: "Mountain Caverns" },
+  silver_ore: { id: "silver_ore", name: "Silver Ore", rarity: "uncommon", sellPrice: 40, type: "resource", zone: "Mountain Caverns" },
+  ruby_chunk: { id: "ruby_chunk", name: "Ruby Chunk", rarity: "rare", sellPrice: 120, type: "resource", zone: "Mountain Caverns" },
+  mythril_ore: { id: "mythril_ore", name: "Mythril Ore", rarity: "epic", sellPrice: 500, type: "resource", zone: "Mountain Caverns" },
+  plasma_core: { id: "plasma_core", name: "Plasma Core", rarity: "epic", sellPrice: 1200, type: "resource", zone: "Mountain Caverns" },
+  chrono_crystal: { id: "chrono_crystal", name: "Chrono Crystal", rarity: "mythic", sellPrice: 5000, type: "resource", zone: "Mountain Caverns" },
+  wood: { id: "wood", name: "Wood", rarity: "common", sellPrice: 10, type: "resource", zone: "Enchanted Forest" },
+  fiber: { id: "fiber", name: "Fiber", rarity: "common", sellPrice: 12, type: "resource", zone: "Enchanted Forest" },
+  healing_herb: { id: "healing_herb", name: "Healing Herb", rarity: "common", sellPrice: 18, type: "resource", zone: "Enchanted Forest" },
+  wildflower_petal: { id: "wildflower_petal", name: "Wildflower Petal", rarity: "common", sellPrice: 14, type: "resource", zone: "Enchanted Forest" },
+  meadow_moss: { id: "meadow_moss", name: "Meadow Moss", rarity: "common", sellPrice: 16, type: "resource", zone: "Enchanted Forest" },
+  faerie_dust: { id: "faerie_dust", name: "Faerie Dust", rarity: "uncommon", sellPrice: 55, type: "resource", zone: "Enchanted Forest" },
+  beast_hide: { id: "beast_hide", name: "Beast Hide", rarity: "uncommon", sellPrice: 45, type: "resource", zone: "Enchanted Forest" },
+  glowing_mushroom: { id: "glowing_mushroom", name: "Glowing Mushroom", rarity: "uncommon", sellPrice: 50, type: "resource", zone: "Enchanted Forest" },
+  luminous_crystal: { id: "luminous_crystal", name: "Luminous Crystal", rarity: "uncommon", sellPrice: 65, type: "resource", zone: "Enchanted Forest" },
+  pixie_wing_dust: { id: "pixie_wing_dust", name: "Pixie Wing Dust", rarity: "uncommon", sellPrice: 70, type: "resource", zone: "Enchanted Forest" },
+  nature_essence: { id: "nature_essence", name: "Nature Essence", rarity: "rare", sellPrice: 150, type: "resource", zone: "Enchanted Forest" },
+  spirit_bark: { id: "spirit_bark", name: "Spirit Bark", rarity: "rare", sellPrice: 130, type: "resource", zone: "Enchanted Forest" },
+  elder_wood_sap: { id: "elder_wood_sap", name: "Elder Wood Sap", rarity: "rare", sellPrice: 140, type: "resource", zone: "Enchanted Forest" },
+  forest_spirit_essence: { id: "forest_spirit_essence", name: "Forest Spirit Essence", rarity: "rare", sellPrice: 180, type: "resource", zone: "Enchanted Forest" },
+  ancient_leaf: { id: "ancient_leaf", name: "Ancient Leaf", rarity: "rare", sellPrice: 160, type: "resource", zone: "Enchanted Forest" },
+  creature_fang: { id: "creature_fang", name: "Creature Fang", rarity: "epic", sellPrice: 400, type: "resource", zone: "Enchanted Forest" },
+  mythic_beast_hide: { id: "mythic_beast_hide", name: "Mythic Beast Hide", rarity: "epic", sellPrice: 500, type: "resource", zone: "Enchanted Forest" },
+  void_crystal: { id: "void_crystal", name: "Void Crystal", rarity: "epic", sellPrice: 600, type: "resource", zone: "Enchanted Forest" },
+  rare_pet_fragment: { id: "rare_pet_fragment", name: "Rare Pet Fragment", rarity: "epic", sellPrice: 800, type: "resource", zone: "Enchanted Forest" },
+  soul_shard_resource: { id: "soul_shard_resource", name: "Soul Shard", rarity: "epic", sellPrice: 800, type: "resource", zone: "Enchanted Forest" },
+  heartwood_crystal: { id: "heartwood_crystal", name: "Heartwood Crystal", rarity: "mythic", sellPrice: 2500, type: "resource", zone: "Enchanted Forest" },
+  world_tree_sap: { id: "world_tree_sap", name: "World Tree Sap", rarity: "mythic", sellPrice: 3000, type: "resource", zone: "Enchanted Forest" },
+  primordial_seed: { id: "primordial_seed", name: "Primordial Seed", rarity: "mythic", sellPrice: 3500, type: "resource", zone: "Enchanted Forest" },
+  essence_of_life: { id: "essence_of_life", name: "Essence of Life", rarity: "mythic", sellPrice: 4000, type: "resource", zone: "Enchanted Forest" },
+  genesis_fragment: { id: "genesis_fragment", name: "Genesis Fragment", rarity: "mythic", sellPrice: 5000, type: "resource", zone: "Enchanted Forest" },
+  aether_fragment: { id: "aether_fragment", name: "Aether Fragment", rarity: "rare", sellPrice: 200, type: "resource", zone: "Coastal Village" },
+  sea_salt: { id: "sea_salt", name: "Sea Salt", rarity: "common", sellPrice: 8, type: "resource", zone: "Coastal Village" },
+  coral_piece: { id: "coral_piece", name: "Coral Piece", rarity: "uncommon", sellPrice: 35, type: "resource", zone: "Coastal Village" },
+  crafting_reagent: { id: "crafting_reagent", name: "Crafting Reagent", rarity: "uncommon", sellPrice: 50, type: "resource", zone: "Coastal Village" },
+  rare_essence: { id: "rare_essence", name: "Rare Essence", rarity: "rare", sellPrice: 180, type: "resource", zone: "Mystic Tower" },
+  tempest_stone: { id: "tempest_stone", name: "Tempest Stone", rarity: "epic", sellPrice: 900, type: "resource", zone: "Mystic Tower" },
+  arcane_dust: { id: "arcane_dust", name: "Arcane Dust", rarity: "common", sellPrice: 25, type: "resource", zone: "Mystic Tower" },
+  mana_crystal: { id: "mana_crystal", name: "Mana Crystal", rarity: "uncommon", sellPrice: 60, type: "resource", zone: "Mystic Tower" },
+  raw_ruby: { id: "raw_ruby", name: "Raw Ruby", rarity: "uncommon", sellPrice: 55, type: "resource", zone: "Ruby Mines" },
+  gold_nugget: { id: "gold_nugget", name: "Gold Nugget", rarity: "rare", sellPrice: 130, type: "resource", zone: "Ruby Mines" },
+  deep_iron: { id: "deep_iron", name: "Deep Iron", rarity: "common", sellPrice: 18, type: "resource", zone: "Ruby Mines" },
+  crystal_shard: { id: "crystal_shard", name: "Crystal Shard", rarity: "epic", sellPrice: 650, type: "resource", zone: "Ruby Mines" },
+  lake_crystal: { id: "lake_crystal", name: "Lake Crystal", rarity: "uncommon", sellPrice: 42, type: "resource", zone: "Crystal Lake" },
+  water_lily: { id: "water_lily", name: "Water Lily", rarity: "common", sellPrice: 14, type: "resource", zone: "Crystal Lake" },
+  moonstone: { id: "moonstone", name: "Moonstone", rarity: "rare", sellPrice: 160, type: "resource", zone: "Crystal Lake" },
+  ancient_relic: { id: "ancient_relic", name: "Ancient Relic", rarity: "rare", sellPrice: 170, type: "resource", zone: "Ancient Ruins" },
+  ruin_stone: { id: "ruin_stone", name: "Ruin Stone", rarity: "common", sellPrice: 20, type: "resource", zone: "Ancient Ruins" },
+  shadow_fragment: { id: "shadow_fragment", name: "Shadow Fragment", rarity: "uncommon", sellPrice: 55, type: "resource", zone: "Ancient Ruins" },
+  void_shard: { id: "void_shard", name: "Void Shard", rarity: "epic", sellPrice: 1000, type: "resource", zone: "Ancient Ruins" },
+  hellfire_ember: { id: "hellfire_ember", name: "Hellfire Ember", rarity: "rare", sellPrice: 250, type: "resource", zone: "Hell Zone" },
+  demon_bone: { id: "demon_bone", name: "Demon Bone", rarity: "uncommon", sellPrice: 70, type: "resource", zone: "Hell Zone" },
+  abyssal_core: { id: "abyssal_core", name: "Abyssal Core", rarity: "mythic", sellPrice: 4000, type: "resource", zone: "Hell Zone" },
+};
+
+export function getResourceById(id: string): ResourceItem | undefined {
+  return RESOURCE_ITEMS[id];
+}
