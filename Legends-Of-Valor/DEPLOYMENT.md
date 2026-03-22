@@ -29,11 +29,13 @@ In Railway's project settings, add:
 | Variable | Description |
 |----------|-------------|
 | `DATABASE_URL` | (Auto-set by Railway PostgreSQL) |
-| `FRONTEND_URL` | Your Vercel frontend URL (e.g., `https://your-app.vercel.app`) |
+| `FRONTEND_URL` | Your Vercel frontend URL (e.g., `https://your-app.vercel.app`) — exact origin, no trailing slash |
+| `JWT_SECRET` | A long random secret string for signing auth tokens |
 | `OPENAI_API_KEY` | Your OpenAI API key for AI Game Master |
-| `SESSION_SECRET` | A random string for session encryption |
 
 > **Note:** Do **not** set `SERVE_STATIC=true` on Railway. The Railway backend is an API-only deployment — static frontend files are not present and not needed. The `SERVE_STATIC` flag is only for environments where both the backend and built frontend assets are co-located (e.g., a single-server Replit deployment).
+
+> **Important:** `FRONTEND_URL` must be the exact Vercel origin (no trailing slash). The CORS middleware uses an exact-match allowlist for security — only the URL you specify will be permitted to make credentialed cross-origin requests.
 
 ### 1.4 Get your Railway Backend URL
 
@@ -54,7 +56,9 @@ In Vercel's project settings → Environment Variables, add:
 
 | Variable | Description |
 |----------|-------------|
-| `VITE_API_URL` | Your Railway backend URL (e.g., `https://your-app.up.railway.app`) |
+| `VITE_API_URL` | Your Railway backend URL (e.g., `https://your-app.up.railway.app`) — exact origin, no trailing slash |
+
+> **Important:** `VITE_API_URL` must be set before building. The frontend bakes this value in at build time via `import.meta.env.VITE_API_URL`. Without it, all API calls go to the Vercel domain and return 404s.
 
 ### 2.3 Deploy
 
@@ -67,6 +71,24 @@ After Vercel deployment:
 1. Go back to Railway
 2. Update the `FRONTEND_URL` environment variable with your actual Vercel URL
 3. Railway will automatically redeploy
+
+## Environment Variables Summary
+
+### Railway (Backend)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | Yes | PostgreSQL connection string (auto-set by Railway PostgreSQL) |
+| `FRONTEND_URL` | Yes | Exact Vercel frontend origin (e.g., `https://your-app.vercel.app`) |
+| `JWT_SECRET` | Yes | Long random string for signing authentication tokens |
+| `OPENAI_API_KEY` | Yes | OpenAI API key for AI Game Master feature |
+| `NODE_ENV` | Yes | Set to `production` |
+
+### Vercel (Frontend)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `VITE_API_URL` | Yes | Exact Railway backend origin (e.g., `https://your-app.up.railway.app`) |
 
 ## Build Commands Reference
 
@@ -92,15 +114,30 @@ npm run db:push
 
 This syncs your Drizzle schema to the PostgreSQL database.
 
+## Cookie & CORS Configuration
+
+Auth cookies are configured as follows for cross-origin (Vercel ↔ Railway) requests to work:
+
+- `sameSite: "none"` — required so browsers send the cookie on cross-origin requests
+- `secure: true` — required when `sameSite: "none"` (cookies are only sent over HTTPS)
+- `httpOnly: true` — prevents JavaScript access to the cookie
+
+The CORS middleware on the backend uses an exact-match allowlist. Only the origin specified in `FRONTEND_URL` (plus localhost URLs for local development) will receive `Access-Control-Allow-Origin` headers.
+
 ## Troubleshooting
 
 ### CORS Errors
-- Ensure `FRONTEND_URL` is set correctly in Railway
-- The backend allows any `.vercel.app` domain by default
+- Ensure `FRONTEND_URL` is set to the exact Vercel origin in Railway (no trailing slash)
+- If using a custom domain on Vercel, update `FRONTEND_URL` to match the custom domain
 
 ### API Connection Issues
-- Verify `VITE_API_URL` is set in Vercel (include the full URL with `https://`)
+- Verify `VITE_API_URL` is set in Vercel before deploying (include the full URL with `https://`)
 - Check Railway logs for backend errors
+- Ensure `VITE_API_URL` has no trailing slash
+
+### Cookies Not Sent
+- Both Vercel and Railway must be served over HTTPS (they are by default)
+- Ensure `NODE_ENV=production` is set on Railway so `secure: true` is enforced on cookies
 
 ### Database Connection
 - Ensure `DATABASE_URL` is set in Railway

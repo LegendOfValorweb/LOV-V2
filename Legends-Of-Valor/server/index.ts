@@ -11,13 +11,14 @@ declare module "http" {
   }
 }
 
-const allowedOrigins = process.env.FRONTEND_URL 
-  ? [process.env.FRONTEND_URL, "http://localhost:5173", "http://localhost:5000"]
-  : ["http://localhost:5173", "http://localhost:5000"];
+const isProduction = process.env.NODE_ENV === "production";
+const allowedOrigins = isProduction && process.env.FRONTEND_URL
+  ? [process.env.FRONTEND_URL]
+  : [process.env.FRONTEND_URL, "http://localhost:5173", "http://localhost:5000"].filter(Boolean) as string[];
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (origin && (allowedOrigins.includes(origin) || allowedOrigins.some(o => origin.endsWith('.vercel.app')))) {
+  if (origin && allowedOrigins.includes(origin)) {
     res.header("Access-Control-Allow-Origin", origin);
     res.header("Access-Control-Allow-Credentials", "true");
     res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");

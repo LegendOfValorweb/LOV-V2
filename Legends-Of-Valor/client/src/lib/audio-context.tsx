@@ -9,7 +9,7 @@ export const MUSIC_TRACKS = [
 ];
 
 interface AudioContextValue {
-  audioRef: React.RefObject<HTMLAudioElement>;
+  audioRef: React.RefObject<HTMLAudioElement | null>;
   isPlaying: boolean;
   volume: number;
   isMuted: boolean;
@@ -27,7 +27,7 @@ interface AudioContextValue {
 const AudioCtx = createContext<AudioContextValue | null>(null);
 
 export function AudioProvider({ children }: { children: ReactNode }) {
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolumeState] = useState(0.3);
   const [isMuted, setIsMuted] = useState(false);
