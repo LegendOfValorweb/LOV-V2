@@ -245,7 +245,7 @@ export default function NpcBattle() {
       ambientClass="zone-ambient-tower"
       overlayOpacity={0.45}
     >
-      <div className="h-full flex flex-col text-foreground">
+      <div className="game-page text-foreground">
       <header className="border-b border-border bg-card/80 backdrop-blur sticky top-0 z-50">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">

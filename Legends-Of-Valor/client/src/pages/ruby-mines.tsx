@@ -105,7 +105,7 @@ export default function RubyMines() {
       ambientClass="zone-ambient-cave"
       overlayOpacity={0.5}
     >
-      <div className="h-full flex flex-col overflow-y-auto">
+      <div className="game-page">
         <header className="border-b border-red-500/30 bg-black/50 backdrop-blur-sm sticky top-0 z-50">
           <div className="container mx-auto px-4 py-4">
             <div className="flex items-center justify-between">

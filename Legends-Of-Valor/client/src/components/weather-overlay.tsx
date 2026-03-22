@@ -68,9 +68,9 @@ export function WeatherOverlay() {
     };
 
     fetchTime();
-    const interval = setInterval(fetchTime, 30000);
+    const interval = setInterval(fetchTime, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [location]);
 
   const currentZoneId = ROUTE_TO_ZONE[location] || "capital_city";
 

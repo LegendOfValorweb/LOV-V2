@@ -86,6 +86,42 @@ export default function Tournaments() {
     }
   };
 
+  const createPracticeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/tournaments/create-practice", {
+        accountId: account?.id,
+      });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Practice Tournament Created!", description: "Ready to simulate. Click Simulate to run it." });
+      queryClient.invalidateQueries({ queryKey: ["/api/tournaments"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed", description: error.message || "Could not create tournament", variant: "destructive" });
+    },
+  });
+
+  const simulateMutation = useMutation({
+    mutationFn: async (tournamentId: string) => {
+      const res = await apiRequest("POST", `/api/tournaments/${tournamentId}/simulate`, {
+        accountId: account?.id,
+      });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.playerWon) {
+        toast({ title: "You Won! 🏆", description: `Victory! Claimed ${(50000).toLocaleString()} gold and 100 rubies!` });
+      } else {
+        toast({ title: "Tournament Complete", description: `Winner: ${data.winner}. Better luck next time!` });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/tournaments"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Simulate Failed", description: error.message || "Could not simulate tournament", variant: "destructive" });
+    },
+  });
+
   const betMutation = useMutation({
     mutationFn: async ({ tournamentId, matchIndex, betAmount, targetPlayerId }: { tournamentId: string, matchIndex: number, betAmount: number, targetPlayerId: string }) => {
       const res = await apiRequest("POST", `/api/tournaments/${tournamentId}/bet`, {
@@ -233,6 +269,21 @@ export default function Tournaments() {
             You are competing!
           </Badge>
         )}
+
+        {tournament.createdBy === account?.id && tournament.status === "pending" && (
+          <Button
+            onClick={() => simulateMutation.mutate(tournament.id)}
+            disabled={simulateMutation.isPending}
+            className="bg-purple-600 hover:bg-purple-700 w-full"
+          >
+            {simulateMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            ) : (
+              <Crown className="w-4 h-4 mr-2" />
+            )}
+            Simulate Tournament
+          </Button>
+        )}
       </CardContent>
     </Card>
   );
@@ -298,17 +349,27 @@ export default function Tournaments() {
               </section>
             )}
 
-            {!active && pending.length === 0 && completed.length === 0 && (
-              <Card className="bg-gray-900/50 border-gray-700">
-                <CardContent className="py-12 text-center">
-                  <Trophy className="w-12 h-12 mx-auto text-gray-600 mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-400 mb-2">No Tournaments Available</h3>
-                  <p className="text-gray-500">
-                    Check back later for upcoming tournament events!
-                  </p>
-                </CardContent>
-              </Card>
-            )}
+            <Card className="bg-gray-900/50 border-amber-700/40">
+              <CardContent className="py-8 text-center">
+                <Trophy className="w-10 h-10 mx-auto text-amber-500 mb-3" />
+                <h3 className="text-base font-semibold text-amber-300 mb-1">Practice Tournament</h3>
+                <p className="text-gray-400 text-sm mb-4">
+                  Run a practice tournament against NPC opponents to earn gold and rubies.
+                </p>
+                <Button
+                  onClick={() => createPracticeMutation.mutate()}
+                  disabled={createPracticeMutation.isPending}
+                  className="bg-amber-600 hover:bg-amber-700"
+                >
+                  {createPracticeMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <Swords className="w-4 h-4 mr-2" />
+                  )}
+                  Create Practice Tournament
+                </Button>
+              </CardContent>
+            </Card>
           </>
         )}
       </div>

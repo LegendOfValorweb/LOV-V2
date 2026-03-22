@@ -312,6 +312,29 @@ export default function HellZone() {
     },
   });
 
+  const [soloPracticeResult, setSoloPracticeResult] = useState<null | {
+    playerWon: boolean; placement: number; totalParticipants: number;
+    winner: string; kills: number; goldReward: number; rubyReward: number; log: string[];
+  }>(null);
+
+  const soloPracticeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/battle-royale/solo-practice", { accountId: account?.id });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setSoloPracticeResult(data);
+      if (data.playerWon) {
+        toast({ title: "Victory! You won the Battle Royale!", description: `+${data.goldReward.toLocaleString()} Gold, +${data.rubyReward} Rubies` });
+      } else {
+        toast({ title: `Placed #${data.placement} of ${data.totalParticipants}`, description: data.goldReward > 0 ? `+${data.goldReward.toLocaleString()} Gold` : "Better luck next time!" });
+      }
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   useEffect(() => {
     if (brStatus?.status === "active" || brStatus?.status === "registration") {
       setActiveTab("royale");
@@ -367,7 +390,7 @@ export default function HellZone() {
       ambientClass="zone-ambient-hell"
       overlayOpacity={0.5}
     >
-      <div className="h-full flex flex-col overflow-y-auto">
+      <div className="game-page">
         <header className="border-b border-red-500/50 bg-black/70 backdrop-blur-sm sticky top-0 z-50">
           <div className="container mx-auto px-4 py-4">
             <div className="flex items-center justify-between">
@@ -547,10 +570,40 @@ export default function HellZone() {
                   </CardHeader>
                   <CardContent>
                     {brStatus?.status === "closed" && (
-                      <div className="text-center py-12 text-muted-foreground">
-                        <Clock className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                        <p>Battle Royale is currently closed.</p>
-                        <p className="text-sm">Wait for admin to open registration.</p>
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Clock className="w-10 h-10 mx-auto mb-4 opacity-50" />
+                        <p className="mb-2">Battle Royale is currently closed.</p>
+                        <p className="text-sm mb-6">Or jump in now with a Solo Practice run against NPC opponents!</p>
+
+                        {soloPracticeResult && (
+                          <div className={`mx-auto max-w-sm mb-6 p-4 rounded-lg border ${soloPracticeResult.playerWon ? "border-yellow-500 bg-yellow-900/20" : "border-gray-600 bg-gray-900/40"}`}>
+                            <div className="text-lg font-bold mb-2">
+                              {soloPracticeResult.playerWon ? "🏆 Victory!" : `#${soloPracticeResult.placement} of ${soloPracticeResult.totalParticipants}`}
+                            </div>
+                            <div className="text-sm space-y-1 mb-3 text-left">
+                              <div>Kills: <span className="text-amber-300">{soloPracticeResult.kills}</span></div>
+                              {soloPracticeResult.goldReward > 0 && <div>Gold earned: <span className="text-yellow-300">+{soloPracticeResult.goldReward.toLocaleString()}</span></div>}
+                              {soloPracticeResult.rubyReward > 0 && <div>Rubies: <span className="text-red-400">+{soloPracticeResult.rubyReward}</span></div>}
+                              {!soloPracticeResult.playerWon && <div className="text-gray-400">Winner: {soloPracticeResult.winner}</div>}
+                            </div>
+                            <div className="text-xs text-gray-500 text-left space-y-0.5">
+                              {soloPracticeResult.log.map((line, i) => <div key={i}>{line}</div>)}
+                            </div>
+                          </div>
+                        )}
+
+                        <Button
+                          onClick={() => soloPracticeMutation.mutate()}
+                          disabled={soloPracticeMutation.isPending}
+                          className="bg-red-700 hover:bg-red-800"
+                          size="lg"
+                        >
+                          {soloPracticeMutation.isPending ? (
+                            <><Skull className="w-4 h-4 animate-spin mr-2" />Simulating...</>
+                          ) : (
+                            <><Swords className="w-5 h-5 mr-2" />Solo Practice Battle</>
+                          )}
+                        </Button>
                       </div>
                     )}
 

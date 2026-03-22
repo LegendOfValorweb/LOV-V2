@@ -268,10 +268,13 @@ export interface ResourceItem {
 }
 
 export const RESOURCE_ITEMS: Record<string, ResourceItem> = {
+  copper_ore: { id: "copper_ore", name: "Copper Ore", rarity: "common", sellPrice: 8, type: "resource", zone: "Mountain Caverns" },
   iron_ore: { id: "iron_ore", name: "Iron Ore", rarity: "common", sellPrice: 15, type: "resource", zone: "Mountain Caverns" },
   silver_ore: { id: "silver_ore", name: "Silver Ore", rarity: "uncommon", sellPrice: 40, type: "resource", zone: "Mountain Caverns" },
+  gold_ore: { id: "gold_ore", name: "Gold Ore", rarity: "rare", sellPrice: 90, type: "resource", zone: "Mountain Caverns" },
   ruby_chunk: { id: "ruby_chunk", name: "Ruby Chunk", rarity: "rare", sellPrice: 120, type: "resource", zone: "Mountain Caverns" },
   mythril_ore: { id: "mythril_ore", name: "Mythril Ore", rarity: "epic", sellPrice: 500, type: "resource", zone: "Mountain Caverns" },
+  adamantite_ore: { id: "adamantite_ore", name: "Adamantite Ore", rarity: "epic", sellPrice: 800, type: "resource", zone: "Mountain Caverns" },
   plasma_core: { id: "plasma_core", name: "Plasma Core", rarity: "epic", sellPrice: 1200, type: "resource", zone: "Mountain Caverns" },
   chrono_crystal: { id: "chrono_crystal", name: "Chrono Crystal", rarity: "mythic", sellPrice: 5000, type: "resource", zone: "Mountain Caverns" },
   wood: { id: "wood", name: "Wood", rarity: "common", sellPrice: 10, type: "resource", zone: "Enchanted Forest" },

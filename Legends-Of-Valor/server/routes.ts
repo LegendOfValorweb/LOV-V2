@@ -12926,6 +12926,30 @@ export async function registerRoutes(
     res.json({ success: true, tournament });
   });
 
+  app.post("/api/tournaments/create-practice", async (req, res) => {
+    const { accountId } = req.body;
+    const account = await storage.getAccount(accountId);
+    if (!account) return res.status(404).json({ error: "Account not found" });
+
+    const npcNames = ["Shadow_Vex", "Iron_Magnus", "Guardian_Kira", "Storm_Lyra", "Frost_Blade", "Ember_Knight"];
+    const shuffled = [accountId, ...npcNames.slice(0, 3)].sort(() => Math.random() - 0.5);
+
+    const id = `tournament_practice_${Date.now()}`;
+    const tournament: Tournament = {
+      id,
+      name: `Practice Tournament`,
+      status: "pending",
+      participants: shuffled,
+      brackets: [],
+      rewards: { gold: 50000, rubies: 100 },
+      createdBy: accountId,
+    };
+
+    tournaments.set(id, tournament);
+
+    res.json({ success: true, tournament });
+  });
+
   app.post("/api/tournaments/:id/join", async (req, res) => {
     const { accountId } = req.body;
     const tournament = tournaments.get(req.params.id);
@@ -12946,6 +12970,67 @@ export async function registerRoutes(
     tournaments.set(req.params.id, tournament);
     
     res.json({ success: true, participants: tournament.participants.length });
+  });
+
+  app.post("/api/tournaments/:id/simulate", async (req, res) => {
+    const { accountId } = req.body;
+    const tournament = tournaments.get(req.params.id);
+    if (!tournament) return res.status(404).json({ error: "Tournament not found" });
+    if (tournament.createdBy !== accountId) return res.status(403).json({ error: "Only creator can simulate" });
+    if (tournament.status !== "pending") return res.status(400).json({ error: "Tournament already started" });
+    if (tournament.participants.length < 2) return res.status(400).json({ error: "Need at least 2 participants" });
+
+    const account = await storage.getAccount(accountId);
+    if (!account) return res.status(404).json({ error: "Account not found" });
+
+    const allParticipants = [...tournament.participants];
+    let currentRound = allParticipants;
+    const brackets: { round: number; matches: TournamentMatch[] }[] = [];
+    let roundNum = 1;
+
+    while (currentRound.length > 1) {
+      const shuffled = [...currentRound].sort(() => Math.random() - 0.5);
+      const matches: TournamentMatch[] = [];
+      const nextRound: string[] = [];
+
+      for (let i = 0; i < shuffled.length; i += 2) {
+        if (shuffled[i + 1]) {
+          const isPlayerMatch = shuffled[i] === accountId || shuffled[i + 1] === accountId;
+          const playerWins = isPlayerMatch && Math.random() < 0.6;
+          const winner = isPlayerMatch
+            ? (playerWins ? accountId : (shuffled[i] === accountId ? shuffled[i + 1] : shuffled[i]))
+            : shuffled[Math.random() < 0.5 ? i : i + 1];
+          matches.push({ player1: shuffled[i], player2: shuffled[i + 1], winner });
+          nextRound.push(winner);
+        } else {
+          matches.push({ player1: shuffled[i], player2: "BYE", winner: shuffled[i] });
+          nextRound.push(shuffled[i]);
+        }
+      }
+
+      brackets.push({ round: roundNum, matches });
+      currentRound = nextRound;
+      roundNum++;
+    }
+
+    const winnerId = currentRound[0];
+    tournament.brackets = brackets;
+    tournament.status = "completed";
+    tournament.startedAt = new Date();
+    tournament.endedAt = new Date();
+    tournaments.set(req.params.id, tournament);
+
+    if (winnerId === accountId) {
+      await storage.updateAccount(accountId, {
+        gold: account.gold + (tournament.rewards.gold || 0),
+        rubies: (account.rubies || 0) + (tournament.rewards.rubies || 0),
+      });
+    }
+
+    const winnerAccount = winnerId !== accountId ? await storage.getAccount(winnerId) : account;
+    const winnerName = winnerAccount?.username || winnerId;
+
+    res.json({ success: true, tournament, winner: winnerName, playerWon: winnerId === accountId });
   });
 
   app.post("/api/admin/tournaments/:id/start", async (req, res) => {
@@ -13164,29 +13249,34 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Mining requires Apprentice rank or higher", required: "Apprentice" });
       }
 
-      const nodes: Record<string, { goldReward: number; expReward: number }> = {
-        copper: { goldReward: 100, expReward: 5 },
-        iron: { goldReward: 250, expReward: 10 },
-        silver: { goldReward: 500, expReward: 20 },
-        gold: { goldReward: 1000, expReward: 50 },
-        mythril: { goldReward: 2500, expReward: 100 },
-        adamantite: { goldReward: 5000, expReward: 200 },
+      const nodes: Record<string, { itemId: string; itemName: string; quantity: number; goldValue: number }> = {
+        copper: { itemId: "copper_ore", itemName: "Copper Ore", quantity: 3, goldValue: 30 },
+        iron: { itemId: "iron_ore", itemName: "Iron Ore", quantity: 2, goldValue: 20 },
+        silver: { itemId: "silver_ore", itemName: "Silver Ore", quantity: 2, goldValue: 50 },
+        gold: { itemId: "gold_ore", itemName: "Gold Ore", quantity: 1, goldValue: 100 },
+        mythril: { itemId: "mythril_ore", itemName: "Mythril Ore", quantity: 1, goldValue: 250 },
+        adamantite: { itemId: "adamantite_ore", itemName: "Adamantite Ore", quantity: 1, goldValue: 500 },
       };
 
       const node = nodes[nodeId];
       if (!node) return res.status(400).json({ error: "Invalid node" });
 
       const luck = (account.stats as any)?.Luck || 10;
-      const bonusMultiplier = 1 + (luck / 100);
-      const finalGold = Math.floor(node.goldReward * bonusMultiplier);
-      const finalExp = Math.floor(node.expReward * bonusMultiplier);
+      const bonusQuantity = Math.floor(luck / 50);
+      const finalQuantity = node.quantity + bonusQuantity;
 
-      await storage.updateAccount(accountId, {
-        gold: (account.gold || 0) + finalGold,
-        trainingPoints: (account.trainingPoints || 0) + finalExp,
-      });
+      for (let i = 0; i < finalQuantity; i++) {
+        await storage.addToInventory({
+          accountId,
+          itemId: node.itemId,
+          stats: {},
+          purchasedAt: new Date(),
+        });
+      }
 
-      res.json({ success: true, goldReward: finalGold, expReward: finalExp });
+      await recordValorpediaDiscovery(accountId, "resources", node.itemId);
+
+      res.json({ success: true, itemId: node.itemId, itemName: node.itemName, quantity: finalQuantity, goldValue: node.goldValue });
     } catch (error) {
       res.status(500).json({ error: "Mining failed" });
     }
@@ -13743,6 +13833,100 @@ export async function registerRoutes(
               maxHp: p.maxHp,
             }))
         : [],
+    });
+  });
+
+  app.post("/api/battle-royale/solo-practice", async (req, res) => {
+    const { accountId } = req.body;
+    if (!accountId) return res.status(400).json({ error: "Account ID required" });
+
+    const account = await storage.getAccount(accountId);
+    if (!account) return res.status(404).json({ error: "Account not found" });
+
+    const npcNames = ["Shadow Wraith", "Bone Stalker", "Void Reaper", "Inferno Knight", "Chaos Golem"];
+    const npcRaces = ["undead", "demon", "dragon", "human", "orc"];
+
+    const opponents = npcNames.slice(0, 4 + Math.floor(Math.random() * 3)).map((name, i) => ({
+      accountId: `npc_br_${i}`,
+      username: name,
+      race: npcRaces[i % npcRaces.length],
+      hp: 80 + Math.floor(Math.random() * 120),
+      maxHp: 200,
+      kills: 0,
+      eliminated: false,
+      placement: 0,
+    }));
+
+    const playerMaxHp = 200 + (account as any).level * 10;
+    const playerHp = playerMaxHp;
+
+    let participants = [
+      { accountId, username: account.username, race: (account as any).race || "human", hp: playerHp, maxHp: playerMaxHp, kills: 0, eliminated: false, placement: 0 },
+      ...opponents,
+    ];
+
+    const totalParticipants = participants.length;
+    let round = 1;
+    const log: string[] = [];
+    let playerSurvived = true;
+
+    while (participants.filter(p => !p.eliminated).length > 1) {
+      const alive = participants.filter(p => !p.eliminated);
+      const shuffled = alive.sort(() => Math.random() - 0.5);
+
+      for (let i = 0; i < shuffled.length - 1; i += 2) {
+        const a = shuffled[i];
+        const b = shuffled[i + 1];
+        if (!a || !b) continue;
+
+        const aWins = a.accountId === accountId
+          ? Math.random() < 0.55
+          : Math.random() < 0.5;
+
+        if (aWins) {
+          b.eliminated = true;
+          b.placement = alive.filter(p => !p.eliminated).length + 1;
+          a.kills++;
+          log.push(`Round ${round}: ${a.username} defeated ${b.username}`);
+          if (b.accountId === accountId) playerSurvived = false;
+        } else {
+          a.eliminated = true;
+          a.placement = alive.filter(p => !p.eliminated).length + 1;
+          b.kills++;
+          log.push(`Round ${round}: ${b.username} defeated ${a.username}`);
+          if (a.accountId === accountId) playerSurvived = false;
+        }
+      }
+      round++;
+    }
+
+    const winner = participants.find(p => !p.eliminated);
+    if (winner) winner.placement = 1;
+
+    const playerData = participants.find(p => p.accountId === accountId);
+    const playerPlacement = playerData?.placement || totalParticipants;
+    const playerWon = winner?.accountId === accountId;
+
+    const goldReward = playerWon ? 15000 : Math.max(0, (totalParticipants - playerPlacement) * 500);
+    const rubyReward = playerWon ? 50 : 0;
+
+    if (goldReward > 0 || rubyReward > 0) {
+      await storage.updateAccount(accountId, {
+        gold: account.gold + goldReward,
+        rubies: ((account as any).rubies || 0) + rubyReward,
+      });
+    }
+
+    res.json({
+      success: true,
+      playerWon,
+      placement: playerPlacement,
+      totalParticipants,
+      winner: winner?.username || "Unknown",
+      kills: playerData?.kills || 0,
+      goldReward,
+      rubyReward,
+      log: log.slice(-10),
     });
   });
 

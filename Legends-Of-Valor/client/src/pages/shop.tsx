@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import ZoneNPCPanel from "@/components/zone-npc-panel";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -151,6 +151,30 @@ export default function Shop() {
 
   const handleItemLeave = useCallback(() => {
     setHoveredItem(null);
+  }, []);
+
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggeredRef = useRef(false);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent, item: Item) => {
+    longPressTriggeredRef.current = false;
+    const touch = e.touches[0];
+    longPressTimerRef.current = setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      setHoveredItem({ item, pos: { x: touch.clientX, y: touch.clientY } });
+    }, 500);
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    if (longPressTriggeredRef.current) {
+      e.preventDefault();
+      setTimeout(() => setHoveredItem(null), 1500);
+    }
+    longPressTriggeredRef.current = false;
   }, []);
 
   function getPriceTrend(itemId: string, basePrice: number): { indicator: string; color: string } | null {
@@ -322,6 +346,9 @@ export default function Shop() {
                     onClick={() => !isLocked && handleBuy(item)}
                     onMouseEnter={(e) => handleItemHover(e, item)}
                     onMouseLeave={handleItemLeave}
+                    onTouchStart={(e) => handleTouchStart(e, item)}
+                    onTouchEnd={handleTouchEnd}
+                    onTouchCancel={handleTouchEnd}
                     title={item.name}
                   >
                     {isLocked ? (

@@ -1038,7 +1038,7 @@ export default function Base() {
       ambientClass="zone-ambient-shop"
       overlayOpacity={0.35}
     >
-      <div className="h-full flex flex-col">
+      <div className="game-page">
         {/* HUD bar */}
         <div className="flex-shrink-0 flex items-center justify-between px-3 py-2 bg-black/60 backdrop-blur-sm border-b border-white/10">
           <div className="flex items-center gap-2">

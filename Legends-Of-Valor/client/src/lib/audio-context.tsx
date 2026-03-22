@@ -1,4 +1,5 @@
 import { createContext, useContext, useRef, useState, useEffect, useCallback, type ReactNode } from "react";
+import { useGame } from "@/lib/game-context";
 
 export const MUSIC_TRACKS = [
   { name: "Epic Adventure", src: "/music.mp3" },
@@ -27,6 +28,7 @@ interface AudioContextValue {
 const AudioCtx = createContext<AudioContextValue | null>(null);
 
 export function AudioProvider({ children }: { children: ReactNode }) {
+  const { account } = useGame();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolumeState] = useState(0.3);
@@ -34,12 +36,67 @@ export function AudioProvider({ children }: { children: ReactNode }) {
   const [currentTrack, setCurrentTrack] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const prevAccountIdRef = useRef<string | null>(null);
+  const autoplayHandlersRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.volume = isMuted ? 0 : volume;
     }
   }, [volume, isMuted]);
+
+  useEffect(() => {
+    const currentId = account?.id ?? null;
+    const prevId = prevAccountIdRef.current;
+
+    if (!currentId) {
+      prevAccountIdRef.current = null;
+      return;
+    }
+
+    if (currentId === prevId) return;
+
+    prevAccountIdRef.current = currentId;
+
+    if (autoplayHandlersRef.current) {
+      autoplayHandlersRef.current();
+      autoplayHandlersRef.current = null;
+    }
+
+    const tryPlay = () => {
+      const audio = audioRef.current;
+      if (audio && !audio.paused) return;
+      if (audio) {
+        audio.play().catch(() => {});
+      }
+    };
+
+    const delay = setTimeout(tryPlay, 600);
+
+    const handleInteraction = () => {
+      clearTimeout(delay);
+      tryPlay();
+      document.removeEventListener('click', handleInteraction);
+      document.removeEventListener('keydown', handleInteraction);
+      document.removeEventListener('touchstart', handleInteraction);
+      autoplayHandlersRef.current = null;
+    };
+
+    const cleanup = () => {
+      clearTimeout(delay);
+      document.removeEventListener('click', handleInteraction);
+      document.removeEventListener('keydown', handleInteraction);
+      document.removeEventListener('touchstart', handleInteraction);
+    };
+
+    autoplayHandlersRef.current = cleanup;
+
+    document.addEventListener('click', handleInteraction);
+    document.addEventListener('keydown', handleInteraction);
+    document.addEventListener('touchstart', handleInteraction);
+
+    return cleanup;
+  }, [account?.id]);
 
   useEffect(() => {
     const audio = audioRef.current;

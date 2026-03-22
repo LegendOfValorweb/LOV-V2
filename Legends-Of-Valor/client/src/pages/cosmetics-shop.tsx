@@ -143,7 +143,7 @@ export default function CosmeticsShop() {
   const currentItems = shop ? shop[activeCategory as keyof CosmeticsShop] : [];
 
   return (
-    <div className="h-full relative">
+    <div className="game-page">
       <div 
         className="absolute inset-0 bg-cover bg-center"
         style={{ backgroundImage: "url('/backdrops/shop.png')" }}
