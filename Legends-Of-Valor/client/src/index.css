@@ -1155,6 +1155,389 @@
   animation: ghostPulse 2s ease-in-out infinite;
 }
 
+/* ─── Settings Panel ──────────────────────────────────── */
+.settings-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: transparent;
+  pointer-events: auto;
+}
+
+.settings-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 300px;
+  height: 100%;
+  background: hsl(240 12% 9% / 0.97);
+  border-left: 1px solid hsl(45 50% 30% / 0.4);
+  display: flex;
+  flex-direction: column;
+  box-shadow: -6px 0 32px hsl(0 0% 0% / 0.6);
+  animation: settingsSlidein 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes settingsSlidein {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);   opacity: 1; }
+}
+
+.settings-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid hsl(45 40% 20% / 0.5);
+  flex-shrink: 0;
+}
+
+.settings-panel-title {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  font-weight: 700;
+  color: hsl(45 90% 65%);
+  letter-spacing: 0.06em;
+}
+
+.settings-panel-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: hsl(240 8% 18% / 0.8);
+  border: 1px solid hsl(240 8% 28% / 0.5);
+  color: hsl(45 10% 70%);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.settings-panel-close:hover {
+  background: hsl(0 70% 35% / 0.5);
+  color: hsl(0 80% 75%);
+}
+
+.settings-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px 10px 0;
+  flex-shrink: 0;
+}
+
+.settings-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 7px 6px;
+  border-radius: 6px 6px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: hsl(45 10% 55%);
+  background: hsl(240 8% 14% / 0.5);
+  border: 1px solid hsl(240 8% 22% / 0.4);
+  border-bottom: none;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  font-family: var(--font-sans);
+}
+.settings-tab:hover {
+  color: hsl(45 80% 70%);
+  background: hsl(240 8% 18% / 0.7);
+}
+.settings-tab-active {
+  color: hsl(45 90% 70%) !important;
+  background: hsl(240 10% 12% / 0.95) !important;
+  border-color: hsl(45 50% 30% / 0.5) !important;
+}
+
+.settings-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: hsl(45 40% 25% / 0.5) transparent;
+}
+.settings-panel-body::-webkit-scrollbar { width: 4px; }
+.settings-panel-body::-webkit-scrollbar-track { background: transparent; }
+.settings-panel-body::-webkit-scrollbar-thumb { background: hsl(45 40% 25% / 0.5); border-radius: 4px; }
+
+/* Music tab */
+.settings-music {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 14px;
+}
+
+.settings-music-now-playing {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: hsl(240 10% 14% / 0.8);
+  border: 1px solid hsl(45 40% 25% / 0.3);
+  border-radius: 8px;
+}
+
+.settings-music-track-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-music-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: hsl(45 10% 50%);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.settings-music-track-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: hsl(45 80% 78%);
+  font-family: var(--font-sans);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.settings-music-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.settings-music-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: hsl(240 8% 18% / 0.8);
+  border: 1px solid hsl(240 8% 28% / 0.5);
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  color: hsl(45 10% 70%);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.settings-music-btn:hover {
+  background: hsl(240 8% 25%);
+  color: hsl(45 90% 75%);
+  border-color: hsl(45 50% 35% / 0.5);
+}
+.settings-music-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.settings-music-btn-play {
+  width: 44px;
+  height: 44px;
+  background: hsl(45 80% 30% / 0.5);
+  border-color: hsl(45 60% 40% / 0.6);
+  color: hsl(45 90% 75%);
+}
+.settings-music-btn-play:hover {
+  background: hsl(45 80% 35% / 0.7);
+  color: hsl(45 100% 85%);
+}
+
+.settings-music-volume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: hsl(240 8% 13% / 0.6);
+  border-radius: 8px;
+  border: 1px solid hsl(240 8% 20% / 0.4);
+}
+
+.settings-music-slider {
+  flex: 1;
+  height: 4px;
+  appearance: none;
+  background: hsl(240 8% 25%);
+  border-radius: 4px;
+  cursor: pointer;
+  accent-color: hsl(45 90% 55%);
+}
+
+.settings-music-volume-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: hsl(45 10% 55%);
+  min-width: 30px;
+  text-align: right;
+}
+
+.settings-music-tracklist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-music-tracklist-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: hsl(45 10% 45%);
+  padding: 0 2px;
+}
+
+.settings-music-tracks {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 220px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: hsl(45 30% 20% / 0.4) transparent;
+  border: 1px solid hsl(240 8% 20% / 0.4);
+  border-radius: 6px;
+  background: hsl(240 8% 11% / 0.5);
+  padding: 4px;
+}
+
+.settings-music-track-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  color: hsl(45 10% 55%);
+  background: transparent;
+  border: none;
+  text-align: left;
+  width: 100%;
+  transition: background 0.12s, color 0.12s;
+}
+.settings-music-track-row:hover {
+  background: hsl(240 8% 18%);
+  color: hsl(45 80% 70%);
+}
+.settings-music-track-active {
+  background: hsl(45 60% 20% / 0.4) !important;
+  color: hsl(45 90% 72%) !important;
+}
+
+.settings-track-number {
+  font-size: 10px;
+  color: hsl(45 10% 35%);
+  min-width: 16px;
+  text-align: right;
+}
+
+.settings-track-playing-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: hsl(45 90% 55%);
+  min-width: 16px;
+  animation: trackPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes trackPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.75); }
+}
+
+.settings-track-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Guide tab */
+.settings-guide {
+  padding: 12px 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-guide-intro {
+  font-size: 12px;
+  color: hsl(45 10% 55%);
+  line-height: 1.5;
+  padding: 8px 10px;
+  background: hsl(240 8% 13% / 0.6);
+  border-radius: 6px;
+  border: 1px solid hsl(240 8% 20% / 0.3);
+}
+
+.settings-guide-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-guide-section {
+  border: 1px solid hsl(240 8% 20% / 0.5);
+  border-radius: 6px;
+  overflow: hidden;
+  background: hsl(240 8% 11% / 0.5);
+}
+
+.settings-guide-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+.settings-guide-header:hover {
+  background: hsl(240 8% 16% / 0.7);
+}
+
+.settings-guide-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+}
+
+.settings-guide-title {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 700;
+  color: hsl(45 70% 72%);
+  font-family: var(--font-serif);
+  letter-spacing: 0.03em;
+}
+
+.settings-guide-body {
+  padding: 10px 14px 14px;
+  border-top: 1px solid hsl(240 8% 20% / 0.4);
+  color: hsl(45 8% 70%);
+  font-size: 12px;
+  line-height: 1.55;
+  background: hsl(240 10% 9% / 0.6);
+}
+.settings-guide-body ul,
+.settings-guide-body ol {
+  padding-left: 4px;
+}
+.settings-guide-body strong {
+  color: hsl(45 80% 70%);
+}
+/* ─── End Settings Panel ──────────────────────────────── */
+
 @keyframes ghostPulse {
   0%, 100% { opacity: 0.7; }
   50% { opacity: 1; }

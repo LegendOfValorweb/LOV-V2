@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useGame } from "@/lib/game-context";
+import { SettingsPanel } from "@/components/settings-panel";
 
 const RANK_LEVELS: Record<string, number> = {
   "Novice": 1, "Apprentice": 2, "Initiate": 3, "Journeyman": 4,
@@ -69,6 +70,7 @@ export function GameHUD() {
   const [activePet, setActivePet] = useState<PetData | null>(null);
   const [activeBird, setActiveBird] = useState<BirdData | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [combatCooldown, setCombatCooldown] = useState(0);
 
   const isVisible = location !== "/" && location !== "/admin" && !!account;
@@ -147,8 +149,14 @@ export function GameHUD() {
   const handleLogout = useCallback(() => {
     if (combatCooldown > 0) return;
     setMenuOpen(false);
+    setSettingsOpen(false);
     logout();
   }, [combatCooldown, logout]);
+
+  const handleSettingsToggle = useCallback(() => {
+    setSettingsOpen(o => !o);
+    setMenuOpen(false);
+  }, []);
 
   const navigateTo = useCallback((path: string) => {
     setMenuOpen(false);
@@ -234,10 +242,17 @@ export function GameHUD() {
         </button>
         <button
           className={`hud-icon-btn ${menuOpen ? 'hud-icon-active' : ''}`}
-          onClick={() => setMenuOpen(!menuOpen)}
+          onClick={() => { setMenuOpen(!menuOpen); setSettingsOpen(false); }}
           title="More..."
         >
           <span className="hud-icon-sprite">☰</span>
+        </button>
+        <button
+          className={`hud-icon-btn ${settingsOpen ? 'hud-icon-active' : ''}`}
+          onClick={handleSettingsToggle}
+          title="Settings & Guide"
+        >
+          <span className="hud-icon-sprite">⚙</span>
         </button>
       </div>
 
@@ -374,6 +389,10 @@ export function GameHUD() {
         <div className="hud-ghost-overlay">
           <span>👻 GHOST STATE</span>
         </div>
+      )}
+
+      {settingsOpen && (
+        <SettingsPanel onClose={() => setSettingsOpen(false)} />
       )}
     </div>
   );

@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { GameProvider } from "@/lib/game-context";
+import { AudioProvider } from "@/lib/audio-context";
 import AudioPlayer from "@/components/audio-player";
 import FloatingAIButton from "@/components/floating-ai-button";
 import { GameHUD } from "@/components/game-hud";
@@ -94,17 +95,19 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <GameProvider>
-          <MobileLandscapePrompt />
-          <GameViewport>
-            <AppLoadingWrapper>
-              <Toaster />
-              <AudioPlayer />
-              <GameHUD />
-              <FloatingAIButton />
-              <WeatherOverlay />
-              <Router />
-            </AppLoadingWrapper>
-          </GameViewport>
+          <AudioProvider>
+            <MobileLandscapePrompt />
+            <GameViewport>
+              <AppLoadingWrapper>
+                <Toaster />
+                <AudioPlayer />
+                <GameHUD />
+                <FloatingAIButton />
+                <WeatherOverlay />
+                <Router />
+              </AppLoadingWrapper>
+            </GameViewport>
+          </AudioProvider>
         </GameProvider>
       </TooltipProvider>
     </QueryClientProvider>

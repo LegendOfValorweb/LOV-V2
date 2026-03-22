@@ -33,7 +33,10 @@ app.use((req, res, next) => {
 const healthHandler = (_req: Request, res: Response) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 };
-app.get("/", healthHandler);
+// Only intercept / in production — in dev, Vite serves the frontend from root
+if (process.env.NODE_ENV === "production") {
+  app.get("/", healthHandler);
+}
 app.get("/health", healthHandler);
 app.get("/api/health", healthHandler);
 
