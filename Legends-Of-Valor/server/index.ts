@@ -41,6 +41,24 @@ if (process.env.NODE_ENV === "production") {
 app.get("/health", healthHandler);
 app.get("/api/health", healthHandler);
 
+// Diagnostic endpoint — helps verify CORS + env var configuration
+app.get("/api/debug/config", (req: Request, res: Response) => {
+  const origin = req.headers.origin || "(none)";
+  const frontendUrl = process.env.FRONTEND_URL || "(not set)";
+  const nodeEnv = process.env.NODE_ENV || "(not set)";
+  const corsMatch = origin === frontendUrl;
+  res.json({
+    nodeEnv,
+    frontendUrlSet: !!process.env.FRONTEND_URL,
+    frontendUrlLength: frontendUrl.length,
+    requestOrigin: origin,
+    corsWouldAllow: corsMatch,
+    jwtSecretSet: !!process.env.JWT_SECRET,
+    databaseUrlSet: !!process.env.DATABASE_URL,
+    googleApiKeySet: !!process.env.GOOGLE_API_KEY,
+  });
+});
+
 app.use((req, res, next) => {
   if (req.path === "/api/admin/events" || req.path === "/api/player/events") {
     if (req.method === "GET") {

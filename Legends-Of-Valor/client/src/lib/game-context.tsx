@@ -161,85 +161,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
       }
 
       return { account: null, error: errorData.message || errorData.error || "Login failed" };
-    } catch (error) {
-      // Fallback to localStorage for offline/static mode
-      console.log("API unavailable, using localStorage fallback");
-      const savedAccount = localStorage.getItem(ACCOUNT_STORAGE_PREFIX + username);
-      let acc: Account;
-
-      if (savedAccount) {
-        acc = JSON.parse(savedAccount);
-      } else {
-        acc = {
-          id: Math.floor(Math.random() * 1000000).toString(),
-          username,
-          password: _password,
-          role,
-          race: null,
-          gender: null,
-          portrait: null,
-          gold: 10000,
-          rubies: 0,
-          soulShards: 0,
-          focusedShards: 0,
-          trainingPoints: 100,
-          petExp: 0,
-          runes: 0,
-          soulGins: 0,
-          beakCoins: 0,
-          valorTokens: 0,
-          bait: 0,
-          craftingMats: 0,
-          mysticShards: 0,
-          petEggs: 0,
-          rarePetEggs: 0,
-          epicPetEggs: 0,
-          mythicPetEggs: 0,
-          skinTickets: 0,
-          rareSkinTickets: 0,
-          epicSkinTickets: 0,
-          mythicSkinTickets: 0,
-          unlockedSkins: [],
-          activeBuffs: [],
-          vipUntil: null,
-          pets: [],
-          rank: "Novice",
-          wins: 0,
-          losses: 0,
-          stats: { Str: 10, Def: 10, Spd: 10, Int: 10, Luck: 10, Pot: 0 },
-          equipped: { weapon: null, armor: null, accessory1: null, accessory2: null },
-          npcFloor: 1,
-          npcLevel: 1,
-          equippedPetId: null,
-          lastActive: new Date(),
-          storyAct: 1,
-          storyCheckpoint: null,
-          isDead: false,
-          lastDeathTime: null,
-          deathCount: 0,
-          reviveTokens: 1,
-          respawnLocation: "base",
-          baseTier: 1,
-          baseSkin: "default",
-          baseRoomLevels: { storage: 1, rest: 1, crafting: 1, training: 1, vault: 1, defenses: 1 },
-          trophies: [],
-          equippedCharacterSkin: "default",
-          equippedPetSkin: "default",
-          equippedBirdSkin: "default",
-          energy: 50,
-          maxEnergy: 50,
-          lastEnergyUpdate: new Date(),
-          ghostState: false,
-          weaknessDebuffExpires: null,
-          heritageCount: 0,
-          heritageBonusPercent: 0,
-        } as Account;
-      }
-
-      setAccount(acc);
-      loadAccountData(username);
-      sessionStorage.setItem('lov_just_logged_in', 'true');
-      return { account: acc };
+    } catch (error: any) {
+      console.error("Login network error:", error);
+      const msg = error?.message?.includes("Failed to fetch")
+        ? "Cannot reach the game server. Please try again in a moment."
+        : (error?.message || "Login failed — server unreachable");
+      return { account: null, error: msg };
     }
   }, [setAccount]);
 
