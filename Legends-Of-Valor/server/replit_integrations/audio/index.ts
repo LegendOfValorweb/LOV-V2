@@ -1,6 +1,5 @@
 export { registerAudioRoutes } from "./routes";
 export {
-  openai,
   textToSpeech,
   textToSpeechStream,
   speechToText,

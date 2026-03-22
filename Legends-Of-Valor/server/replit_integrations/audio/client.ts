@@ -1,38 +1,25 @@
-import OpenAI, { toFile } from "openai";
 import { Buffer } from "node:buffer";
 import { spawn } from "child_process";
-
-export const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
 
 /**
  * Convert WebM audio buffer to WAV format using ffmpeg.
  * Browser MediaRecorder outputs WebM/opus which must be converted to WAV for audio APIs.
- * Note: Requires ffmpeg (available by default on Replit).
- *
- * @example
- * // In your route handler:
- * const webmBuffer = Buffer.from(req.body.audio, "base64");
- * const wavBuffer = await convertWebmToWav(webmBuffer);
- * const transcript = await speechToText(wavBuffer, "wav");
  */
 export function convertWebmToWav(webmBuffer: Buffer): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const ffmpeg = spawn("ffmpeg", [
-      "-i", "pipe:0",      // Read from stdin
-      "-f", "wav",         // Output format
-      "-ar", "16000",      // Sample rate (16kHz is good for speech)
-      "-ac", "1",          // Mono audio
-      "-acodec", "pcm_s16le", // PCM 16-bit encoding
-      "pipe:1"             // Write to stdout
+      "-i", "pipe:0",
+      "-f", "wav",
+      "-ar", "16000",
+      "-ac", "1",
+      "-acodec", "pcm_s16le",
+      "pipe:1"
     ]);
 
     const chunks: Buffer[] = [];
 
     ffmpeg.stdout.on("data", (chunk) => chunks.push(chunk));
-    ffmpeg.stderr.on("data", () => {}); // Suppress ffmpeg logs
+    ffmpeg.stderr.on("data", () => {});
     ffmpeg.on("close", (code) => {
       if (code === 0) {
         resolve(Buffer.concat(chunks));
@@ -48,186 +35,70 @@ export function convertWebmToWav(webmBuffer: Buffer): Promise<Buffer> {
 }
 
 /**
- * Voice Chat: User speaks, LLM responds with audio (audio-in, audio-out).
- * Uses gpt-audio-mini model via Replit AI Integrations.
- *
- * @example
- * // Converting browser WebM to WAV before calling:
- * const webmBuffer = Buffer.from(req.body.audio, "base64");
- * const wavBuffer = await convertWebmToWav(webmBuffer);
- * const result = await voiceChat(wavBuffer, "alloy", "wav", "mp3");
+ * Voice Chat: Disabled — OpenAI audio models removed.
+ * Use the browser's Web Speech API for voice input instead.
  */
 export async function voiceChat(
-  audioBuffer: Buffer,
-  voice: "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer" = "alloy",
-  inputFormat: "wav" | "mp3" = "wav",
-  outputFormat: "wav" | "mp3" = "mp3"
+  _audioBuffer: Buffer,
+  _voice?: string,
+  _inputFormat?: string,
+  _outputFormat?: string
 ): Promise<{ transcript: string; audioResponse: Buffer }> {
-  const audioBase64 = audioBuffer.toString("base64");
-  const response = await openai.chat.completions.create({
-    model: "gpt-audio-mini",
-    modalities: ["text", "audio"],
-    audio: { voice, format: outputFormat },
-    messages: [{
-      role: "user",
-      content: [
-        { type: "input_audio", input_audio: { data: audioBase64, format: inputFormat } },
-      ],
-    }],
-  });
-  const message = response.choices[0]?.message as any;
-  const transcript = message?.audio?.transcript || message?.content || "";
-  const audioData = message?.audio?.data ?? "";
-  return {
-    transcript,
-    audioResponse: Buffer.from(audioData, "base64"),
-  };
+  throw new Error("Voice chat via OpenAI is not available. Use the browser Web Speech API.");
 }
 
 /**
- * Streaming Voice Chat: For real-time audio responses.
- * Note: Streaming only supports pcm16 output format.
- *
- * @example
- * // Converting browser WebM to WAV before calling:
- * const webmBuffer = Buffer.from(req.body.audio, "base64");
- * const wavBuffer = await convertWebmToWav(webmBuffer);
- * for await (const chunk of voiceChatStream(wavBuffer)) { ... }
+ * Streaming Voice Chat: Disabled — OpenAI audio models removed.
  */
 export async function voiceChatStream(
-  audioBuffer: Buffer,
-  voice: "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer" = "alloy",
-  inputFormat: "wav" | "mp3" = "wav"
+  _audioBuffer: Buffer,
+  _voice?: string,
+  _inputFormat?: string
 ): Promise<AsyncIterable<{ type: "transcript" | "audio"; data: string }>> {
-  const audioBase64 = audioBuffer.toString("base64");
-  const stream = await openai.chat.completions.create({
-    model: "gpt-audio-mini",
-    modalities: ["text", "audio"],
-    audio: { voice, format: "pcm16" },
-    messages: [{
-      role: "user",
-      content: [
-        { type: "input_audio", input_audio: { data: audioBase64, format: inputFormat } },
-      ],
-    }],
-    stream: true,
-  });
-
-  return (async function* () {
-    for await (const chunk of stream) {
-      const delta = chunk.choices?.[0]?.delta as any;
-      if (!delta) continue;
-      if (delta?.audio?.transcript) {
-        yield { type: "transcript", data: delta.audio.transcript };
-      }
-      if (delta?.audio?.data) {
-        yield { type: "audio", data: delta.audio.data };
-      }
-    }
-  })();
+  throw new Error("Voice chat streaming via OpenAI is not available. Use the browser Web Speech API.");
 }
 
-const GAME_MASTER_VOICE_PROMPT = `You are the Voice of Fate — an ancient, omniscient Game Master who has witnessed the rise and fall of empires. Deliver the following text exactly as written, word for word, but speak it with the full weight of a master storyteller:
-
-- Speak slowly and with gravitas. Let silence breathe between sentences.
-- Your voice carries centuries of wisdom and danger. Every word matters.
-- On phrases describing power, victory, or consequence — let your voice deepen and resonate with intensity.
-- On phrases describing mystery or the unknown — soften slightly, as if sharing a dangerous secret.
-- On names, titles, or dramatic revelations — pause just before them, then deliver them with deliberate force.
-- Never rush. You are timeless. The world waits on your words.
-- Speak as though the very air in the room has grown still to listen.`;
-
 /**
- * Text-to-Speech: Converts text to speech verbatim with dramatic fantasy delivery.
- * Uses gpt-audio model via Replit AI Integrations.
+ * Text-to-Speech: Disabled — OpenAI audio models removed.
+ * The AI chat page uses the browser's built-in SpeechSynthesis API instead.
  */
 export async function textToSpeech(
-  text: string,
-  voice: "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer" = "alloy",
-  format: "wav" | "mp3" | "flac" | "opus" | "pcm16" = "wav"
+  _text: string,
+  _voice?: string,
+  _format?: string
 ): Promise<Buffer> {
-  const response = await openai.chat.completions.create({
-    model: "gpt-audio",
-    modalities: ["text", "audio"],
-    audio: { voice, format },
-    messages: [
-      { role: "system", content: GAME_MASTER_VOICE_PROMPT },
-      { role: "user", content: text },
-    ],
-  });
-  const audioData = (response.choices[0]?.message as any)?.audio?.data ?? "";
-  return Buffer.from(audioData, "base64");
+  throw new Error("Server-side TTS via OpenAI is not available. Use the browser SpeechSynthesis API.");
 }
 
 /**
- * Streaming Text-to-Speech: Converts text to speech with real-time streaming and dramatic delivery.
- * Uses gpt-audio model via Replit AI Integrations.
- * Note: Streaming only supports pcm16 output format.
+ * Streaming Text-to-Speech: Disabled — OpenAI audio models removed.
  */
 export async function textToSpeechStream(
-  text: string,
-  voice: "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer" = "alloy"
+  _text: string,
+  _voice?: string
 ): Promise<AsyncIterable<string>> {
-  const stream = await openai.chat.completions.create({
-    model: "gpt-audio",
-    modalities: ["text", "audio"],
-    audio: { voice, format: "pcm16" },
-    messages: [
-      { role: "system", content: GAME_MASTER_VOICE_PROMPT },
-      { role: "user", content: text },
-    ],
-    stream: true,
-  });
-
-  return (async function* () {
-    for await (const chunk of stream) {
-      const delta = chunk.choices?.[0]?.delta as any;
-      if (!delta) continue;
-      if (delta?.audio?.data) {
-        yield delta.audio.data;
-      }
-    }
-  })();
+  throw new Error("Server-side TTS streaming via OpenAI is not available. Use the browser SpeechSynthesis API.");
 }
 
 /**
- * Speech-to-Text: Transcribes audio using dedicated transcription model.
- * Uses gpt-4o-mini-transcribe for accurate transcription.
+ * Speech-to-Text: Disabled — OpenAI Whisper removed.
+ * Use the browser's built-in SpeechRecognition API for voice input.
  */
 export async function speechToText(
-  audioBuffer: Buffer,
-  format: "wav" | "mp3" | "webm" = "wav"
+  _audioBuffer: Buffer,
+  _format?: string
 ): Promise<string> {
-  const file = await toFile(audioBuffer, `audio.${format}`);
-  const response = await openai.audio.transcriptions.create({
-    file,
-    model: "gpt-4o-mini-transcribe",
-  });
-  return response.text;
+  throw new Error("Server-side speech-to-text via OpenAI is not available. Use the browser SpeechRecognition API.");
 }
 
 /**
- * Streaming Speech-to-Text: Transcribes audio with real-time streaming.
- * Uses gpt-4o-mini-transcribe for accurate transcription.
+ * Streaming Speech-to-Text: Disabled — OpenAI Whisper removed.
  */
 export async function speechToTextStream(
-  audioBuffer: Buffer,
-  format: "wav" | "mp3" | "webm" = "wav"
+  _audioBuffer: Buffer,
+  _format?: string
 ): Promise<AsyncIterable<string>> {
-  const file = await toFile(audioBuffer, `audio.${format}`);
-  const stream = await openai.audio.transcriptions.create({
-    file,
-    model: "gpt-4o-mini-transcribe",
-    stream: true,
-  });
-
-  return (async function* () {
-    for await (const event of stream) {
-      if (event.type === "transcript.text.delta") {
-        yield event.delta;
-      }
-    }
-  })();
+  throw new Error("Server-side speech-to-text streaming via OpenAI is not available. Use the browser SpeechRecognition API.");
 }
 
 // ============================================================
@@ -244,24 +115,15 @@ export class SentenceParser {
   private segmenter: Intl.Segmenter;
 
   constructor(locale = "en") {
-    // Intl.Segmenter handles sentence boundaries for all Unicode languages
-    // Falls back gracefully if locale not supported
     this.segmenter = new Intl.Segmenter(locale, { granularity: "sentence" });
   }
 
-  /**
-   * Feed tokens from LLM stream.
-   * Returns complete sentences with sequence numbers.
-   */
   feed(token: string): Array<{ seq: number; text: string }> {
     this.buffer += token;
     const sentences: Array<{ seq: number; text: string }> = [];
 
-    // Segment current buffer
     const segments = Array.from(this.segmenter.segment(this.buffer));
 
-    // All segments except the last are complete sentences
-    // (last segment might be incomplete, still accumulating tokens)
     for (let i = 0; i < segments.length - 1; i++) {
       const text = segments[i].segment.trim();
       if (text) {
@@ -269,7 +131,6 @@ export class SentenceParser {
       }
     }
 
-    // Keep only the last (potentially incomplete) segment in buffer
     if (segments.length > 0) {
       this.buffer = segments[segments.length - 1].segment;
     }
@@ -277,7 +138,6 @@ export class SentenceParser {
     return sentences;
   }
 
-  /** Flush any remaining text as final sentence */
   flush(): { seq: number; text: string } | null {
     const text = this.buffer.trim();
     this.buffer = "";
@@ -290,10 +150,6 @@ export class SentenceParser {
   }
 }
 
-// ============================================================
-// Cascading Voice Chat - STT → Text Model → TTS Pipeline
-// ============================================================
-
 export interface VoiceChatStreamEvent {
   type: "user_transcript" | "sentence" | "audio" | "transcript" | "done" | "error";
   seq?: number;
@@ -302,152 +158,13 @@ export interface VoiceChatStreamEvent {
   error?: string;
 }
 
-/** Internal type for tracking active TTS streams */
-interface TTSStream {
-  seq: number;
-  iterator: AsyncIterator<string>;
-  done: boolean;
-}
-
 /**
- * Voice chat using separate text model and TTS.
- *
- * Key behaviors:
- * - TTS starts immediately when a sentence completes (doesn't wait for previous TTS)
- * - Audio yields in sequence order (always yields seq 0 chunks before seq 1)
- * - Multiple TTS streams can run concurrently
- * - Low latency: streams chunks as they arrive from the current sentence's TTS
+ * Voice chat using separate text model and TTS: Disabled — OpenAI removed.
  */
 export async function* voiceChatWithTextModel(
-  audioBuffer: Buffer,
-  options: {
-    voice?: "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer";
-    inputFormat?: "wav" | "mp3";
-    systemPrompt?: string;
-    chatHistory?: Array<{ role: "user" | "assistant"; content: string }>;
-    textModel?: string;
-    locale?: string; // For sentence segmentation (e.g., "en", "ja", "zh")
-  } = {}
+  _audioBuffer: Buffer,
+  _options: Record<string, unknown> = {}
 ): AsyncGenerator<VoiceChatStreamEvent> {
-  const {
-    voice = "onyx",
-    inputFormat = "wav",
-    systemPrompt = "You are a helpful assistant.",
-    chatHistory = [],
-    textModel = "gpt-5-mini",
-    locale = "en",
-  } = options;
-
-  // 1. Transcribe user audio
-  const userText = await speechToText(audioBuffer, inputFormat);
-  yield { type: "user_transcript", data: userText };
-
-  // 2. Build messages for text model
-  const messages = [
-    { role: "system" as const, content: systemPrompt },
-    ...chatHistory,
-    { role: "user" as const, content: userText },
-  ];
-
-  // 3. Stream text from LLM
-  const textStream = await openai.chat.completions.create({
-    model: textModel,
-    messages,
-    stream: true,
-  });
-
-  // 4. Parse sentences and dispatch TTS in parallel
-  const parser = new SentenceParser(locale);
-  const activeStreams: TTSStream[] = [];
-  let nextSeqToYield = 0;
-  let fullTranscript = "";
-
-  /**
-   * Start TTS for a sentence. Runs concurrently with other TTS streams.
-   */
-  const startTTS = async (sentence: { seq: number; text: string }) => {
-    const stream = await textToSpeechStream(sentence.text, voice);
-    activeStreams.push({
-      seq: sentence.seq,
-      iterator: stream[Symbol.asyncIterator](),
-      done: false,
-    });
-  };
-
-  /**
-   * Yield audio chunks from active TTS streams in sequence order.
-   * - Always yields from the current sequence (nextSeqToYield) first
-   * - Buffers are not needed here because we yield directly from iterators
-   * - When current sequence's TTS is done, moves to next
-   */
-  async function* drainAudioInOrder(): AsyncGenerator<VoiceChatStreamEvent> {
-    while (activeStreams.length > 0) {
-      // Find the stream for the current sequence we should yield
-      const currentStream = activeStreams.find((s) => s.seq === nextSeqToYield);
-
-      if (!currentStream) {
-        // Next sequence hasn't started TTS yet, yield control back
-        return;
-      }
-
-      if (currentStream.done) {
-        // Current stream exhausted, move to next sequence
-        activeStreams.splice(activeStreams.indexOf(currentStream), 1);
-        nextSeqToYield++;
-        continue;
-      }
-
-      // Pull next chunk from current stream
-      const { value, done } = await currentStream.iterator.next();
-
-      if (done) {
-        currentStream.done = true;
-        activeStreams.splice(activeStreams.indexOf(currentStream), 1);
-        nextSeqToYield++;
-      } else {
-        yield { type: "audio", seq: currentStream.seq, data: value };
-      }
-    }
-  }
-
-  // 5. Process text stream: parse sentences, dispatch TTS, yield audio
-  for await (const chunk of textStream) {
-    const token = chunk.choices[0]?.delta?.content || "";
-    if (!token) continue;
-
-    fullTranscript += token;
-
-    // Extract complete sentences
-    const sentences = parser.feed(token);
-    for (const sentence of sentences) {
-      yield { type: "sentence", seq: sentence.seq, text: sentence.text };
-      await startTTS(sentence);
-    }
-
-    // Yield any ready audio (non-blocking: only yields if current seq has data)
-    for await (const event of drainAudioInOrder()) {
-      yield event;
-    }
-  }
-
-  // 6. Flush remaining sentence
-  const finalSentence = parser.flush();
-  if (finalSentence) {
-    yield { type: "sentence", seq: finalSentence.seq, text: finalSentence.text };
-    await startTTS(finalSentence);
-  }
-
-  // 7. Drain all remaining TTS audio (blocking: wait for all to complete)
-  while (activeStreams.length > 0) {
-    for await (const event of drainAudioInOrder()) {
-      yield event;
-    }
-    // Small yield to prevent tight loop if waiting for TTS
-    if (activeStreams.length > 0 && !activeStreams.find((s) => s.seq === nextSeqToYield)) {
-      await new Promise((r) => setTimeout(r, 10));
-    }
-  }
-
-  yield { type: "transcript", data: fullTranscript };
+  yield { type: "error", error: "Voice chat with text model is not available. OpenAI has been removed." };
   yield { type: "done" };
 }
