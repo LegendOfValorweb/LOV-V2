@@ -589,7 +589,7 @@ export async function registerRoutes(
           loginAccount = (await storage.getAccount(existing.id))!;
         }
         
-        return res.json(loginAccount);
+        return res.json({ ...loginAccount, token });
       }
       
       if (activeSessions.size >= MAX_PLAYERS) {
@@ -697,7 +697,7 @@ export async function registerRoutes(
         broadcastToAdmins("playerUpdate", safeAccount);
       }
       
-      return res.status(201).json(account);
+      return res.status(201).json({ ...account, token });
     } catch (error) {
       console.error("Login error:", error);
       if (error instanceof z.ZodError) {

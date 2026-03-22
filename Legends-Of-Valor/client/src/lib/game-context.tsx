@@ -12,6 +12,7 @@ import {
 import type { Account, InventoryItem, Item } from "@shared/schema";
 import { ALL_ITEMS } from "./items-data";
 import { useToast } from "@/hooks/use-toast";
+import { API_BASE_URL, setStoredToken, clearStoredToken, getAuthHeaders } from "./queryClient";
 
 interface GameContextType {
   account: Account | null;
@@ -66,7 +67,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
       
       // Fetch fresh account data from server to ensure base/inventory is up to date
       try {
-        const accountResponse = await fetch(`/api/accounts/${cachedAcc.id}`);
+        const accountResponse = await fetch(`${API_BASE_URL}/api/accounts/${cachedAcc.id}`, {
+          credentials: "include",
+          headers: { ...getAuthHeaders() },
+        });
         if (accountResponse.ok) {
           const freshAccount = await accountResponse.json();
           setAccountState(freshAccount);
@@ -79,7 +83,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
       
       // Fetch inventory from API
       try {
-        const response = await fetch(`/api/accounts/${cachedAcc.id}/inventory`);
+        const response = await fetch(`${API_BASE_URL}/api/accounts/${cachedAcc.id}/inventory`, {
+          credentials: "include",
+          headers: { ...getAuthHeaders() },
+        });
         if (response.ok) {
           const data = await response.json();
           setInventory(data);
@@ -124,16 +131,20 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (username: string, _password: string, role: "player" | "admin", race?: string, gender?: string, startingEggElement?: string) => {
     try {
       // Try API login first
-      const response = await fetch("/api/accounts/login", {
+      const response = await fetch(`${API_BASE_URL}/api/accounts/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password: _password, role, race, gender, startingEggElement }),
+        credentials: "include",
       });
 
       if (response.ok) {
-        const acc = await response.json();
-        // JWT handling: token is in cookie, but we can store some info in localStorage if needed
-        // The server uses HTTP-only cookies for the JWT, so we don't manually store the token string.
+        const data = await response.json();
+        // Store JWT token in localStorage for cross-origin Authorization header auth
+        if (data.token) {
+          setStoredToken(data.token);
+        }
+        const { token: _tok, ...acc } = data;
         setAccount(acc);
         localStorage.setItem(SESSION_KEY, JSON.stringify({ username: acc.username }));
         localStorage.setItem(ACCOUNT_STORAGE_PREFIX + acc.username, JSON.stringify(acc));
@@ -234,10 +245,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      await fetch("/api/accounts/logout", { method: "POST" });
+      await fetch(`${API_BASE_URL}/api/accounts/logout`, {
+        method: "POST",
+        credentials: "include",
+        headers: { ...getAuthHeaders() },
+      });
     } catch (e) {
       console.error("Logout API failed", e);
     }
+    clearStoredToken();
     localStorage.removeItem(SESSION_KEY);
     setAccountState(null);
     setInventory([]);
@@ -246,7 +262,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const refreshInventory = useCallback(async () => {
     if (account) {
       try {
-        const response = await fetch(`/api/accounts/${account.id}/inventory`);
+        const response = await fetch(`${API_BASE_URL}/api/accounts/${account.id}/inventory`, {
+          credentials: "include",
+          headers: { ...getAuthHeaders() },
+        });
         if (response.ok) {
           const data = await response.json();
           setInventory(data);
@@ -265,7 +284,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const refetchAccount = useCallback(async () => {
     if (!account) return;
     try {
-      const response = await fetch(`/api/accounts/${account.id}`);
+      const response = await fetch(`${API_BASE_URL}/api/accounts/${account.id}`, {
+        credentials: "include",
+        headers: { ...getAuthHeaders() },
+      });
       if (response.ok) {
         const freshAccount = await response.json();
         setAccountState(freshAccount);
@@ -295,10 +317,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
     
     try {
       // First deduct gold from account on server
-      const goldRes = await fetch(`/api/accounts/${account.id}`, {
+      const goldRes = await fetch(`${API_BASE_URL}/api/accounts/${account.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({ gold: account.gold - item.price }),
+        credentials: "include",
       });
       
       if (!goldRes.ok) {
@@ -309,13 +332,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
       }
       
       // Then add item to inventory on server
-      const invRes = await fetch(`/api/accounts/${account.id}/inventory`, {
+      const invRes = await fetch(`${API_BASE_URL}/api/accounts/${account.id}/inventory`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({
           itemId: item.id,
           stats: item.stats || {},
         }),
+        credentials: "include",
       });
       
       if (!invRes.ok) {
@@ -323,10 +347,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
         const msg = invData.error || "Failed to add item to inventory";
         console.error(msg);
         // Refund the gold if inventory add failed
-        await fetch(`/api/accounts/${account.id}`, {
+        await fetch(`${API_BASE_URL}/api/accounts/${account.id}`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
           body: JSON.stringify({ gold: account.gold }),
+          credentials: "include",
         });
         return { success: false, error: msg };
       }

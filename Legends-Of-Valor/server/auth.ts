@@ -25,7 +25,14 @@ export function verifyToken(token: string): any {
 }
 
 export async function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
-  const token = req.cookies?.[COOKIE_NAME];
+  // Accept token from Authorization Bearer header (cross-origin) or cookie (same-origin)
+  let token: string | undefined;
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.slice(7);
+  } else {
+    token = req.cookies?.[COOKIE_NAME];
+  }
   
   if (!token) {
     return res.status(401).json({ error: "Unauthorized", message: "No token provided" });

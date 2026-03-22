@@ -13,7 +13,7 @@ Preferred communication style: Simple, everyday language.
 - **Frontend**: React 18 with Vite, TailwindCSS, shadcn/ui components
 - **Backend**: Express.js with TypeScript
 - **Database**: PostgreSQL with Drizzle ORM
-- **AI**: OpenAI (via Replit AI Integrations) for AI Game Master
+- **AI**: Google Gemini (via Replit AI Integrations) for AI Game Master
 
 ## Project Structure
 
