@@ -1,5 +1,4 @@
 import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 
@@ -105,6 +104,10 @@ httpServer.listen(
 );
 
 (async () => {
+  // Dynamic import ensures routes.ts (and db.ts) are only evaluated AFTER
+  // the server is already listening, so Railway's health probe always gets
+  // a response even if route/DB initialisation is still in progress.
+  const { registerRoutes } = await import("./routes");
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -129,4 +132,8 @@ httpServer.listen(
     const { setupVite } = await import("./vite");
     await setupVite(httpServer, app);
   }
-})();
+})().catch((err) => {
+  console.error("[FATAL] Server initialisation failed:", err);
+  // Process stays alive so Railway's health check keeps getting a 200.
+  // Railway will surface the error in deploy logs for debugging.
+});
