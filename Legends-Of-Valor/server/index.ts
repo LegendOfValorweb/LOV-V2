@@ -30,10 +30,11 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health check endpoints — Railway (and other platforms) may probe /health or /api/health
+// Health check endpoints — Railway (and other platforms) may probe /, /health, or /api/health
 const healthHandler = (_req: Request, res: Response) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 };
+app.get("/", healthHandler);
 app.get("/health", healthHandler);
 app.get("/api/health", healthHandler);
 
