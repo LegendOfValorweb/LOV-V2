@@ -1,158 +1,170 @@
-# Deployment Guide: Frontend (Vercel) + Backend (Railway)
+# Deployment Guide
 
-This guide explains how to deploy Legend of Valor with the frontend on Vercel and the backend on Railway.
+This project uses a split deployment model:
 
-## Prerequisites
+- **Backend** (Express + WebSockets) → [Render](https://render.com)
+- **Frontend** (React + Vite SPA) → [Vercel](https://vercel.com)
 
-- A Vercel account (https://vercel.com)
-- A Railway account (https://railway.app)
-- A PostgreSQL database (Railway provides one, or use your existing database)
+Render is used for the backend because it supports always-on Node.js servers with persistent WebSocket connections. Vercel is serverless and cannot host a persistent Express server.
 
-## Step 1: Deploy Backend to Railway
+---
 
-### 1.1 Create a new Railway project
+## 1. Deploy the Backend on Render
 
-1. Go to https://railway.app and create a new project
-2. Select "Deploy from GitHub repo" and connect this repository
-3. **Important:** In the Railway project settings, set the **Root Directory** to `Legends-Of-Valor`
-4. Railway will auto-detect the configuration from `railway.json` and `nixpacks.toml`
+### Prerequisites
 
-### 1.2 Add PostgreSQL Database
+- A [Render](https://render.com) account
+- A PostgreSQL database accessible via a connection string (Render managed Postgres, Neon, Supabase, or any external provider)
 
-1. In your Railway project, click "+ New" and select "Database" → "PostgreSQL"
-2. Railway will automatically set the `DATABASE_URL` environment variable
+### Steps
 
-### 1.3 Configure Environment Variables
+1. Push this repository to GitHub (or connect your existing GitHub repo to Render).
+2. In the Render dashboard, click **New → Blueprint** and select this repository.
+   Render will detect `render.yaml` automatically and create the `legends-of-valor-backend` web service.
+3. After the service is created, open the service's **Environment** tab and set the following variables:
 
-In Railway's project settings, add:
+   | Variable         | Required | Description |
+   |------------------|----------|-------------|
+   | `DATABASE_URL`   | Yes      | Full PostgreSQL connection string (e.g. `postgresql://user:pass@host/db`) |
+   | `JWT_SECRET`     | Yes      | Long random string used to sign JSON Web Tokens |
+   | `FRONTEND_URL`   | Yes      | Full Vercel URL of your frontend — exact origin, no trailing slash (e.g. `https://your-app.vercel.app`) — used for CORS |
+   | `GOOGLE_API_KEY` | Yes      | Google Generative AI API key (required for AI features) |
+   | `NODE_ENV`       | Yes      | Pre-configured to `production` in `render.yaml` — no action needed |
 
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | (Auto-set by Railway PostgreSQL) |
-| `FRONTEND_URL` | Your Vercel frontend URL (e.g., `https://your-app.vercel.app`) — exact origin, no trailing slash |
-| `JWT_SECRET` | A long random secret string for signing auth tokens |
-| `OPENAI_API_KEY` | Your OpenAI API key for AI Game Master |
+4. Trigger a deploy (or wait for the automatic deploy to complete). Render will run:
+   - **Build**: `npm install --include=dev && npm run build:backend`
+   - **Start**: `npm run start:backend`
+5. Once deployed, note your service's public URL — it will look like:
+   `https://legends-of-valor-backend.onrender.com`
 
-> **Note:** Do **not** set `SERVE_STATIC=true` on Railway. The Railway backend is an API-only deployment — static frontend files are not present and not needed. The `SERVE_STATIC` flag is only for environments where both the backend and built frontend assets are co-located (e.g., a single-server Replit deployment).
+### Health Check
 
-> **Important:** `FRONTEND_URL` must be the exact Vercel origin (no trailing slash). The CORS middleware uses an exact-match allowlist for security — only the URL you specify will be permitted to make credentialed cross-origin requests.
+Render monitors the service at **`/api/health`**. If the endpoint returns a non-2xx response the service will be restarted. The endpoint is always active and returns:
 
-### 1.4 Get your Railway Backend URL
+```json
+{ "status": "ok", "timestamp": "..." }
+```
 
-After deployment, note your Railway app URL (e.g., `https://your-app.up.railway.app`)
+---
 
-## Step 2: Deploy Frontend to Vercel
+## 2. Update vercel.json with the Render URL
 
-### 2.1 Create a new Vercel project
+After completing Step 1, open `vercel.json` and replace the placeholder with your actual Render service URL:
 
-1. Go to https://vercel.com and create a new project
-2. Import this repository from GitHub
-3. **Important:** In Vercel project settings, set the **Root Directory** to `Legends-Of-Valor`
-4. Vercel will auto-detect the configuration from `vercel.json`
+```json
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://YOUR_RENDER_SERVICE.onrender.com/api/:path*"
+    },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
+```
 
-### 2.2 Configure Environment Variables
+Replace `YOUR_RENDER_SERVICE` with the subdomain shown in your Render dashboard
+(e.g. `legends-of-valor-backend`).
 
-In Vercel's project settings → Environment Variables, add:
+Commit and push this change — Vercel will redeploy the frontend automatically.
 
-| Variable | Description |
-|----------|-------------|
-| `VITE_API_URL` | Your Railway backend URL (e.g., `https://your-app.up.railway.app`) — exact origin, no trailing slash |
+---
 
-> **Important:** `VITE_API_URL` must be set before building. The frontend bakes this value in at build time via `import.meta.env.VITE_API_URL`. Without it, all API calls go to the Vercel domain and return 404s.
+## 3. Deploy the Frontend on Vercel
 
-### 2.3 Deploy
+### Steps
 
-Click "Deploy" and Vercel will build the frontend using `npm run build:frontend`
+1. Import this repository into [Vercel](https://vercel.com).
+2. In the Vercel project settings, set the **Root Directory** to `Legends-Of-Valor`.
+3. Vercel auto-detects the following settings from `vercel.json`:
+   - **Install Command**: `npm install`
+   - **Build Command**: `npm run build:frontend`
+   - **Output Directory**: `dist/public`
+4. **No environment variables are required on Vercel.** The API proxy in `vercel.json`
+   forwards all `/api/*` requests to Render at the Vercel edge — the frontend never
+   needs to know the backend URL directly. `VITE_API_URL` is not needed because the
+   rewrite rule handles routing.
+5. Click **Deploy**. Your frontend will be available at your Vercel domain.
 
-## Step 3: Update Railway with Vercel URL
+---
 
-After Vercel deployment:
+## 4. Cross-link the Two Services
 
-1. Go back to Railway
-2. Update the `FRONTEND_URL` environment variable with your actual Vercel URL
-3. Railway will automatically redeploy
+Once both are deployed:
 
-## Environment Variables Summary
+1. On Render, set `FRONTEND_URL` to your Vercel domain (e.g. `https://your-app.vercel.app`).
+   This allows CORS requests from the frontend to the backend.
+2. Ensure `vercel.json` points to the Render backend URL (done in Step 2 above).
 
-### Railway (Backend)
+---
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DATABASE_URL` | Yes | PostgreSQL connection string (auto-set by Railway PostgreSQL) |
-| `FRONTEND_URL` | Yes | Exact Vercel frontend origin (e.g., `https://your-app.vercel.app`) |
-| `JWT_SECRET` | Yes | Long random string for signing authentication tokens |
-| `OPENAI_API_KEY` | Yes | OpenAI API key for AI Game Master feature |
-| `NODE_ENV` | Yes | Set to `production` |
+## Environment Variable Summary
 
-### Vercel (Frontend)
+| Platform | Variable         | Required | Notes |
+|----------|------------------|----------|-------|
+| Render   | `DATABASE_URL`   | Yes      | Postgres connection string |
+| Render   | `JWT_SECRET`     | Yes      | Secret for signing JWTs |
+| Render   | `FRONTEND_URL`   | Yes      | Vercel domain — used for CORS (exact origin, no trailing slash) |
+| Render   | `GOOGLE_API_KEY` | Yes      | Google AI key for AI Game Master |
+| Render   | `NODE_ENV`       | Yes      | Set to `production` (pre-configured in `render.yaml`) |
+| Vercel   | _(none)_         | —        | No env vars needed; proxy handles API routing |
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `VITE_API_URL` | Yes | Exact Railway backend origin (e.g., `https://your-app.up.railway.app`) |
+---
 
 ## Build Commands Reference
 
-| Command | Description |
-|---------|-------------|
-| `npm run build:frontend` | Builds only the React frontend (for Vercel) using `vite build` |
-| `npm run build:backend` | Builds only the Express backend (for Railway) using esbuild |
+| Command                 | Description |
+|-------------------------|-------------|
+| `npm run build:frontend`| Builds the React SPA (for Vercel) using Vite |
+| `npm run build:backend` | Compiles the Express server (for Render) using esbuild |
 | `npm run start:backend` | Starts the production backend server |
+| `npm run db:push`       | Syncs the Drizzle schema to the PostgreSQL database |
 
-## Railway Configuration Notes
+---
 
-- `nixpacks.toml` tells Railway to use Node.js 20 and run `npm run build:backend` (backend only)
-- `railway.json` configures the build and start commands and health check path
-- The backend uses `bcryptjs` (pure JavaScript) so no native compilation tools are needed on Railway
+## Notes
 
-## Database Migrations
+- **Free-tier cold starts**: Render's free plan spins down idle services after 15 minutes
+  of inactivity. The first request after a cold start may take 30–60 seconds.
+  Upgrade to a paid plan for always-on behaviour.
+- **WebSockets**: Render supports persistent WebSocket connections — the reason it was
+  chosen over Vercel (which is serverless and cannot hold open connections).
+- **Database migrations**: Run `npm run db:push` locally with `DATABASE_URL` pointing at
+  your production database to apply schema changes before or after deployment.
 
-Before first deployment, run database migrations:
-
-```bash
-npm run db:push
-```
-
-This syncs your Drizzle schema to the PostgreSQL database.
-
-## Cookie & CORS Configuration
-
-Auth cookies are configured as follows for cross-origin (Vercel ↔ Railway) requests to work:
-
-- `sameSite: "none"` — required so browsers send the cookie on cross-origin requests
-- `secure: true` — required when `sameSite: "none"` (cookies are only sent over HTTPS)
-- `httpOnly: true` — prevents JavaScript access to the cookie
-
-The CORS middleware on the backend uses an exact-match allowlist. Only the origin specified in `FRONTEND_URL` (plus localhost URLs for local development) will receive `Access-Control-Allow-Origin` headers.
+---
 
 ## Troubleshooting
 
 ### CORS Errors
-- Ensure `FRONTEND_URL` is set to the exact Vercel origin in Railway (no trailing slash)
-- If using a custom domain on Vercel, update `FRONTEND_URL` to match the custom domain
+- Ensure `FRONTEND_URL` on Render is the exact Vercel origin (no trailing slash).
+- If you use a custom domain on Vercel, update `FRONTEND_URL` to match.
 
-### API Connection Issues
-- Verify `VITE_API_URL` is set in Vercel before deploying (include the full URL with `https://`)
-- Check Railway logs for backend errors
-- Ensure `VITE_API_URL` has no trailing slash
+### API 404s on Vercel
+- Verify `vercel.json` has the correct Render URL in the rewrite destination.
+- Redeploy Vercel after updating `vercel.json`.
 
 ### Cookies Not Sent
-- Both Vercel and Railway must be served over HTTPS (they are by default)
-- Ensure `NODE_ENV=production` is set on Railway so `secure: true` is enforced on cookies
+- Both Render and Vercel serve over HTTPS by default — no extra action needed.
+- Confirm `NODE_ENV=production` is set on Render so cookies use `secure: true`.
 
-### Database Connection
-- Ensure `DATABASE_URL` is set in Railway
-- Run `npm run db:push` to create tables
+### Database Connection Issues
+- Verify `DATABASE_URL` is set correctly on Render.
+- Run `npm run db:push` to ensure tables exist.
 
-### Build Failures on Railway
-- Make sure the Railway project's Root Directory is set to `Legends-Of-Valor`
-- The `nixpacks.toml` file handles Node.js installation and the build step automatically
+### Build Failures on Render
+- Confirm the Render service root is set to `Legends-Of-Valor` if deploying from a
+  monorepo, or that your repo root is `Legends-Of-Valor` directly.
+
+---
 
 ## Local Development
 
-For local development, the app runs as a single server on port 5000:
+For local development the app runs as a single server on port 5000:
 
 ```bash
 npm run dev
 ```
 
-No environment variables needed for local development - the frontend proxies API requests to the same server.
+No environment variables are required for local development — the frontend Vite dev server
+proxies API requests to the same local server.

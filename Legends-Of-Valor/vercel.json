@@ -1,12 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "_comment_api_destination": "After the first Render deploy, replace YOUR_RENDER_SERVICE with your actual Render subdomain (e.g. legends-of-valor-backend) and redeploy on Vercel.",
   "installCommand": "npm install",
   "buildCommand": "npm run build:frontend",
   "outputDirectory": "dist/public",
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://lov-v2-production.up.railway.app/api/:path*"
+      "destination": "https://YOUR_RENDER_SERVICE.onrender.com/api/:path*"
     },
     { "source": "/(.*)", "destination": "/index.html" }
   ]

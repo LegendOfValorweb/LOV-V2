@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: legends-of-valor-backend
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: npm install --include=dev && npm run build:backend
+    startCommand: npm run start:backend
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
