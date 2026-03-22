@@ -2397,6 +2397,31 @@ export const bounties = pgTable("bounties", {
 
 export type Bounty = typeof bounties.$inferSelect;
 
+// ==================== SERVER ACHIEVEMENTS (Honour Hall) ====================
+export const serverAchievements = pgTable("server_achievements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  achievementKey: text("achievement_key").notNull().unique(),
+  displayName: text("display_name").notNull(),
+  category: text("category").notNull(),
+  description: text("description").notNull(),
+  holderAccountId: varchar("holder_account_id").references(() => accounts.id),
+  holderUsername: text("holder_username"),
+  holderRace: text("holder_race"),
+  achievedAt: timestamp("achieved_at"),
+  contextValue: text("context_value"),
+});
+
+export const serverAchievementsRelations = relations(serverAchievements, ({ one }) => ({
+  holder: one(accounts, {
+    fields: [serverAchievements.holderAccountId],
+    references: [accounts.id],
+  }),
+}));
+
+export const insertServerAchievementSchema = createInsertSchema(serverAchievements).omit({ id: true });
+export type ServerAchievement = typeof serverAchievements.$inferSelect;
+export type InsertServerAchievement = z.infer<typeof insertServerAchievementSchema>;
+
 export const zoneNpcProgress = pgTable("zone_npc_progress", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   accountId: varchar("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),

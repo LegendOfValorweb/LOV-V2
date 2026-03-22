@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useGame } from "@/lib/game-context";
 import { SettingsPanel } from "@/components/settings-panel";
+import { useToast } from "@/hooks/use-toast";
 
 const RANK_LEVELS: Record<string, number> = {
   "Novice": 1, "Apprentice": 2, "Initiate": 3, "Journeyman": 4,
@@ -38,6 +39,7 @@ const ZONE_NAMES: Record<string, string> = {
   "/hell-zone": "Hell Zone",
   "/valorpedia": "Valorpedia",
   "/reputation": "Faction Reputation",
+  "/honour-hall": "Honour Hall",
   "/admin": "Admin Console",
 };
 
@@ -66,6 +68,7 @@ function formatNumber(n: number): string {
 export function GameHUD() {
   const [location, navigate] = useLocation();
   const { account, logout } = useGame();
+  const { toast } = useToast();
   const [energyData, setEnergyData] = useState<{ energy: number; maxEnergy: number } | null>(null);
   const [activePet, setActivePet] = useState<PetData | null>(null);
   const [activeBird, setActiveBird] = useState<BirdData | null>(null);
@@ -145,6 +148,36 @@ export function GameHUD() {
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [account?.lastCombatTime]);
+
+  useEffect(() => {
+    if (!accountId) return;
+    const src = new EventSource(`/api/player/events?playerId=${accountId}`);
+
+    src.addEventListener("serverAchievement", (e) => {
+      try {
+        const d = JSON.parse(e.data);
+        toast({
+          title: "⚜ Server First!",
+          description: `${d.holderUsername} (${d.holderRace || "?"}) claimed: ${d.displayName}`,
+          duration: 8000,
+        });
+      } catch {}
+    });
+
+    src.addEventListener("serverAchievementClaimed", (e) => {
+      try {
+        const d = JSON.parse(e.data);
+        toast({
+          title: "⚜ You claimed a Server First!",
+          description: d.displayNames?.[0] || "Achievement unlocked!",
+          duration: 10000,
+        });
+      } catch {}
+    });
+
+    src.onerror = () => { src.close(); };
+    return () => { src.close(); };
+  }, [accountId, toast]);
 
   const handleLogout = useCallback(() => {
     if (combatCooldown > 0) return;
@@ -288,6 +321,9 @@ export function GameHUD() {
             </button>
             <button className="hud-menu-item" onClick={() => navigateTo("/achievements")}>
               <span>🎖</span><span>Achieve</span>
+            </button>
+            <button className="hud-menu-item" onClick={() => navigateTo("/honour-hall")}>
+              <span>⚜</span><span>Honour</span>
             </button>
             <button className="hud-menu-item" onClick={() => navigateTo("/valorpedia")}>
               <span>📚</span><span>Pedia</span>

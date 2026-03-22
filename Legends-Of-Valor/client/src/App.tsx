@@ -42,6 +42,7 @@ import BlackMarket from "@/pages/black-market";
 import AncientRuins from "@/pages/ancient-ruins";
 import ResearchLab from "@/pages/research-lab";
 import EnchantedForest from "@/pages/enchanted-forest";
+import HonourHall from "@/pages/honour-hall";
 import NotFound from "@/pages/not-found";
 import { MobileLandscapePrompt } from "@/components/mobile-landscape-prompt";
 import { AppLoadingWrapper } from "@/components/app-loading-wrapper";
@@ -84,6 +85,7 @@ function Router() {
       <Route path="/ancient-ruins" component={AncientRuins} />
       <Route path="/research-lab" component={ResearchLab} />
       <Route path="/enchanted-forest" component={EnchantedForest} />
+      <Route path="/honour-hall" component={HonourHall} />
       <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>

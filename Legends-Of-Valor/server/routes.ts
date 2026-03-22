@@ -1,6 +1,25 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { getWorldTimeInfo, getDayNightState } from "./weather-system";
+import {
+  initServerAchievements,
+  checkAndClaimOnWin,
+  checkAndClaimOnRankUp,
+  checkAndClaimOnTowerFloor,
+  checkAndClaimOnItemPurchase,
+  checkAndClaimOnSkinPurchase,
+  checkAndClaimOnGold,
+  checkAndClaimOnRubyEarned,
+  checkAndClaimOnValorSpend,
+  checkAndClaimOnCraft,
+  checkAndClaimOnFish,
+  checkAndClaimOnOreMined,
+  checkAndClaimOnHeritage,
+  checkAndClaimOnZoneDungeon,
+  checkAndClaimOnWorldBossKill,
+  getAchievementDisplayName,
+  SERVER_ACHIEVEMENT_DEFS,
+} from "./server-achievements";
 import { storage } from "./storage";
 import { db } from "./db";
 import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress } from "@shared/schema";
@@ -336,6 +355,9 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  // Initialize server achievements (Honour Hall)
+  initServerAchievements().catch(err => console.error("[HonourHall] Init error:", err));
 
   // Helper: resolve equipped inventory items by UUID (new) or itemId (legacy fallback).
   // Returns deduplicated items per slot; call once per equipped object to avoid double-counting.
@@ -1997,6 +2019,12 @@ export async function registerRoutes(
         else if (action === "add") newWins += value;
         else if (action === "deduct") newWins -= value;
         updatedPlayer = (await storage.updateAccountWins(player.id, newWins))!;
+        // Honour Hall: win milestones via admin update
+        const winsClaimed = await checkAndClaimOnWin(player.id, player.username, player.race, newWins, false);
+        for (const k of winsClaimed) {
+          broadcastToAllPlayers("serverAchievement", { achievementKey: k, displayName: getAchievementDisplayName(k), holderUsername: player.username, holderRace: player.race });
+        }
+        if (winsClaimed.length > 0) broadcastToPlayer(player.id, "serverAchievementClaimed", { keys: winsClaimed, displayNames: winsClaimed.map(getAchievementDisplayName) });
       } else if (section === "losses") {
         let newLosses = player.losses;
         if (action === "set") newLosses = value;
@@ -2005,6 +2033,12 @@ export async function registerRoutes(
         updatedPlayer = (await storage.updateAccountLosses(player.id, newLosses))!;
       } else if (section === "rank") {
         updatedPlayer = (await storage.updateAccountRank(player.id, value))!;
+        // Honour Hall: rank-up via admin section update
+        const sectionRankClaimed = await checkAndClaimOnRankUp(player.id, player.username, player.race, value);
+        for (const k of sectionRankClaimed) {
+          broadcastToAllPlayers("serverAchievement", { achievementKey: k, displayName: getAchievementDisplayName(k), holderUsername: player.username, holderRace: player.race });
+        }
+        if (sectionRankClaimed.length > 0) broadcastToPlayer(player.id, "serverAchievementClaimed", { keys: sectionRankClaimed, displayNames: sectionRankClaimed.map(getAchievementDisplayName) });
       } else if (section === "inventory") {
         if (action === "append") {
           await storage.addToInventory({
@@ -2977,7 +3011,27 @@ export async function registerRoutes(
           
           if (winner) await storage.updateAccountWins(winnerId, winner.wins + 1);
           if (loser) await storage.updateAccountLosses(loserId, loser.losses + 1);
-          
+
+          // Honour Hall: PvP win achievements
+          if (winner) {
+            const newWins = (winner.wins || 0) + 1;
+            const claimedPvp = await checkAndClaimOnWin(
+              winner.id, winner.username, winner.race, newWins, true
+            );
+            if (claimedPvp.length > 0) {
+              broadcastToAllPlayers("serverAchievement", {
+                achievementKey: claimedPvp[0],
+                displayName: getAchievementDisplayName(claimedPvp[0]),
+                holderUsername: winner.username,
+                holderRace: winner.race,
+              });
+              broadcastToPlayer(winner.id, "serverAchievementClaimed", {
+                keys: claimedPvp,
+                displayNames: claimedPvp.map(getAchievementDisplayName),
+              });
+            }
+          }
+
           let goldDropped = 0;
           let durabilityLost = 0;
           let deathMessage = "";
@@ -3014,6 +3068,12 @@ export async function registerRoutes(
               await db.update(accounts).set({
                 gold: winner.gold + goldDropped,
               }).where(eq(accounts.id, winnerId));
+              // Honour Hall: gold milestone from PvP win
+              const pvpGoldClaimed = await checkAndClaimOnGold(winner.id, winner.username, winner.race, winner.gold + goldDropped);
+              for (const k of pvpGoldClaimed) {
+                broadcastToAllPlayers("serverAchievement", { achievementKey: k, displayName: getAchievementDisplayName(k), holderUsername: winner.username, holderRace: winner.race });
+              }
+              if (pvpGoldClaimed.length > 0) broadcastToPlayer(winner.id, "serverAchievementClaimed", { keys: pvpGoldClaimed, displayNames: pvpGoldClaimed.map(getAchievementDisplayName) });
             }
             
             deathMessage = ` You dropped ${goldDropped} gold. Equipment lost ${durabilityLost} durability. You are now a Ghost — return to Base to respawn.`;
@@ -4017,12 +4077,20 @@ export async function registerRoutes(
         }
         
         // Auto-update all rewards into player account (no win/loss tracking for NPC)
+        const newGoldAfterNpc = account.gold + rewards.gold;
         await storage.updateAccount(account.id, {
-          gold: account.gold + rewards.gold,
+          gold: newGoldAfterNpc,
           trainingPoints: (account.trainingPoints || 0) + rewards.trainingPoints,
           soulShards: (account.soulShards || 0) + rewards.soulShards,
           runes: (account.runes || 0) + rewards.runes,
         } as any);
+
+        // Honour Hall: gold milestone from NPC battle rewards
+        const npcGoldClaimed = await checkAndClaimOnGold(account.id, account.username, account.race, newGoldAfterNpc);
+        for (const k of npcGoldClaimed) {
+          broadcastToAllPlayers("serverAchievement", { achievementKey: k, displayName: getAchievementDisplayName(k), holderUsername: account.username, holderRace: account.race });
+        }
+        if (npcGoldClaimed.length > 0) broadcastToPlayer(account.id, "serverAchievementClaimed", { keys: npcGoldClaimed, displayNames: npcGoldClaimed.map(getAchievementDisplayName) });
         
         // Give pet exp directly to the equipped pet
         if (equippedPet && rewards.petExp > 0) {
@@ -9568,6 +9636,21 @@ export async function registerRoutes(
       // Valorpedia: discover Crystal Lake (fishing always happens here)
       recordValorpediaDiscovery(accountId, "zones", "crystal_lake");
 
+      // Honour Hall: First fish caught
+      const fishClaimed = await checkAndClaimOnFish(accountId, account.username, account.race);
+      if (fishClaimed.length > 0) {
+        broadcastToAllPlayers("serverAchievement", {
+          achievementKey: fishClaimed[0],
+          displayName: getAchievementDisplayName(fishClaimed[0]),
+          holderUsername: account.username,
+          holderRace: account.race,
+        });
+        broadcastToPlayer(accountId, "serverAchievementClaimed", {
+          keys: fishClaimed,
+          displayNames: fishClaimed.map(getAchievementDisplayName),
+        });
+      }
+
       let monsterEncounter = null;
       const fishingZone = "crystal_lake";
       const actionMonster = checkActionSpawn(fishingZone, accountId, rank);
@@ -10289,6 +10372,25 @@ export async function registerRoutes(
       
       // Check trophies after tower progress
       await checkAndGrantTrophies(req.params.id);
+
+      // Honour Hall: Tower floor achievements
+      if (newFloor > floor) {
+        const towerClaimed = await checkAndClaimOnTowerFloor(
+          req.params.id, account.username, account.race, newFloor
+        );
+        if (towerClaimed.length > 0) {
+          broadcastToAllPlayers("serverAchievement", {
+            achievementKey: towerClaimed[0],
+            displayName: getAchievementDisplayName(towerClaimed[0]),
+            holderUsername: account.username,
+            holderRace: account.race,
+          });
+          broadcastToPlayer(req.params.id, "serverAchievementClaimed", {
+            keys: towerClaimed,
+            displayNames: towerClaimed.map(getAchievementDisplayName),
+          });
+        }
+      }
       
       res.json({
         result: "victory",
@@ -10750,6 +10852,21 @@ export async function registerRoutes(
         message: `Admin changed ${account.username}'s rank to ${rank}`,
         metadata: { adminId, accountId, newRank: rank, oldRank: account.rank },
       });
+
+      // Honour Hall: rank-up achievement
+      const rankClaimed = await checkAndClaimOnRankUp(accountId, account.username, account.race, rank);
+      if (rankClaimed.length > 0) {
+        broadcastToAllPlayers("serverAchievement", {
+          achievementKey: rankClaimed[0],
+          displayName: getAchievementDisplayName(rankClaimed[0]),
+          holderUsername: account.username,
+          holderRace: account.race,
+        });
+        broadcastToPlayer(accountId, "serverAchievementClaimed", {
+          keys: rankClaimed,
+          displayNames: rankClaimed.map(getAchievementDisplayName),
+        });
+      }
       
       res.json({ success: true, newRank: rank });
     } catch (error) {
@@ -11312,6 +11429,21 @@ export async function registerRoutes(
         heritageCount: newHeritageCount,
         title: heritageTitle,
       });
+
+      // Honour Hall: Heritage rebirth achievement
+      const heritageClaimed = await checkAndClaimOnHeritage(accountId, account.username, account.race);
+      if (heritageClaimed.length > 0) {
+        broadcastToAllPlayers("serverAchievement", {
+          achievementKey: heritageClaimed[0],
+          displayName: getAchievementDisplayName(heritageClaimed[0]),
+          holderUsername: account.username,
+          holderRace: account.race,
+        });
+        broadcastToPlayer(accountId, "serverAchievementClaimed", {
+          keys: heritageClaimed,
+          displayNames: heritageClaimed.map(getAchievementDisplayName),
+        });
+      }
 
       res.json({
         success: true,
@@ -12199,6 +12331,13 @@ export async function registerRoutes(
         } as any);
       }
 
+      // Honour Hall: first max-tier skin purchase from cosmetics shop
+      const skinClaimed = await checkAndClaimOnSkinPurchase(accountId, account.username, account.race, skin.rarity || "", skin.name || skinId);
+      for (const k of skinClaimed) {
+        broadcastToAllPlayers("serverAchievement", { achievementKey: k, displayName: getAchievementDisplayName(k), holderUsername: account.username, holderRace: account.race });
+      }
+      if (skinClaimed.length > 0) broadcastToPlayer(accountId, "serverAchievementClaimed", { keys: skinClaimed, displayNames: skinClaimed.map(getAchievementDisplayName) });
+
       res.json({ success: true, skin: fullSkinId, message: `Purchased ${skin.name}!` });
     } catch (error) {
       res.status(500).json({ error: "Failed to purchase skin" });
@@ -12491,6 +12630,41 @@ export async function registerRoutes(
         message: `${account.username} purchased ${bundle.name}!`,
         metadata: { bundleId, grantedItems },
       });
+
+      // Honour Hall: First valor token spend
+      const valorClaimed = await checkAndClaimOnValorSpend(accountId, account.username, account.race);
+      if (valorClaimed.length > 0) {
+        broadcastToAllPlayers("serverAchievement", {
+          achievementKey: valorClaimed[0],
+          displayName: getAchievementDisplayName(valorClaimed[0]),
+          holderUsername: account.username,
+          holderRace: account.race,
+        });
+        broadcastToPlayer(accountId, "serverAchievementClaimed", {
+          keys: valorClaimed,
+          displayNames: valorClaimed.map(getAchievementDisplayName),
+        });
+      }
+
+      // Honour Hall: gold milestone (if gold was granted)
+      if (contents.gold) {
+        const updatedAccount = await storage.getAccount(accountId);
+        if (updatedAccount) {
+          const goldClaimed = await checkAndClaimOnGold(accountId, updatedAccount.username, updatedAccount.race, updatedAccount.gold || 0);
+          if (goldClaimed.length > 0) {
+            broadcastToAllPlayers("serverAchievement", {
+              achievementKey: goldClaimed[0],
+              displayName: getAchievementDisplayName(goldClaimed[0]),
+              holderUsername: updatedAccount.username,
+              holderRace: updatedAccount.race,
+            });
+            broadcastToPlayer(accountId, "serverAchievementClaimed", {
+              keys: goldClaimed,
+              displayNames: goldClaimed.map(getAchievementDisplayName),
+            });
+          }
+        }
+      }
       
       res.json({ success: true, bundle: bundle.name, grantedItems });
     } catch (error) {
@@ -12657,6 +12831,13 @@ export async function registerRoutes(
     const skins = playerSkins.get(accountId) || { owned: ["default"] };
     skins.owned.push(skinId);
     playerSkins.set(accountId, skins);
+
+    // Honour Hall: first max-tier skin purchase
+    const skinPurchaseClaimed = await checkAndClaimOnSkinPurchase(accountId, account.username, account.race, (skin as any).rarity || "", (skin as any).name || skinId);
+    for (const k of skinPurchaseClaimed) {
+      broadcastToAllPlayers("serverAchievement", { achievementKey: k, displayName: getAchievementDisplayName(k), holderUsername: account.username, holderRace: account.race });
+    }
+    if (skinPurchaseClaimed.length > 0) broadcastToPlayer(accountId, "serverAchievementClaimed", { keys: skinPurchaseClaimed, displayNames: skinPurchaseClaimed.map(getAchievementDisplayName) });
     
     res.json({ success: true, skin, newOwned: skins.owned });
   });
@@ -13298,6 +13479,21 @@ export async function registerRoutes(
 
       await recordValorpediaDiscovery(accountId, "resources", node.itemId);
 
+      // Honour Hall: First ore mined
+      const oreClaimed = await checkAndClaimOnOreMined(accountId, account.username, account.race);
+      if (oreClaimed.length > 0) {
+        broadcastToAllPlayers("serverAchievement", {
+          achievementKey: oreClaimed[0],
+          displayName: getAchievementDisplayName(oreClaimed[0]),
+          holderUsername: account.username,
+          holderRace: account.race,
+        });
+        broadcastToPlayer(accountId, "serverAchievementClaimed", {
+          keys: oreClaimed,
+          displayNames: oreClaimed.map(getAchievementDisplayName),
+        });
+      }
+
       res.json({ success: true, itemId: node.itemId, itemName: node.itemName, quantity: finalQuantity, goldValue: node.goldValue });
     } catch (error) {
       res.status(500).json({ error: "Mining failed" });
@@ -13345,10 +13541,17 @@ export async function registerRoutes(
           
           if (won) {
             const bonus = Math.floor(node.rubyReward * 0.5);
+            const newRubies = (account.rubies || 0) + node.rubyReward + bonus;
             await storage.updateAccount(accountId, {
-              rubies: (account.rubies || 0) + node.rubyReward + bonus,
+              rubies: newRubies,
               gold: (account.gold || 0) + node.goldReward,
             });
+            // Honour Hall: ruby earned
+            const rubyClaimed = await checkAndClaimOnRubyEarned(accountId, account.username, account.race, newRubies);
+            if (rubyClaimed.length > 0) {
+              broadcastToAllPlayers("serverAchievement", { achievementKey: rubyClaimed[0], displayName: getAchievementDisplayName(rubyClaimed[0]), holderUsername: account.username, holderRace: account.race });
+              broadcastToPlayer(accountId, "serverAchievementClaimed", { keys: rubyClaimed, displayNames: rubyClaimed.map(getAchievementDisplayName) });
+            }
             return res.json({ 
               pvpEncounter: true, 
               won: true, 
@@ -13369,10 +13572,25 @@ export async function registerRoutes(
         }
       }
 
+      const newRubies = (account.rubies || 0) + node.rubyReward;
       await storage.updateAccount(accountId, {
-        rubies: (account.rubies || 0) + node.rubyReward,
+        rubies: newRubies,
         gold: (account.gold || 0) + node.goldReward,
       });
+
+      // Honour Hall: ruby earned
+      const rubyMineClaimed = await checkAndClaimOnRubyEarned(accountId, account.username, account.race, newRubies);
+      if (rubyMineClaimed.length > 0) {
+        broadcastToAllPlayers("serverAchievement", { achievementKey: rubyMineClaimed[0], displayName: getAchievementDisplayName(rubyMineClaimed[0]), holderUsername: account.username, holderRace: account.race });
+        broadcastToPlayer(accountId, "serverAchievementClaimed", { keys: rubyMineClaimed, displayNames: rubyMineClaimed.map(getAchievementDisplayName) });
+      }
+
+      // Honour Hall: gold milestone
+      const rubyMineGoldClaimed = await checkAndClaimOnGold(accountId, account.username, account.race, (account.gold || 0) + node.goldReward);
+      if (rubyMineGoldClaimed.length > 0) {
+        broadcastToAllPlayers("serverAchievement", { achievementKey: rubyMineGoldClaimed[0], displayName: getAchievementDisplayName(rubyMineGoldClaimed[0]), holderUsername: account.username, holderRace: account.race });
+        broadcastToPlayer(accountId, "serverAchievementClaimed", { keys: rubyMineGoldClaimed, displayNames: rubyMineGoldClaimed.map(getAchievementDisplayName) });
+      }
 
       res.json({ success: true, rubyReward: node.rubyReward, goldReward: node.goldReward, pvpEncounter: false });
     } catch (error) {
@@ -15151,6 +15369,21 @@ export async function registerRoutes(
           monstersDefeated: run.monstersDefeated + 1,
         }).where(eq(zoneDungeonRuns.id, run.id));
 
+        // Honour Hall: Zone dungeon completion
+        const dungeonClaimed = await checkAndClaimOnZoneDungeon(accountId, account.username, account.race, run.zoneId);
+        if (dungeonClaimed.length > 0) {
+          broadcastToAllPlayers("serverAchievement", {
+            achievementKey: dungeonClaimed[0],
+            displayName: getAchievementDisplayName(dungeonClaimed[0]),
+            holderUsername: account.username,
+            holderRace: account.race,
+          });
+          broadcastToPlayer(accountId, "serverAchievementClaimed", {
+            keys: dungeonClaimed,
+            displayNames: dungeonClaimed.map(getAchievementDisplayName),
+          });
+        }
+
         return res.json({
           success: true,
           message: `You defeated ${monsterTemplate.name} and completed ${config.name}!`,
@@ -15158,6 +15391,7 @@ export async function registerRoutes(
           monster: { name: monsterTemplate.name, element: monsterTemplate.element, level: monsterLevel, isBoss: true },
           floor: run.currentFloor,
           dungeonCompleted: true,
+          serverAchievementsClaimed: dungeonClaimed.map(k => ({ key: k, displayName: getAchievementDisplayName(k) })),
           rewards: {
             gold: run.totalGoldEarned + scaledGold,
             xp: run.totalXpEarned + scaledXp,
@@ -15658,13 +15892,36 @@ export async function registerRoutes(
         .where(eq(accounts.id, accountId));
 
       const updatedBoss = await db.select().from(worldBosses).where(eq(worldBosses.id, boss.id)).limit(1);
+      const bossDefeated = updatedBoss[0]?.status === "defeated";
+
+      // Honour Hall: World boss kill
+      let bossKillClaimed: string[] = [];
+      if (bossDefeated) {
+        const attacker = await storage.getAccount(accountId);
+        if (attacker) {
+          bossKillClaimed = await checkAndClaimOnWorldBossKill(accountId, attacker.username, attacker.race, boss.name);
+          if (bossKillClaimed.length > 0) {
+            broadcastToAllPlayers("serverAchievement", {
+              achievementKey: bossKillClaimed[0],
+              displayName: getAchievementDisplayName(bossKillClaimed[0]),
+              holderUsername: attacker.username,
+              holderRace: attacker.race,
+            });
+            broadcastToPlayer(accountId, "serverAchievementClaimed", {
+              keys: bossKillClaimed,
+              displayNames: bossKillClaimed.map(getAchievementDisplayName),
+            });
+          }
+        }
+      }
 
       res.json({
         success: true,
         damage,
         currentHp: updatedBoss[0]?.hp || 0,
-        isDefeated: updatedBoss[0]?.status === "defeated",
+        isDefeated: bossDefeated,
         attacksRemaining,
+        serverAchievementsClaimed: bossKillClaimed.map(k => ({ key: k, displayName: getAchievementDisplayName(k) })),
         reward: { gold: PER_ATTACK_GOLD, soulShards: PER_ATTACK_SOUL_SHARDS },
       });
     } catch (error) {
@@ -15883,6 +16140,25 @@ export async function registerRoutes(
     try {
       const { accountId, recipeId } = req.body;
       const newItem = await craftItem(accountId, recipeId);
+
+      // Honour Hall: First craft
+      const crafter = await storage.getAccount(accountId);
+      if (crafter) {
+        const craftClaimed = await checkAndClaimOnCraft(accountId, crafter.username, crafter.race, newItem?.itemId || recipeId);
+        if (craftClaimed.length > 0) {
+          broadcastToAllPlayers("serverAchievement", {
+            achievementKey: craftClaimed[0],
+            displayName: getAchievementDisplayName(craftClaimed[0]),
+            holderUsername: crafter.username,
+            holderRace: crafter.race,
+          });
+          broadcastToPlayer(accountId, "serverAchievementClaimed", {
+            keys: craftClaimed,
+            displayNames: craftClaimed.map(getAchievementDisplayName),
+          });
+        }
+      }
+
       res.json(newItem);
     } catch (error) {
       console.error("Error crafting item:", error);
@@ -17293,7 +17569,24 @@ export async function registerRoutes(
       await db.update(accounts).set({ rubies: rubies - item.rubyPrice } as any).where(eq(accounts.id, accountId));
       await storage.addInventoryItem(accountId, { name: inventoryItem.name, type: inventoryItem.type, tier: inventoryItem.tier, stats: inventoryItem.stats, special: inventoryItem.special || "", id: `${inventoryItem.id}-${Date.now()}` });
 
-      res.json({ success: true, counterfeit: isCounterfeit, item: inventoryItem });
+      // Honour Hall: item tier purchase
+      const itemTierClaimed = await checkAndClaimOnItemPurchase(accountId, account.username, account.race, item.tier, item.name);
+      if (itemTierClaimed.length > 0) {
+        for (const k of itemTierClaimed) {
+          broadcastToAllPlayers("serverAchievement", {
+            achievementKey: k,
+            displayName: getAchievementDisplayName(k),
+            holderUsername: account.username,
+            holderRace: account.race,
+          });
+        }
+        broadcastToPlayer(accountId, "serverAchievementClaimed", {
+          keys: itemTierClaimed,
+          displayNames: itemTierClaimed.map(getAchievementDisplayName),
+        });
+      }
+
+      res.json({ success: true, counterfeit: isCounterfeit, item: inventoryItem, serverAchievementsClaimed: itemTierClaimed.map(k => ({ key: k, displayName: getAchievementDisplayName(k) })) });
     } catch (error) {
       res.status(500).json({ error: "Failed to purchase item" });
     }
@@ -17447,6 +17740,36 @@ export async function registerRoutes(
       };
     });
     res.json(overview);
+  });
+
+  // ==================== HONOUR HALL ====================
+  const { serverAchievements: saTable } = await import("@shared/schema");
+
+  app.get("/api/honour-hall", async (_req, res) => {
+    try {
+      const rows = await db.select().from(saTable);
+      const byCategory: Record<string, typeof rows> = {};
+      for (const row of rows) {
+        if (!byCategory[row.category]) byCategory[row.category] = [];
+        byCategory[row.category].push(row);
+      }
+      res.json({ achievements: rows, byCategory });
+    } catch (error) {
+      console.error("Honour Hall fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch Honour Hall" });
+    }
+  });
+
+  app.get("/api/honour-hall/player/:accountId", async (req, res) => {
+    try {
+      const { accountId } = req.params;
+      const rows = await db.select().from(saTable)
+        .where(eq(saTable.holderAccountId, accountId));
+      res.json({ achievements: rows });
+    } catch (error) {
+      console.error("Player honour hall fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch player honours" });
+    }
   });
 
   return httpServer;
