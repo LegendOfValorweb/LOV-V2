@@ -101,6 +101,67 @@ const MAX_PLAYERS_PER_RACE = 2;
 const SESSION_TIMEOUT = 5 * 60 * 1000; // 5 minutes of inactivity
 const SLEEP_TIMEOUT = 10 * 60 * 1000; // 10 minutes of inactivity to sleep the app
 
+const RANK_REQUIREMENTS = [
+  { rank: "Novice",          index: 0,  winsRequired: 0,      floorRequired: 1  },
+  { rank: "Apprentice",      index: 1,  winsRequired: 5,      floorRequired: 1  },
+  { rank: "Initiate",        index: 2,  winsRequired: 15,     floorRequired: 3  },
+  { rank: "Journeyman",      index: 3,  winsRequired: 30,     floorRequired: 5  },
+  { rank: "Adept",           index: 4,  winsRequired: 60,     floorRequired: 10 },
+  { rank: "Expert",          index: 5,  winsRequired: 120,    floorRequired: 15 },
+  { rank: "Master",          index: 6,  winsRequired: 250,    floorRequired: 20 },
+  { rank: "Grandmaster",     index: 7,  winsRequired: 500,    floorRequired: 30 },
+  { rank: "Champion",        index: 8,  winsRequired: 1000,   floorRequired: 40 },
+  { rank: "Overlord",        index: 9,  winsRequired: 2000,   floorRequired: 50 },
+  { rank: "Sovereign",       index: 10, winsRequired: 5000,   floorRequired: 50 },
+  { rank: "Ascendant",       index: 11, winsRequired: 10000,  floorRequired: 50 },
+  { rank: "Legend",          index: 12, winsRequired: 25000,  floorRequired: 50 },
+  { rank: "Mythic",          index: 13, winsRequired: 50000,  floorRequired: 50 },
+  { rank: "Mythical Legend", index: 14, winsRequired: 100000, floorRequired: 50 },
+];
+
+async function checkAndAutoRankUp(accountId: string, wins: number, floor: number): Promise<void> {
+  try {
+    const account = await storage.getAccount(accountId);
+    if (!account || account.role !== "player") return;
+
+    const currentRankIndex = playerRanks.indexOf(account.rank as any) ?? 0;
+    let highestEligibleIndex = currentRankIndex;
+
+    for (const req of RANK_REQUIREMENTS) {
+      if (req.index > currentRankIndex && wins >= req.winsRequired && floor >= req.floorRequired) {
+        highestEligibleIndex = req.index;
+      }
+    }
+
+    if (highestEligibleIndex > currentRankIndex) {
+      const newRank = RANK_REQUIREMENTS[highestEligibleIndex].rank;
+      await storage.updateAccount(accountId, { rank: newRank as any });
+
+      broadcastToPlayer(accountId, "rankUp", {
+        oldRank: account.rank,
+        newRank,
+        message: `You have been promoted to ${newRank}!`,
+      });
+
+      const rankClaimed = await checkAndClaimOnRankUp(accountId, account.username, account.race, newRank);
+      if (rankClaimed.length > 0) {
+        broadcastToAllPlayers("serverAchievement", {
+          achievementKey: rankClaimed[0],
+          displayName: getAchievementDisplayName(rankClaimed[0]),
+          holderUsername: account.username,
+          holderRace: account.race,
+        });
+        broadcastToPlayer(accountId, "serverAchievementClaimed", {
+          keys: rankClaimed,
+          displayNames: rankClaimed.map(getAchievementDisplayName),
+        });
+      }
+    }
+  } catch (err) {
+    console.error("[autoRankUp] Error checking rank promotion:", err);
+  }
+}
+
 const ENERGY_COSTS: Record<string, number> = {
   gathering: 2,
   fishing: 3,
@@ -3030,6 +3091,8 @@ export async function registerRoutes(
                 displayNames: claimedPvp.map(getAchievementDisplayName),
               });
             }
+            // Auto rank-up check after PvP win
+            await checkAndAutoRankUp(winner.id, newWins, winner.npcFloor || 1);
           }
 
           let goldDropped = 0;
@@ -10390,6 +10453,8 @@ export async function registerRoutes(
             displayNames: towerClaimed.map(getAchievementDisplayName),
           });
         }
+        // Auto rank-up check after tower floor progress
+        await checkAndAutoRankUp(req.params.id, account.wins || 0, newFloor);
       }
       
       res.json({
@@ -10682,23 +10747,15 @@ export async function registerRoutes(
       const admin = await storage.getAccount(adminId);
       if (!admin || admin.role !== "admin") return res.status(403).json({ error: "Admin access required" });
 
-      const RANK_REQUIREMENTS = [
-        { rank: "Novice",         index: 0,  winsRequired: 0,      floorRequired: 1,   description: "Starting rank" },
-        { rank: "Apprentice",     index: 1,  winsRequired: 5,      floorRequired: 1,   description: "First PvP victories" },
-        { rank: "Initiate",       index: 2,  winsRequired: 15,     floorRequired: 3,   description: "Proven combatant" },
-        { rank: "Journeyman",     index: 3,  winsRequired: 30,     floorRequired: 5,   description: "Seasoned warrior" },
-        { rank: "Adept",          index: 4,  winsRequired: 60,     floorRequired: 10,  description: "Skilled fighter" },
-        { rank: "Expert",         index: 5,  winsRequired: 120,    floorRequired: 15,  description: "Elite combatant" },
-        { rank: "Master",         index: 6,  winsRequired: 250,    floorRequired: 20,  description: "Master of combat" },
-        { rank: "Grandmaster",    index: 7,  winsRequired: 500,    floorRequired: 30,  description: "Grandmaster warrior" },
-        { rank: "Champion",       index: 8,  winsRequired: 1000,   floorRequired: 40,  description: "Champion of the realm" },
-        { rank: "Overlord",       index: 9,  winsRequired: 2000,   floorRequired: 50,  description: "Overlord of battles" },
-        { rank: "Sovereign",      index: 10, winsRequired: 5000,   floorRequired: 50,  description: "Sovereign ruler" },
-        { rank: "Ascendant",      index: 11, winsRequired: 10000,  floorRequired: 50,  description: "Ascendant legend" },
-        { rank: "Legend",         index: 12, winsRequired: 25000,  floorRequired: 50,  description: "Living legend" },
-        { rank: "Mythic",         index: 13, winsRequired: 50000,  floorRequired: 50,  description: "Mythic powerhouse" },
-        { rank: "Mythical Legend",index: 14, winsRequired: 100000, floorRequired: 50,  description: "The ultimate rank" },
-      ];
+      const RANK_REQUIREMENTS_WITH_DESC = RANK_REQUIREMENTS.map((r, i) => ({
+        ...r,
+        description: [
+          "Starting rank", "First PvP victories", "Proven combatant", "Seasoned warrior",
+          "Skilled fighter", "Elite combatant", "Master of combat", "Grandmaster warrior",
+          "Champion of the realm", "Overlord of battles", "Sovereign ruler", "Ascendant legend",
+          "Living legend", "Mythic powerhouse", "The ultimate rank",
+        ][i] || "",
+      }));
 
       const allAccounts = await storage.getAllAccounts();
       const players = allAccounts.filter(a => a.role === "player");
@@ -10725,7 +10782,7 @@ export async function registerRoutes(
         return null;
       }).filter(Boolean);
 
-      res.json({ rankRequirements: RANK_REQUIREMENTS, eligiblePlayers });
+      res.json({ rankRequirements: RANK_REQUIREMENTS_WITH_DESC, eligiblePlayers });
     } catch (error) {
       console.error("Rank requirements error:", error);
       res.status(500).json({ error: "Failed to load rank requirements" });

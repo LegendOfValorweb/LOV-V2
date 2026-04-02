@@ -67,7 +67,7 @@ function formatNumber(n: number): string {
 
 export function GameHUD() {
   const [location, navigate] = useLocation();
-  const { account, logout } = useGame();
+  const { account, logout, refetchAccount } = useGame();
   const { toast } = useToast();
   const [energyData, setEnergyData] = useState<{ energy: number; maxEnergy: number } | null>(null);
   const [activePet, setActivePet] = useState<PetData | null>(null);
@@ -175,9 +175,21 @@ export function GameHUD() {
       } catch {}
     });
 
+    src.addEventListener("rankUp", (e) => {
+      try {
+        const d = JSON.parse(e.data);
+        toast({
+          title: "🏆 Rank Up!",
+          description: d.message || `You have been promoted to ${d.newRank}!`,
+          duration: 12000,
+        });
+        refetchAccount();
+      } catch {}
+    });
+
     src.onerror = () => { src.close(); };
     return () => { src.close(); };
-  }, [accountId, toast]);
+  }, [accountId, toast, refetchAccount]);
 
   const handleLogout = useCallback(() => {
     if (combatCooldown > 0) return;
