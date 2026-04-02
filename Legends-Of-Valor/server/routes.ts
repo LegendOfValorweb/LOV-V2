@@ -4017,6 +4017,7 @@ export async function registerRoutes(
       const rawStats = await getPlayerTotalStats(account.id);
       let totalStats = applyRaceModifiers(rawStats, account.race);
       totalStats = applyRacePassiveSkill(totalStats, account.equippedRacePassive);
+      totalStats = applyWeaknessDebuff(totalStats, account.weaknessDebuffExpires ? new Date(account.weaknessDebuffExpires) : null);
       const playerCombatStats: CombatStats = { ...totalStats };
       
       // Pet elements and elemental power (not covered by getPlayerTotalStats)
@@ -14519,6 +14520,21 @@ export async function registerRoutes(
 
       const monsterFightExtras = await getPlayerCombatExtras(accountId, account.equippedRacePassive);
 
+      let monsterFightPetElements: { elements: string[]; elementalPower: number } | undefined;
+      if (account.equippedPetId) {
+        const mfPet = await storage.getPet(account.equippedPetId);
+        if (mfPet) {
+          const mfPetStats = mfPet.stats as Record<string, unknown>;
+          const mfElemPower = Number(mfPetStats.ElementalPower) || 0;
+          const mfPetEls = mfPet.elements && mfPet.elements.length > 0
+            ? mfPet.elements
+            : mfPet.element ? [mfPet.element] : [];
+          if (mfPetEls.length > 0) {
+            monsterFightPetElements = { elements: mfPetEls, elementalPower: mfElemPower };
+          }
+        }
+      }
+
       const playerCombatant: Combatant = {
         id: accountId,
         name: account.username,
@@ -14528,6 +14544,7 @@ export async function registerRoutes(
         level: playerRanks.indexOf(account.rank) + 1,
         isPlayer: true,
         spell: monsterFightSpell,
+        elements: monsterFightPetElements,
         raceCritBonus: monsterFightExtras.raceCritBonus,
         raceLifeStealPct: monsterFightExtras.raceLifeStealPct,
         immunities: monsterFightExtras.raceImmunities.length > 0 ? monsterFightExtras.raceImmunities : undefined,
@@ -15344,16 +15361,64 @@ export async function registerRoutes(
       const playerMaxHP = calculateMaxHP(playerStats as any, safeRankIdx * 10, account.race, account.rank);
 
       const dungeonExtras = await getPlayerCombatExtras(accountId, account.equippedRacePassive);
+
+      let dungeonSpell: any = undefined;
+      const dungeonEquippedSkill = await storage.getEquippedSkill(accountId);
+      if (dungeonEquippedSkill) {
+        const { getSkillById, RANK_MULTIPLIER } = await import("@shared/skills-data");
+        const skillDef = getSkillById(dungeonEquippedSkill.skillId);
+        if (skillDef) {
+          const rankMult = RANK_MULTIPLIER[account.rank || "Novice"] || 1.0;
+          dungeonSpell = {
+            name: skillDef.name,
+            multiplier: skillDef.spellPower || 1.5,
+            element: skillDef.element,
+            isAoE: skillDef.spellCategory === "aoe",
+            targetCount: skillDef.targetCount,
+            spellCategory: skillDef.spellCategory || "damage",
+            spellPower: skillDef.spellPower || 1.5,
+            ccType: skillDef.ccType,
+            ccDuration: skillDef.ccDuration,
+            buffStat: skillDef.buffStat,
+            buffAmount: skillDef.buffAmount,
+            rankMultiplier: rankMult,
+          };
+        }
+      }
+
+      const dungeonElements: string[] = [];
+      let dungeonElementalPower = 0;
+      const raceElement = account.race ? (raceModifiers[account.race as keyof typeof raceModifiers]?.element || null) : null;
+      if (raceElement) {
+        dungeonElements.push(raceElement);
+        dungeonElementalPower = 10 + safeRankIdx * 5;
+      }
+      if (account.equippedPetId) {
+        const dungeonPet = await storage.getPet(account.equippedPetId);
+        if (dungeonPet) {
+          const dungeonPetStats = dungeonPet.stats as Record<string, unknown>;
+          const dungeonPetElemPower = Number(dungeonPetStats.ElementalPower) || 0;
+          const dungeonPetEls = dungeonPet.elements && dungeonPet.elements.length > 0
+            ? dungeonPet.elements
+            : dungeonPet.element ? [dungeonPet.element] : [];
+          for (const el of dungeonPetEls) {
+            if (!dungeonElements.includes(el)) dungeonElements.push(el);
+          }
+          dungeonElementalPower = Math.max(dungeonElementalPower, dungeonPetElemPower);
+        }
+      }
+
       const playerCombatant: Combatant = {
         id: accountId,
         name: account.username,
         stats: { ...playerStats as any, HP: playerMaxHP, maxHP: playerMaxHP },
         race: account.race,
         rank: account.rank,
-        elements: { elements: [], elementalPower: 0 },
+        elements: { elements: dungeonElements, elementalPower: dungeonElementalPower },
         immunities: dungeonExtras.raceImmunities.length > 0 ? dungeonExtras.raceImmunities : [],
         level: safeRankIdx * 10 + 1,
         isPlayer: true,
+        spell: dungeonSpell,
         raceCritBonus: dungeonExtras.raceCritBonus,
         raceLifeStealPct: dungeonExtras.raceLifeStealPct,
         raceDodgeBonus: dungeonExtras.raceDodgeBonus,
@@ -15362,11 +15427,6 @@ export async function registerRoutes(
         raceCounterChance: dungeonExtras.raceCounterChance,
         raceBonusDamagePct: dungeonExtras.raceBonusDamagePct,
       };
-
-      const raceElement = account.race ? (raceModifiers[account.race as keyof typeof raceModifiers]?.element || null) : null;
-      if (raceElement) {
-        playerCombatant.elements = { elements: [raceElement], elementalPower: 10 + safeRankIdx * 5 };
-      }
 
       const monsterCombatant: Combatant = {
         id: `dungeon_monster_${run.id}_${run.currentFloor}`,
@@ -15933,8 +15993,12 @@ export async function registerRoutes(
         });
       }
 
-      const totalStats = await getPlayerTotalStats(accountId);
-      const damage = Math.max(1, totalStats.Str);
+      const bossAttacker = await storage.getAccount(accountId);
+      const rawBossStats = await getPlayerTotalStats(accountId);
+      let bossAttackStats = applyRaceModifiers(rawBossStats, bossAttacker?.race);
+      bossAttackStats = applyRacePassiveSkill(bossAttackStats, bossAttacker?.equippedRacePassive);
+      bossAttackStats = applyWeaknessDebuff(bossAttackStats, bossAttacker?.weaknessDebuffExpires ? new Date(bossAttacker.weaknessDebuffExpires) : null);
+      const damage = Math.max(1, Math.floor(bossAttackStats.Str + bossAttackStats.Int * 0.5 + bossAttackStats.Luck * 0.25));
 
       const newAttackCount = await recordBossDamage(boss.id, accountId, damage);
       const attacksRemaining = Math.max(0, MAX_ATTACKS_PER_BOSS - newAttackCount);
