@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useAudio, MUSIC_TRACKS } from "@/lib/audio-context";
+import { useGame } from "@/lib/game-context";
 import {
   Play, Pause, SkipForward, SkipBack, Volume2, VolumeX,
-  Loader2, Music, BookOpen, ChevronDown, ChevronRight, X,
+  Loader2, Music, BookOpen, ChevronDown, ChevronRight, X, User, Lock, Eye, EyeOff, CheckCircle,
 } from "lucide-react";
 
 interface GuideSectionData {
@@ -429,11 +430,88 @@ interface SettingsPanelProps {
 }
 
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
-  const [tab, setTab] = useState<"music" | "guide">("music");
+  const [tab, setTab] = useState<"music" | "guide" | "account">("music");
   const {
     isPlaying, volume, isMuted, currentTrack, isLoading, hasError,
     togglePlay, toggleMute, nextTrack, prevTrack, setVolume, selectTrack,
   } = useAudio();
+  const { account, setAccount } = useGame();
+
+  const [newUsername, setNewUsername] = useState("");
+  const [usernamePassword, setUsernamePassword] = useState("");
+  const [showUsernamePassword, setShowUsernamePassword] = useState(false);
+  const [usernameLoading, setUsernameLoading] = useState(false);
+  const [usernameMsg, setUsernameMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function handleChangeUsername(e: React.FormEvent) {
+    e.preventDefault();
+    if (!account) return;
+    setUsernameLoading(true);
+    setUsernameMsg(null);
+    try {
+      const res = await fetch(`/api/accounts/${account.id}/change-username`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newUsername: newUsername.trim(), currentPassword: usernamePassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setUsernameMsg({ ok: false, text: data.error || "Failed to change username" });
+      } else {
+        setAccount({ ...account, username: newUsername.trim() });
+        setUsernameMsg({ ok: true, text: "Username updated successfully!" });
+        setNewUsername("");
+        setUsernamePassword("");
+      }
+    } catch {
+      setUsernameMsg({ ok: false, text: "Network error. Please try again." });
+    } finally {
+      setUsernameLoading(false);
+    }
+  }
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (!account) return;
+    if (newPassword !== confirmPassword) {
+      setPasswordMsg({ ok: false, text: "New passwords do not match." });
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPasswordMsg({ ok: false, text: "New password must be at least 6 characters." });
+      return;
+    }
+    setPasswordLoading(true);
+    setPasswordMsg(null);
+    try {
+      const res = await fetch(`/api/accounts/${account.id}/change-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPasswordMsg({ ok: false, text: data.error || "Failed to change password" });
+      } else {
+        setPasswordMsg({ ok: true, text: "Password updated successfully!" });
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+      }
+    } catch {
+      setPasswordMsg({ ok: false, text: "Network error. Please try again." });
+    } finally {
+      setPasswordLoading(false);
+    }
+  }
 
   return (
     <div className="settings-panel-overlay" onClick={onClose}>
@@ -452,6 +530,13 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           >
             <Music className="h-3.5 w-3.5" />
             Music
+          </button>
+          <button
+            className={`settings-tab ${tab === "account" ? "settings-tab-active" : ""}`}
+            onClick={() => setTab("account")}
+          >
+            <User className="h-3.5 w-3.5" />
+            Account
           </button>
           <button
             className={`settings-tab ${tab === "guide" ? "settings-tab-active" : ""}`}
@@ -536,6 +621,148 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+
+          {tab === "account" && (
+            <div className="space-y-5 p-1">
+              {!account && (
+                <p className="text-sm text-gray-400 text-center py-6">Please log in to manage account settings.</p>
+              )}
+              {account && (
+                <>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-3">Logged in as <span className="text-amber-400 font-semibold">{account.username}</span></p>
+                  </div>
+
+                  <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-4 space-y-3">
+                    <h3 className="text-sm font-semibold text-amber-300 flex items-center gap-2">
+                      <User className="h-4 w-4" /> Change Username
+                    </h3>
+                    <form onSubmit={handleChangeUsername} className="space-y-2">
+                      <div>
+                        <label className="text-xs text-gray-400 block mb-1">New Username</label>
+                        <input
+                          type="text"
+                          value={newUsername}
+                          onChange={e => setNewUsername(e.target.value)}
+                          placeholder="3–32 characters"
+                          minLength={3}
+                          maxLength={32}
+                          required
+                          className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400 block mb-1">Current Password</label>
+                        <div className="relative">
+                          <input
+                            type={showUsernamePassword ? "text" : "password"}
+                            value={usernamePassword}
+                            onChange={e => setUsernamePassword(e.target.value)}
+                            placeholder="Confirm with your password"
+                            required
+                            className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-1.5 pr-9 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-amber-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowUsernamePassword(v => !v)}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
+                          >
+                            {showUsernamePassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                      </div>
+                      {usernameMsg && (
+                        <p className={`text-xs flex items-center gap-1 ${usernameMsg.ok ? "text-green-400" : "text-red-400"}`}>
+                          {usernameMsg.ok && <CheckCircle className="h-3.5 w-3.5" />}
+                          {usernameMsg.text}
+                        </p>
+                      )}
+                      <button
+                        type="submit"
+                        disabled={usernameLoading || !newUsername.trim() || !usernamePassword}
+                        className="w-full bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded py-1.5 transition-colors flex items-center justify-center gap-2"
+                      >
+                        {usernameLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update Username"}
+                      </button>
+                    </form>
+                  </div>
+
+                  <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-4 space-y-3">
+                    <h3 className="text-sm font-semibold text-amber-300 flex items-center gap-2">
+                      <Lock className="h-4 w-4" /> Change Password
+                    </h3>
+                    <form onSubmit={handleChangePassword} className="space-y-2">
+                      <div>
+                        <label className="text-xs text-gray-400 block mb-1">Current Password</label>
+                        <div className="relative">
+                          <input
+                            type={showCurrentPw ? "text" : "password"}
+                            value={currentPassword}
+                            onChange={e => setCurrentPassword(e.target.value)}
+                            placeholder="Your current password"
+                            required
+                            className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-1.5 pr-9 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-amber-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowCurrentPw(v => !v)}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
+                          >
+                            {showCurrentPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400 block mb-1">New Password</label>
+                        <div className="relative">
+                          <input
+                            type={showNewPw ? "text" : "password"}
+                            value={newPassword}
+                            onChange={e => setNewPassword(e.target.value)}
+                            placeholder="At least 6 characters"
+                            minLength={6}
+                            required
+                            className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-1.5 pr-9 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-amber-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowNewPw(v => !v)}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
+                          >
+                            {showNewPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400 block mb-1">Confirm New Password</label>
+                        <input
+                          type="password"
+                          value={confirmPassword}
+                          onChange={e => setConfirmPassword(e.target.value)}
+                          placeholder="Re-enter new password"
+                          required
+                          className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                      {passwordMsg && (
+                        <p className={`text-xs flex items-center gap-1 ${passwordMsg.ok ? "text-green-400" : "text-red-400"}`}>
+                          {passwordMsg.ok && <CheckCircle className="h-3.5 w-3.5" />}
+                          {passwordMsg.text}
+                        </p>
+                      )}
+                      <button
+                        type="submit"
+                        disabled={passwordLoading || !currentPassword || !newPassword || !confirmPassword}
+                        className="w-full bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded py-1.5 transition-colors flex items-center justify-center gap-2"
+                      >
+                        {passwordLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update Password"}
+                      </button>
+                    </form>
+                  </div>
+                </>
+              )}
             </div>
           )}
 

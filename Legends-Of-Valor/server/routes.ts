@@ -10263,6 +10263,68 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/accounts/:id/change-username", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      const schema = z.object({
+        newUsername: z.string().min(3).max(32),
+        currentPassword: z.string().min(1),
+      });
+      const { newUsername, currentPassword } = schema.parse(req.body);
+
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const passwordMatch = await bcrypt.compare(currentPassword, account.password);
+      if (!passwordMatch) return res.status(401).json({ error: "Current password is incorrect" });
+
+      const existing = await storage.getAccountByUsername(newUsername);
+      if (existing && existing.id !== accountId) {
+        return res.status(409).json({ error: "Username is already taken" });
+      }
+
+      const [updated] = await db
+        .update(accounts)
+        .set({ username: newUsername })
+        .where(eq(accounts.id, accountId))
+        .returning();
+
+      const { password: _, ...safeAccount } = updated;
+      res.json({ success: true, account: safeAccount });
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: "Invalid input", details: error.errors });
+      res.status(500).json({ error: "Failed to change username" });
+    }
+  });
+
+  app.post("/api/accounts/:id/change-password", async (req, res) => {
+    try {
+      const accountId = req.params.id;
+      const schema = z.object({
+        currentPassword: z.string().min(1),
+        newPassword: z.string().min(6),
+      });
+      const { currentPassword, newPassword } = schema.parse(req.body);
+
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const passwordMatch = await bcrypt.compare(currentPassword, account.password);
+      if (!passwordMatch) return res.status(401).json({ error: "Current password is incorrect" });
+
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await db
+        .update(accounts)
+        .set({ password: hashedPassword })
+        .where(eq(accounts.id, accountId));
+
+      res.json({ success: true });
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: "Invalid input", details: error.errors });
+      res.status(500).json({ error: "Failed to change password" });
+    }
+  });
+
   app.post("/api/accounts/:id/auto-gather", async (req, res) => {
     try {
       const accountId = req.params.id;
