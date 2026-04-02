@@ -79,11 +79,33 @@ const baseTiers: BaseTier[] = [
     requirements: { gold: 500000000, rank: "Legend" },
     rooms: ["storage", "rest", "weapon_locker", "crafting", "training", "vault", "defenses"],
   },
+  {
+    tier: 6,
+    name: "Stronghold",
+    description: "A towering stronghold where champions forge their legacy. Unlocks the Alchemy Lab.",
+    requirements: { gold: 2500000000, rank: "Champion" },
+    rooms: ["storage", "rest", "weapon_locker", "crafting", "training", "vault", "defenses", "alchemy_lab"],
+  },
+  {
+    tier: 7,
+    name: "Citadel",
+    description: "A mighty citadel feared across the realm. Unlocks the Barracks for elite fighter training.",
+    requirements: { gold: 10000000000, rank: "Overlord" },
+    rooms: ["storage", "rest", "weapon_locker", "crafting", "training", "vault", "defenses", "alchemy_lab", "barracks"],
+  },
+  {
+    tier: 8,
+    name: "Eternal Fortress",
+    description: "The pinnacle of power — an eternal fortress that transcends mortal limits. Unlocks the Sanctum.",
+    requirements: { gold: 100000000000, rank: "Mythical Legend" },
+    rooms: ["storage", "rest", "weapon_locker", "crafting", "training", "vault", "defenses", "alchemy_lab", "barracks", "sanctum"],
+  },
 ];
 
-const ROOM_MAX_LEVEL_BY_TIER: Record<number, number> = { 1: 3, 2: 5, 3: 7, 4: 9, 5: 10 };
+const ROOM_MAX_LEVEL_BY_TIER: Record<number, number> = { 1: 3, 2: 5, 3: 7, 4: 9, 5: 10, 6: 12, 7: 15, 8: 20 };
 const ROOM_UPGRADE_BASE_COST: Record<string, number> = {
   storage: 5000, weapon_locker: 8000, rest: 3000, crafting: 10000, training: 15000, vault: 25000, defenses: 50000,
+  alchemy_lab: 75000, barracks: 100000, sanctum: 250000,
 };
 
 const baseRooms: BaseRoom[] = [
@@ -153,9 +175,39 @@ const baseRooms: BaseRoom[] = [
     description: "Arrow Traps, Magic Wards and more.",
     icon: <Shield className="w-5 h-5" />,
     level: 1,
-    maxLevel: 10,
+    maxLevel: 20,
     upgradeCost: 50000,
     benefits: ["Arrow Traps deal damage to raiders", "Magic Wards reduce gold lost"],
+  },
+  {
+    id: "alchemy_lab",
+    name: "Alchemy Lab",
+    description: "Brew powerful potions and consumables. Unlocked at Tier 6 (Stronghold).",
+    icon: <Sparkles className="w-5 h-5" />,
+    level: 1,
+    maxLevel: 20,
+    upgradeCost: 75000,
+    benefits: ["+5% potion effectiveness per level", "Unlock advanced elixirs at level 5", "Passive HP regen buff at level 10", "Legendary brew recipes at level 15"],
+  },
+  {
+    id: "barracks",
+    name: "Barracks",
+    description: "Train elite soldiers and commanders. Unlocked at Tier 7 (Citadel).",
+    icon: <Users className="w-5 h-5" />,
+    level: 1,
+    maxLevel: 20,
+    upgradeCost: 100000,
+    benefits: ["+3% combat damage per level", "Recruit elite guards at level 5", "War march bonus for guild raids at level 10", "Legendary battalion at level 15"],
+  },
+  {
+    id: "sanctum",
+    name: "Sanctum",
+    description: "An ancient chamber of transcendent power. Unlocked at Tier 8 (Eternal Fortress).",
+    icon: <Crown className="w-5 h-5" />,
+    level: 1,
+    maxLevel: 20,
+    upgradeCost: 250000,
+    benefits: ["+5% all stats per level", "Divine protection aura at level 5", "Resurrection ward (prevent death once/day) at level 10", "Immortal aura — godlike power at level 20"],
   },
 ];
 
@@ -179,6 +231,9 @@ const ALL_BUILDINGS: BuildingDef[] = [
   { id: "vault", name: "Vault", icon: <Coins className="w-6 h-6" />, color: "from-yellow-600 to-yellow-800", unlockTier: 4, description: "Secure gold with interest." },
   { id: "raids", name: "War Room", icon: <Target className="w-6 h-6" />, color: "from-red-800 to-red-900", unlockTier: 1, description: "Manage NPC raids." },
   { id: "events", name: "Events Hall", icon: <Calendar className="w-6 h-6" />, color: "from-pink-700 to-fuchsia-800", unlockTier: 1, description: "Weekly events & visitors." },
+  { id: "alchemy_lab", name: "Alchemy Lab", icon: <Sparkles className="w-6 h-6" />, color: "from-teal-600 to-cyan-700", unlockTier: 6, description: "Brew potions & elixirs." },
+  { id: "barracks", name: "Barracks", icon: <Users className="w-6 h-6" />, color: "from-indigo-700 to-blue-800", unlockTier: 7, description: "Train elite soldiers." },
+  { id: "sanctum", name: "Sanctum", icon: <Crown className="w-6 h-6" />, color: "from-yellow-500 to-amber-600", unlockTier: 8, description: "Transcendent power chamber." },
 ];
 
 interface BaseSkin {
@@ -1011,7 +1066,7 @@ export default function Base() {
   })();
   const showFirstSteps = !isDismissed && !allFirstStepsDone;
 
-  const nextTierCost = currentTier < 5 ? [0, 500000, 5000000, 50000000, 500000000][currentTier] : 0;
+  const nextTierCost = currentTier < 8 ? [0, 500000, 5000000, 50000000, 500000000, 2500000000, 10000000000, 100000000000][currentTier] : 0;
 
   const baseSkin = (account as any).baseSkin || "default";
   const skinPath = baseSkin === "default" 
@@ -1124,7 +1179,7 @@ export default function Base() {
               <Badge variant="secondary" className="text-lg px-4 py-1">Tier {currentTier}</Badge>
             </div>
 
-            {currentTier < 5 && (
+            {currentTier < 8 && (
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">
                   Next tier: <span className="font-medium text-yellow-400">{baseTiers[currentTier]?.name}</span> — costs {nextTierCost.toLocaleString()} gold
@@ -1133,7 +1188,7 @@ export default function Base() {
                   Required rank: {baseTiers[currentTier]?.requirements.rank}
                 </p>
                 <Button 
-                  disabled={currentTier >= 5 || account.gold < nextTierCost || isUpgrading}
+                  disabled={currentTier >= 8 || account.gold < nextTierCost || isUpgrading}
                   onClick={handleUpgradeBase}
                   className="w-full"
                 >
@@ -1142,10 +1197,10 @@ export default function Base() {
                 </Button>
               </div>
             )}
-            {currentTier >= 5 && (
+            {currentTier >= 8 && (
               <div className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/30 text-center">
                 <Crown className="w-6 h-6 text-purple-400 mx-auto mb-1" />
-                <p className="font-medium">Maximum Tier Reached — Castle</p>
+                <p className="font-medium">Maximum Tier Reached — Eternal Fortress</p>
               </div>
             )}
 
@@ -1807,6 +1862,228 @@ export default function Base() {
                 <Shield className="w-10 h-10 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">Defense systems unlock at Tier 3 (Keep)</p>
                 <p className="text-xs mt-1">Upgrade your base to access traps and guards.</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenBuilding(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Alchemy Lab Dialog */}
+      <Dialog open={openBuilding === "alchemy_lab"} onOpenChange={(open) => !open && setOpenBuilding(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-teal-400" />
+              Alchemy Lab
+            </DialogTitle>
+            <DialogDescription>Brew powerful potions, elixirs, and consumable buffs.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {currentTier >= 6 ? (
+              <>
+                {(() => {
+                  const room = baseRooms.find(r => r.id === "alchemy_lab")!;
+                  const level = getRoomLevel("alchemy_lab");
+                  const maxLevel = ROOM_MAX_LEVEL_BY_TIER[currentTier] || 3;
+                  const progress = (level / maxLevel) * 100;
+                  const upgradeCost = ROOM_UPGRADE_BASE_COST["alchemy_lab"] * level;
+                  return (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <Badge>Level {level} / {maxLevel}</Badge>
+                        <span className="text-sm text-muted-foreground">Potion Bonus: +{level * 5}%</span>
+                      </div>
+                      <Progress value={progress} className="h-2" />
+                      <div className="space-y-1">
+                        {room.benefits.map((b, i) => (
+                          <div key={i} className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Sparkles className="w-3 h-3 text-teal-400" />{b}
+                          </div>
+                        ))}
+                      </div>
+                      <Button
+                        className="w-full"
+                        disabled={level >= maxLevel}
+                        onClick={() => handleUpgradeRoom("alchemy_lab")}
+                      >
+                        <Coins className="w-4 h-4 mr-2" />
+                        {level >= maxLevel ? "Max Level" : `Upgrade (${upgradeCost.toLocaleString()} Gold)`}
+                      </Button>
+                    </>
+                  );
+                })()}
+                <div className="border-t border-border pt-4">
+                  <h4 className="text-sm font-semibold text-muted-foreground mb-3">ACTIVE BREWS</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 rounded-lg bg-teal-500/10 border border-teal-500/20">
+                      <p className="text-xs text-muted-foreground">Potion Effectiveness</p>
+                      <p className="text-lg font-bold text-teal-400">+{getRoomLevel("alchemy_lab") * 5}%</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-secondary/50">
+                      <p className="text-xs text-muted-foreground">Brew Slots</p>
+                      <p className="text-lg font-bold">{Math.max(1, Math.floor(getRoomLevel("alchemy_lab") / 3))}</p>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="text-center text-muted-foreground py-6">
+                <Sparkles className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">Alchemy Lab unlocks at Tier 6 (Stronghold)</p>
+                <p className="text-xs mt-1">Reach Champion rank and upgrade your base to brew powerful potions.</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenBuilding(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Barracks Dialog */}
+      <Dialog open={openBuilding === "barracks"} onOpenChange={(open) => !open && setOpenBuilding(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-indigo-400" />
+              Barracks
+            </DialogTitle>
+            <DialogDescription>Train elite soldiers and commanders to fight in your name.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {currentTier >= 7 ? (
+              <>
+                {(() => {
+                  const room = baseRooms.find(r => r.id === "barracks")!;
+                  const level = getRoomLevel("barracks");
+                  const maxLevel = ROOM_MAX_LEVEL_BY_TIER[currentTier] || 3;
+                  const progress = (level / maxLevel) * 100;
+                  const upgradeCost = ROOM_UPGRADE_BASE_COST["barracks"] * level;
+                  return (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <Badge>Level {level} / {maxLevel}</Badge>
+                        <span className="text-sm text-muted-foreground">Combat Bonus: +{level * 3}%</span>
+                      </div>
+                      <Progress value={progress} className="h-2" />
+                      <div className="space-y-1">
+                        {room.benefits.map((b, i) => (
+                          <div key={i} className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Sparkles className="w-3 h-3 text-indigo-400" />{b}
+                          </div>
+                        ))}
+                      </div>
+                      <Button
+                        className="w-full"
+                        disabled={level >= maxLevel}
+                        onClick={() => handleUpgradeRoom("barracks")}
+                      >
+                        <Coins className="w-4 h-4 mr-2" />
+                        {level >= maxLevel ? "Max Level" : `Upgrade (${upgradeCost.toLocaleString()} Gold)`}
+                      </Button>
+                    </>
+                  );
+                })()}
+                <div className="border-t border-border pt-4">
+                  <h4 className="text-sm font-semibold text-muted-foreground mb-3">GARRISON STATS</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
+                      <p className="text-xs text-muted-foreground">Combat Damage Bonus</p>
+                      <p className="text-lg font-bold text-indigo-400">+{getRoomLevel("barracks") * 3}%</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-secondary/50">
+                      <p className="text-xs text-muted-foreground">Elite Soldiers</p>
+                      <p className="text-lg font-bold">{Math.max(0, getRoomLevel("barracks") - 4) * 5}</p>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="text-center text-muted-foreground py-6">
+                <Users className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">Barracks unlocks at Tier 7 (Citadel)</p>
+                <p className="text-xs mt-1">Reach Overlord rank and build the Citadel to command elite soldiers.</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenBuilding(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Sanctum Dialog */}
+      <Dialog open={openBuilding === "sanctum"} onOpenChange={(open) => !open && setOpenBuilding(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Crown className="w-5 h-5 text-yellow-400" />
+              Sanctum
+            </DialogTitle>
+            <DialogDescription>An ancient chamber of transcendent power, unlocking abilities beyond mortal limits.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {currentTier >= 8 ? (
+              <>
+                {(() => {
+                  const room = baseRooms.find(r => r.id === "sanctum")!;
+                  const level = getRoomLevel("sanctum");
+                  const maxLevel = ROOM_MAX_LEVEL_BY_TIER[currentTier] || 3;
+                  const progress = (level / maxLevel) * 100;
+                  const upgradeCost = ROOM_UPGRADE_BASE_COST["sanctum"] * level;
+                  return (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <Badge className="bg-yellow-600">Level {level} / {maxLevel}</Badge>
+                        <span className="text-sm text-muted-foreground">All Stats: +{level * 5}%</span>
+                      </div>
+                      <Progress value={progress} className="h-2" />
+                      <div className="space-y-1">
+                        {room.benefits.map((b, i) => (
+                          <div key={i} className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Sparkles className="w-3 h-3 text-yellow-400" />{b}
+                          </div>
+                        ))}
+                      </div>
+                      <Button
+                        className="w-full bg-gradient-to-r from-yellow-600 to-amber-700 hover:from-yellow-500 hover:to-amber-600"
+                        disabled={level >= maxLevel}
+                        onClick={() => handleUpgradeRoom("sanctum")}
+                      >
+                        <Crown className="w-4 h-4 mr-2" />
+                        {level >= maxLevel ? "Sanctum Perfected" : `Empower Sanctum (${upgradeCost.toLocaleString()} Gold)`}
+                      </Button>
+                    </>
+                  );
+                })()}
+                <div className="border-t border-border pt-4">
+                  <h4 className="text-sm font-semibold text-muted-foreground mb-3">SANCTUM POWERS</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                      <p className="text-xs text-muted-foreground">All Stats Bonus</p>
+                      <p className="text-lg font-bold text-yellow-400">+{getRoomLevel("sanctum") * 5}%</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                      <p className="text-xs text-muted-foreground">Divine Aura</p>
+                      <p className="text-lg font-bold text-amber-400">{getRoomLevel("sanctum") >= 5 ? "Active" : "Inactive"}</p>
+                    </div>
+                  </div>
+                  {getRoomLevel("sanctum") >= 10 && (
+                    <div className="mt-3 p-3 rounded-lg bg-gradient-to-br from-yellow-500/20 to-amber-500/20 border border-yellow-500/40 text-center">
+                      <p className="text-sm font-medium text-yellow-300">Resurrection Ward Active</p>
+                      <p className="text-xs text-muted-foreground mt-1">Once per day, death is prevented and you are restored to 25% HP.</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="text-center text-muted-foreground py-6">
+                <Crown className="w-10 h-10 mx-auto mb-2 opacity-50 text-yellow-600" />
+                <p className="text-sm">Sanctum unlocks at Tier 8 (Eternal Fortress)</p>
+                <p className="text-xs mt-1">Only Mythical Legends may access the power of the Sanctum.</p>
               </div>
             )}
           </div>

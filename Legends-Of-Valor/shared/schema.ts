@@ -185,9 +185,9 @@ export const HERITAGE_TITLES: Record<number, string> = {
   10: "Deca-Legend",
 };
 
-export const BASE_TIER_NAMES = ["", "Camp", "Lodge", "Keep", "Manor", "Castle"] as const;
-export const BASE_TIER_COSTS = [0, 500000, 5000000, 50000000, 500000000];
-export const BASE_TIER_RANK_REQUIREMENTS = ["Novice", "Journeyman", "Expert", "Grandmaster", "Legend"];
+export const BASE_TIER_NAMES = ["", "Camp", "Lodge", "Keep", "Manor", "Castle", "Stronghold", "Citadel", "Eternal Fortress"] as const;
+export const BASE_TIER_COSTS = [0, 500000, 5000000, 50000000, 500000000, 2500000000, 10000000000, 100000000000];
+export const BASE_TIER_RANK_REQUIREMENTS = ["Novice", "Journeyman", "Expert", "Grandmaster", "Legend", "Champion", "Overlord", "Mythical Legend"];
 
 export const ROOM_MAX_LEVEL_BY_TIER: Record<number, number> = {
   1: 3,
@@ -195,6 +195,9 @@ export const ROOM_MAX_LEVEL_BY_TIER: Record<number, number> = {
   3: 7,
   4: 9,
   5: 10,
+  6: 12,
+  7: 15,
+  8: 20,
 };
 
 export const OFFLINE_TRAINING_XP_PER_HOUR: Record<number, number> = {
@@ -203,6 +206,9 @@ export const OFFLINE_TRAINING_XP_PER_HOUR: Record<number, number> = {
   3: 20,
   4: 35,
   5: 50,
+  6: 80,
+  7: 120,
+  8: 200,
 };
 
 export const VAULT_INTEREST_RATE: Record<number, number> = {
@@ -211,6 +217,9 @@ export const VAULT_INTEREST_RATE: Record<number, number> = {
   3: 0.003,
   4: 0.004,
   5: 0.005,
+  6: 0.008,
+  7: 0.012,
+  8: 0.020,
 };
 
 export const VAULT_MAX_GOLD: Record<number, number> = {
@@ -219,6 +228,9 @@ export const VAULT_MAX_GOLD: Record<number, number> = {
   3: 2000000,
   4: 10000000,
   5: 50000000,
+  6: 250000000,
+  7: 1000000000,
+  8: 10000000000,
 };
 
 export const ROOM_UPGRADE_BASE_COST: Record<string, number> = {
@@ -229,6 +241,9 @@ export const ROOM_UPGRADE_BASE_COST: Record<string, number> = {
   training: 15000,
   vault: 25000,
   defenses: 50000,
+  alchemy_lab: 75000,
+  barracks: 100000,
+  sanctum: 250000,
 };
 
 export function calculateCarryCapacity(rank: string, strength: number, petsCarryBonus: number = 0): number {
@@ -2446,3 +2461,42 @@ export const zoneNpcProgressRelations = relations(zoneNpcProgress, ({ one }) => 
 
 export const insertZoneNpcProgressSchema = createInsertSchema(zoneNpcProgress).omit({ id: true, updatedAt: true });
 export type ZoneNpcProgress = typeof zoneNpcProgress.$inferSelect;
+
+// ==================== CO-OP STORY MODE ====================
+export interface CoopChatMessage {
+  role: "player" | "gamemaster";
+  content: string;
+  senderId: string;
+  senderUsername: string;
+  timestamp: string;
+}
+
+export const coopSessions = pgTable("coop_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  hostId: varchar("host_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
+  guestId: varchar("guest_id").references(() => accounts.id, { onDelete: "cascade" }),
+  sessionName: text("session_name").notNull(),
+  status: text("status").notNull().default("waiting"), // "waiting" | "active" | "completed" | "abandoned"
+  sharedHistory: jsonb("shared_history").notNull().default([]).$type<CoopChatMessage[]>(),
+  currentScenario: jsonb("current_scenario").$type<Record<string, any>>(),
+  encounterPhase: text("encounter_phase").notNull().default("exploration"), // "exploration" | "combat" | "resolution"
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const coopSessionsRelations = relations(coopSessions, ({ one }) => ({
+  host: one(accounts, {
+    fields: [coopSessions.hostId],
+    references: [accounts.id],
+    relationName: "host",
+  }),
+  guest: one(accounts, {
+    fields: [coopSessions.guestId],
+    references: [accounts.id],
+    relationName: "guest",
+  }),
+}));
+
+export const insertCoopSessionSchema = createInsertSchema(coopSessions).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertCoopSession = z.infer<typeof insertCoopSessionSchema>;
+export type CoopSession = typeof coopSessions.$inferSelect;

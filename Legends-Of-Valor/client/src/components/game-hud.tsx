@@ -25,6 +25,7 @@ const ZONE_NAMES: Record<string, string> = {
   "/skills": "Skill Chamber",
   "/trading": "Trading Post",
   "/ai-chat": "Game Master",
+  "/coop": "Co-op Story",
   "/birds": "Aviary",
   "/fishing": "Fishing Grounds",
   "/base": "Home Base",
@@ -398,6 +399,9 @@ export function GameHUD() {
             </button>
             <button className="hud-menu-item" onClick={() => navigateTo("/guild")}>
               <span>⚜</span><span>Guild</span>
+            </button>
+            <button className="hud-menu-item" onClick={() => navigateTo("/coop")}>
+              <span>🤺</span><span>Co-op</span>
             </button>
             <button className="hud-menu-item" onClick={() => navigateTo("/trading")}>
               <span>🤝</span><span>Trade</span>

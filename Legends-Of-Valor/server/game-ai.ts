@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { storage } from "./storage";
 import { db } from "./db";
-import { playerStorylines, aiAdminRequests } from "@shared/schema";
+import { playerStorylines, aiAdminRequests, coopSessions, type CoopChatMessage } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
@@ -568,5 +568,129 @@ Keep it friendly, comprehensive but not overwhelming. About 300-400 words.`;
 - **AI Guide**: Chat with me anytime for help!
 
 Good luck on your adventure!`;
+  }
+}
+
+// ==================== CO-OP GAME MASTER ====================
+
+const COOP_GM_SYSTEM_PROMPT = `You are the Co-op Game Master AI for "Legends of Valor", an epic fantasy RPG. Two players are adventuring together and you narrate their shared story.
+
+Your role is to:
+1. **Narrate a shared adventure** — describe encounters, locations, and events that both heroes experience together.
+2. **Address both players by name** — acknowledge each player's actions and contributions.
+3. **Create dynamic encounters** — invent monsters, puzzles, dialogue, and story beats that require teamwork.
+4. **Track the story** — remember what has happened in this session and build upon it.
+5. **React to player messages** — when a player describes what they do, narrate the outcome dramatically.
+6. **Encourage co-op tactics** — reward clever teamwork with better outcomes.
+
+WORLD LORE (same as the single-player world — this is set in Legends of Valor, where the Aether Core was shattered by the Void Covenant):
+- Heroes journey across Enchanted Forests, Mountain Caverns, Ruby Mines, Ancient Ruins, Crystal Lake, and the Hell Zone
+- The Void Covenant is the main antagonist force — corrupted order that shattered the Aether Core
+- Elements matter: Fire, Water, Light, Shadow, Plasma, Nature, Storm, Ice, Thunder, Void
+
+SPEAKING STYLE:
+- Speak in second person plural when addressing both heroes: "You two stand before…"
+- Speak to individual players by name when they act alone: "As Zara charges forward…"
+- Use dramatic pacing with em dashes and ellipses
+- Vary sentence length: short punchy sentences for action, flowing sentences for lore
+- Keep responses to 3-5 paragraphs maximum — you are in a group chat, not writing a novel
+- After describing the scene, always end with a question or prompt that invites player action
+
+ENCOUNTER PHASES:
+- EXPLORATION: Describe what the heroes see, hear, smell. Build tension. Introduce NPCs or clues.
+- COMBAT: When players engage enemies, describe the battle turn by turn. Track enemy HP conceptually. Award victory after sufficient engagement.
+- RESOLUTION: After victory, describe loot, lore discoveries, and the next thread of the story.
+
+Be immersive, reactive, and make every player feel like a hero.`;
+
+export async function chatWithCoopGameMaster(
+  sessionId: string,
+  senderId: string,
+  senderUsername: string,
+  message: string,
+  history: CoopChatMessage[],
+  hostAccount: { username: string; rank: string; npcFloor: number },
+  guestAccount: { username: string; rank: string; npcFloor: number }
+): Promise<string> {
+  const playerContext = `
+=== THE TWO HEROES ===
+- ${hostAccount.username} (Host): ${hostAccount.rank}, Tower Floor ${hostAccount.npcFloor}
+- ${guestAccount.username} (Guest): ${guestAccount.rank}, Tower Floor ${guestAccount.npcFloor}
+
+=== SPEAKING HERO THIS TURN ===
+${senderUsername} says: "${message}"
+`;
+
+  // Build Gemini history from shared chat (alternating user/model, player messages as "user", GM as "model")
+  const geminiHistory = [];
+  for (const msg of history.slice(-30)) {
+    if (msg.role === "player") {
+      geminiHistory.push({ role: "user" as const, parts: [{ text: `[${msg.senderUsername}]: ${msg.content}` }] });
+    } else {
+      geminiHistory.push({ role: "model" as const, parts: [{ text: msg.content }] });
+    }
+  }
+
+  // Ensure history alternates properly (Gemini requires user/model alternation)
+  const cleanHistory: Array<{ role: "user" | "model"; parts: Array<{ text: string }> }> = [];
+  for (const entry of geminiHistory) {
+    if (cleanHistory.length === 0) {
+      cleanHistory.push(entry);
+    } else if (cleanHistory[cleanHistory.length - 1].role !== entry.role) {
+      cleanHistory.push(entry);
+    } else {
+      // Merge with previous
+      cleanHistory[cleanHistory.length - 1].parts[0].text += "\n" + entry.parts[0].text;
+    }
+  }
+
+  // Remove last entry if it's from "model" (we're about to send a user message)
+  if (cleanHistory.length > 0 && cleanHistory[cleanHistory.length - 1].role === "model") {
+    cleanHistory.pop();
+  }
+
+  try {
+    const model = genAI.getGenerativeModel({
+      model: GEMINI_MODEL,
+      systemInstruction: COOP_GM_SYSTEM_PROMPT + "\n\n" + playerContext,
+      generationConfig: { temperature: 0.9, maxOutputTokens: 600 },
+    });
+
+    const chat = model.startChat({ history: cleanHistory });
+    const result = await chat.sendMessage(`[${senderUsername}]: ${message}`);
+    return result.response.text() || "The Game Master pauses, gathering thought… Try again in a moment.";
+  } catch (error) {
+    console.error("Co-op GM error:", error);
+    const fallbacks = [
+      `The threads of fate weave strangely tonight, ${senderUsername}… Yet the quest continues. What do you and your companion do next?`,
+      `A mystical force clouds the Game Master's sight briefly. ${hostAccount.username} and ${guestAccount.username} — press onward. The dungeon does not wait.`,
+      `Even oracles need a moment to consult the stars. Continue your advance, heroes — the next chamber awaits.`,
+    ];
+    return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+  }
+}
+
+// Generate an opening narration for a new co-op session
+export async function generateCoopSessionIntro(
+  sessionName: string,
+  hostAccount: { username: string; rank: string; npcFloor: number },
+  guestAccount: { username: string; rank: string; npcFloor: number }
+): Promise<string> {
+  const prompt = `Two heroes are beginning a co-op adventure called "${sessionName}". 
+Hero 1: ${hostAccount.username} (${hostAccount.rank}, Floor ${hostAccount.npcFloor})
+Hero 2: ${guestAccount.username} (${guestAccount.rank}, Floor ${guestAccount.npcFloor})
+
+Write a dramatic 3-paragraph opening narration welcoming both heroes by name to their shared adventure. 
+Set the scene — describe a location relevant to their combined floor progress. 
+Introduce a hook (a mysterious figure, a discovered ruin, a distress signal) that will start the adventure.
+End with a question that invites the first action from either hero.`;
+
+  try {
+    const model = getModel(COOP_GM_SYSTEM_PROMPT);
+    const result = await model.generateContent(prompt);
+    return result.response.text() || `Welcome, ${hostAccount.username} and ${guestAccount.username}! Your co-op adventure begins now. What do you do first?`;
+  } catch (error) {
+    console.error("Co-op intro error:", error);
+    return `The torchlight flickers as **${hostAccount.username}** and **${guestAccount.username}** step into the unknown together. The air smells of ancient stone and something else… something alive. Two heroes. One fate. What do you do first?`;
   }
 }

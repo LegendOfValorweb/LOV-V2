@@ -22,7 +22,7 @@ import {
 } from "./server-achievements";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress } from "@shared/schema";
+import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage } from "@shared/schema";
 import { ZONE_NPCS, getZoneNPC, calculateNPCStats, calculateNPCRewards } from "@shared/zone-npcs";
 import { z } from "zod";
 import type { Account, Event, Challenge, PlayerRace, PlayerGender } from "@shared/schema";
@@ -1309,7 +1309,10 @@ export async function registerRoutes(
     { id: "gold_millionaire", name: "Millionaire", description: "Accumulate 1,000,000 gold" },
     { id: "gold_billionaire", name: "Billionaire", description: "Accumulate 1,000,000,000 gold" },
     { id: "pet_mythic", name: "Mythic Tamer", description: "Evolve a pet to mythic tier" },
-    { id: "base_fortress", name: "Fortress Builder", description: "Upgrade base to tier 5" },
+    { id: "base_fortress", name: "Fortress Builder", description: "Upgrade base to tier 5 (Castle)" },
+    { id: "base_stronghold", name: "Iron Champion", description: "Upgrade base to tier 6 (Stronghold)" },
+    { id: "base_citadel", name: "Citadel Lord", description: "Upgrade base to tier 7 (Citadel)" },
+    { id: "base_eternal", name: "Eternal Architect", description: "Reach the pinnacle — upgrade base to tier 8 (Eternal Fortress)" },
     { id: "tower_floor_10", name: "Tower Climber", description: "Reach Mystic Tower floor 10" },
     { id: "tower_floor_50", name: "Tower Master", description: "Reach Mystic Tower floor 50" },
     { id: "wins_100", name: "Centurion", description: "Win 100 battles" },
@@ -1434,8 +1437,8 @@ export async function registerRoutes(
       }
 
       const currentTier = account.baseTier || 1;
-      if (currentTier >= 5) {
-        return res.status(400).json({ error: "Base already at maximum tier" });
+      if (currentTier >= 8) {
+        return res.status(400).json({ error: "Base already at maximum tier (Eternal Fortress)" });
       }
 
       const upgradeCost = BASE_TIER_COSTS[currentTier];
@@ -1457,9 +1460,22 @@ export async function registerRoutes(
         baseTier: newTier 
       });
 
-      if (newTier === 5 && !account.trophies?.includes("base_fortress")) {
-        const updatedTrophies = [...(account.trophies || []), "base_fortress"];
-        await storage.updateAccount(accountId, { trophies: updatedTrophies });
+      // Trophies for significant base milestones
+      const trophyUpdates: string[] = [...(account.trophies || [])];
+      if (newTier === 5 && !trophyUpdates.includes("base_fortress")) {
+        trophyUpdates.push("base_fortress");
+      }
+      if (newTier === 6 && !trophyUpdates.includes("base_stronghold")) {
+        trophyUpdates.push("base_stronghold");
+      }
+      if (newTier === 7 && !trophyUpdates.includes("base_citadel")) {
+        trophyUpdates.push("base_citadel");
+      }
+      if (newTier === 8 && !trophyUpdates.includes("base_eternal")) {
+        trophyUpdates.push("base_eternal");
+      }
+      if (trophyUpdates.length > (account.trophies || []).length) {
+        await storage.updateAccount(accountId, { trophies: trophyUpdates });
       }
       
       const updatedAccount = await storage.getAccount(accountId);
@@ -17965,6 +17981,228 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Player honour hall fetch error:", error);
       res.status(500).json({ error: "Failed to fetch player honours" });
+    }
+  });
+
+  // ==================== CO-OP STORY MODE ROUTES ====================
+
+  // List open/active sessions for a player
+  app.get("/api/coop/sessions", async (req, res) => {
+    try {
+      const { accountId } = req.query as { accountId: string };
+      if (!accountId) return res.status(400).json({ error: "accountId required" });
+      const sessions = await db.select().from(coopSessions)
+        .orderBy(coopSessions.createdAt);
+      // Return all waiting sessions plus sessions the player is in
+      const visible = sessions.filter(s =>
+        s.status === "waiting" ||
+        s.hostId === accountId ||
+        s.guestId === accountId
+      );
+      // Enrich with usernames
+      const enriched = await Promise.all(visible.map(async (s) => {
+        const host = await storage.getAccount(s.hostId);
+        const guest = s.guestId ? await storage.getAccount(s.guestId) : null;
+        return {
+          ...s,
+          hostUsername: host?.username || "Unknown",
+          guestUsername: guest?.username || null,
+        };
+      }));
+      res.json({ sessions: enriched });
+    } catch (error) {
+      console.error("Coop sessions list error:", error);
+      res.status(500).json({ error: "Failed to fetch sessions" });
+    }
+  });
+
+  // Get a single session
+  app.get("/api/coop/sessions/:sessionId", async (req, res) => {
+    try {
+      const [session] = await db.select().from(coopSessions)
+        .where(eq(coopSessions.id, req.params.sessionId));
+      if (!session) return res.status(404).json({ error: "Session not found" });
+      const host = await storage.getAccount(session.hostId);
+      const guest = session.guestId ? await storage.getAccount(session.guestId) : null;
+      res.json({
+        session: {
+          ...session,
+          hostUsername: host?.username || "Unknown",
+          guestUsername: guest?.username || null,
+          hostRank: host?.rank || "Novice",
+          guestRank: guest?.rank || null,
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch session" });
+    }
+  });
+
+  // Create a new co-op session
+  app.post("/api/coop/sessions", async (req, res) => {
+    try {
+      const { hostId, sessionName } = z.object({
+        hostId: z.string(),
+        sessionName: z.string().min(1).max(60),
+      }).parse(req.body);
+
+      const account = await storage.getAccount(hostId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const [session] = await db.insert(coopSessions).values({
+        hostId,
+        sessionName,
+        status: "waiting",
+        sharedHistory: [],
+        encounterPhase: "exploration",
+      }).returning();
+
+      res.json({ session });
+    } catch (error) {
+      console.error("Coop create error:", error);
+      res.status(500).json({ error: "Failed to create session" });
+    }
+  });
+
+  // Join a co-op session
+  app.post("/api/coop/sessions/:sessionId/join", async (req, res) => {
+    try {
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      const [session] = await db.select().from(coopSessions)
+        .where(eq(coopSessions.id, req.params.sessionId));
+
+      if (!session) return res.status(404).json({ error: "Session not found" });
+      if (session.status !== "waiting") return res.status(400).json({ error: "Session is not open for joining" });
+      if (session.hostId === accountId) return res.status(400).json({ error: "Cannot join your own session" });
+
+      const guestAccount = await storage.getAccount(accountId);
+      const hostAccount = await storage.getAccount(session.hostId);
+      if (!guestAccount || !hostAccount) return res.status(404).json({ error: "Account not found" });
+
+      // Generate AI opening narration
+      const { generateCoopSessionIntro } = await import("./game-ai");
+      const intro = await generateCoopSessionIntro(
+        session.sessionName,
+        { username: hostAccount.username, rank: hostAccount.rank, npcFloor: hostAccount.npcFloor },
+        { username: guestAccount.username, rank: guestAccount.rank, npcFloor: guestAccount.npcFloor }
+      );
+
+      const openingMessage: CoopChatMessage = {
+        role: "gamemaster",
+        content: intro,
+        senderId: "GM",
+        senderUsername: "Game Master",
+        timestamp: new Date().toISOString(),
+      };
+
+      const [updated] = await db.update(coopSessions)
+        .set({
+          guestId: accountId,
+          status: "active",
+          sharedHistory: [openingMessage],
+          updatedAt: new Date(),
+        })
+        .where(eq(coopSessions.id, req.params.sessionId))
+        .returning();
+
+      res.json({ session: { ...updated, hostUsername: hostAccount.username, guestUsername: guestAccount.username } });
+    } catch (error) {
+      console.error("Coop join error:", error);
+      res.status(500).json({ error: "Failed to join session" });
+    }
+  });
+
+  // Send a message to the co-op group chat (triggers AI GM response)
+  app.post("/api/coop/sessions/:sessionId/message", async (req, res) => {
+    try {
+      const { accountId, message } = z.object({
+        accountId: z.string(),
+        message: z.string().min(1).max(1000),
+      }).parse(req.body);
+
+      const [session] = await db.select().from(coopSessions)
+        .where(eq(coopSessions.id, req.params.sessionId));
+
+      if (!session) return res.status(404).json({ error: "Session not found" });
+      if (session.status !== "active") return res.status(400).json({ error: "Session is not active" });
+      if (session.hostId !== accountId && session.guestId !== accountId) {
+        return res.status(403).json({ error: "You are not in this session" });
+      }
+      if (!session.guestId) return res.status(400).json({ error: "Waiting for a second player" });
+
+      const senderAccount = await storage.getAccount(accountId);
+      const hostAccount = await storage.getAccount(session.hostId);
+      const guestAccount = await storage.getAccount(session.guestId);
+      if (!senderAccount || !hostAccount || !guestAccount) return res.status(404).json({ error: "Account not found" });
+
+      const history = (session.sharedHistory || []) as CoopChatMessage[];
+
+      // Add the player's message
+      const playerMsg: CoopChatMessage = {
+        role: "player",
+        content: message,
+        senderId: accountId,
+        senderUsername: senderAccount.username,
+        timestamp: new Date().toISOString(),
+      };
+
+      // Generate AI GM response
+      const { chatWithCoopGameMaster } = await import("./game-ai");
+      const gmResponse = await chatWithCoopGameMaster(
+        session.id,
+        accountId,
+        senderAccount.username,
+        message,
+        history,
+        { username: hostAccount.username, rank: hostAccount.rank, npcFloor: hostAccount.npcFloor },
+        { username: guestAccount.username, rank: guestAccount.rank, npcFloor: guestAccount.npcFloor }
+      );
+
+      const gmMsg: CoopChatMessage = {
+        role: "gamemaster",
+        content: gmResponse,
+        senderId: "GM",
+        senderUsername: "Game Master",
+        timestamp: new Date().toISOString(),
+      };
+
+      const newHistory = [...history, playerMsg, gmMsg].slice(-80);
+
+      await db.update(coopSessions)
+        .set({ sharedHistory: newHistory, updatedAt: new Date() })
+        .where(eq(coopSessions.id, session.id));
+
+      res.json({ playerMessage: playerMsg, gmMessage: gmMsg, history: newHistory });
+    } catch (error) {
+      console.error("Coop message error:", error);
+      res.status(500).json({ error: "Failed to send message" });
+    }
+  });
+
+  // Leave / abandon a co-op session
+  app.post("/api/coop/sessions/:sessionId/leave", async (req, res) => {
+    try {
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      const [session] = await db.select().from(coopSessions)
+        .where(eq(coopSessions.id, req.params.sessionId));
+      if (!session) return res.status(404).json({ error: "Session not found" });
+
+      if (session.hostId === accountId) {
+        // Host leaves — abandon the session
+        await db.update(coopSessions)
+          .set({ status: "abandoned", updatedAt: new Date() })
+          .where(eq(coopSessions.id, session.id));
+      } else if (session.guestId === accountId) {
+        // Guest leaves — session goes back to waiting
+        await db.update(coopSessions)
+          .set({ guestId: null, status: "waiting", updatedAt: new Date() })
+          .where(eq(coopSessions.id, session.id));
+      } else {
+        return res.status(403).json({ error: "You are not in this session" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to leave session" });
     }
   });
 
