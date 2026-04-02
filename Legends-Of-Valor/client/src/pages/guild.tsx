@@ -14,7 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Shield, Users, Crown, LogOut, ShoppingBag, Package, Swords, Calendar,
   Target, ScrollText, Trophy, Heart, Coins, Gem, Sparkles, Plus, X, 
-  UserPlus, Building2, Vault, Castle, ArrowLeftRight, Send, ClipboardList, Search
+  UserPlus, Building2, Vault, Castle, ArrowLeftRight, Send, ClipboardList, Search,
+  MapPin, Skull, ChevronRight, Loader2, Star, Layers
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
@@ -410,6 +411,60 @@ export default function GuildPage() {
       }
     },
   });
+
+  const [zoneDungeonOpen, setZoneDungeonOpen] = useState(false);
+  const [selectedDungeonZone, setSelectedDungeonZone] = useState<string | null>(null);
+  const [dungeonRun, setDungeonRun] = useState<any>(null);
+  const [zoneDungeonMeta, setZoneDungeonMeta] = useState<any>(null);
+  const [lastFightResult, setLastFightResult] = useState<any>(null);
+  const [dungeonFinished, setDungeonFinished] = useState(false);
+
+  const enterZoneDungeonMutation = useMutation({
+    mutationFn: async (zoneId: string) => {
+      const res = await apiRequest("POST", `/api/zone-dungeons/${zoneId}/enter`, { accountId: account!.id });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setDungeonRun(data.run);
+      setZoneDungeonMeta(data.dungeon);
+      setLastFightResult(null);
+      setDungeonFinished(false);
+    },
+    onError: (err: any) => {
+      toast({ title: "Cannot Enter Dungeon", description: err.message || "Failed to enter dungeon", variant: "destructive" });
+    },
+  });
+
+  const fightZoneDungeonMutation = useMutation({
+    mutationFn: async (zoneId: string) => {
+      const res = await apiRequest("POST", `/api/zone-dungeons/${zoneId}/fight`, { accountId: account!.id });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setLastFightResult(data);
+      if (data.dungeonCompleted || data.runEnded) {
+        setDungeonFinished(true);
+        setDungeonRun(null);
+      } else if (data.run) {
+        setDungeonRun(data.run);
+      } else if (dungeonRun) {
+        setDungeonRun({ ...dungeonRun, currentFloor: (dungeonRun.currentFloor || 1) + 1 });
+      }
+    },
+    onError: (err: any) => {
+      toast({ title: "Fight Error", description: err.message || "Failed to fight", variant: "destructive" });
+    },
+  });
+
+  function openZoneDungeon(zoneId: string) {
+    setSelectedDungeonZone(zoneId);
+    setDungeonRun(null);
+    setZoneDungeonMeta(null);
+    setLastFightResult(null);
+    setDungeonFinished(false);
+    setZoneDungeonOpen(true);
+    enterZoneDungeonMutation.mutate(zoneId);
+  }
 
   const distributeMutation = useMutation({
     mutationFn: async (dists: { accountId: string; gold: number; rubies: number; soulShards: number; focusedShards: number }[]) => {
@@ -1759,45 +1814,56 @@ export default function GuildPage() {
                                 : "bg-muted/20 border-border"
                             }`}
                           >
-                            <div className="flex items-center gap-2 flex-1 min-w-0">
-                              <span className="text-xl shrink-0">{info.icon}</span>
-                              <div className="min-w-0">
-                                <p className="font-medium text-sm truncate">{info.label}</p>
-                                <p className="text-xs text-muted-foreground truncate">
-                                  {isOurs
-                                    ? `Your guild · Defense: ${defense}/100`
-                                    : isEnemy
-                                    ? `${conquest!.guildName || "Enemy"} · Defense: ${defense}/100`
-                                    : "Unclaimed · 5,000 gold to claim"}
-                                </p>
+                            <div className="flex items-center gap-2 justify-between">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <span className="text-xl shrink-0">{info.icon}</span>
+                                <div className="min-w-0">
+                                  <p className="font-medium text-sm truncate">{info.label}</p>
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    {isOurs
+                                      ? `Your guild · Defense: ${defense}/100`
+                                      : isEnemy
+                                      ? `${conquest!.guildName || "Enemy"} · Defense: ${defense}/100`
+                                      : "Unclaimed · 5,000 gold to claim"}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="shrink-0">
+                                {isOurs ? (
+                                  <Badge variant="outline" className="border-violet-400 text-violet-400 text-xs">Owned</Badge>
+                                ) : isEnemy ? (
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    className="h-7 text-xs px-2"
+                                    onClick={() => attackZoneMutation.mutate(zoneId)}
+                                    disabled={attackZoneMutation.isPending}
+                                  >
+                                    <Swords className="w-3 h-3 mr-1" />
+                                    Attack
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    className="h-7 text-xs px-2 bg-violet-600 hover:bg-violet-700"
+                                    onClick={() => claimZoneMutation.mutate(zoneId)}
+                                    disabled={claimZoneMutation.isPending}
+                                  >
+                                    <Crown className="w-3 h-3 mr-1" />
+                                    Claim
+                                  </Button>
+                                )}
                               </div>
                             </div>
-                            <div className="shrink-0">
-                              {isOurs ? (
-                                <Badge variant="outline" className="border-violet-400 text-violet-400 text-xs">Owned</Badge>
-                              ) : isEnemy ? (
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  className="h-7 text-xs px-2"
-                                  onClick={() => attackZoneMutation.mutate(zoneId)}
-                                  disabled={attackZoneMutation.isPending}
-                                >
-                                  <Swords className="w-3 h-3 mr-1" />
-                                  Attack
-                                </Button>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  className="h-7 text-xs px-2 bg-violet-600 hover:bg-violet-700"
-                                  onClick={() => claimZoneMutation.mutate(zoneId)}
-                                  disabled={claimZoneMutation.isPending}
-                                >
-                                  <Crown className="w-3 h-3 mr-1" />
-                                  Claim
-                                </Button>
-                              )}
-                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="w-full h-7 text-xs mt-2 border-amber-500/40 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300"
+                              onClick={() => openZoneDungeon(zoneId)}
+                            >
+                              <Layers className="w-3 h-3 mr-1" />
+                              Enter Zone Dungeon
+                            </Button>
                           </div>
                         );
                       })}
@@ -2120,6 +2186,126 @@ export default function GuildPage() {
         </DialogContent>
       </Dialog>
     </div>
+
+    {/* Zone Dungeon Dialog */}
+    <Dialog open={zoneDungeonOpen} onOpenChange={(open) => { if (!open) { setZoneDungeonOpen(false); setSelectedDungeonZone(null); } }}>
+      <DialogContent className="max-w-md bg-gray-950 border-amber-500/30">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-amber-300">
+            <Layers className="w-5 h-5" />
+            {zoneDungeonMeta?.name || (selectedDungeonZone ? selectedDungeonZone.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) + " Dungeon" : "Zone Dungeon")}
+          </DialogTitle>
+          <DialogDescription className="text-gray-400 text-sm">
+            Fight through dungeon floors to earn gold, XP, training points and soul shards.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {enterZoneDungeonMutation.isPending && (
+            <div className="flex items-center justify-center gap-2 py-6 text-amber-400">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-sm">Entering dungeon…</span>
+            </div>
+          )}
+
+          {!enterZoneDungeonMutation.isPending && dungeonRun && !dungeonFinished && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between bg-gray-900/60 rounded-lg px-3 py-2">
+                <span className="text-xs text-gray-400">Floor</span>
+                <span className="text-sm font-bold text-amber-300">
+                  {dungeonRun.currentFloor > (zoneDungeonMeta?.floors || 5)
+                    ? "👑 BOSS FLOOR"
+                    : `${dungeonRun.currentFloor} / ${zoneDungeonMeta?.floors || "?"}`}
+                </span>
+              </div>
+
+              {lastFightResult && (
+                <div className={`rounded-lg px-3 py-2 text-sm border ${lastFightResult.success ? "bg-green-900/20 border-green-500/30 text-green-300" : "bg-red-900/20 border-red-500/30 text-red-300"}`}>
+                  <p className="font-semibold mb-1">{lastFightResult.success ? "⚔️ Victory!" : "💀 Defeated!"}</p>
+                  <p className="text-xs opacity-80">{lastFightResult.message}</p>
+                  {lastFightResult.success && lastFightResult.rewards && (
+                    <div className="flex gap-3 mt-1 text-xs text-gray-300">
+                      <span>+{(lastFightResult.rewards.gold || 0).toLocaleString()} gold</span>
+                      {lastFightResult.rewards.trainingPoints > 0 && <span>+{lastFightResult.rewards.trainingPoints} TP</span>}
+                      {lastFightResult.rewards.soulShards > 0 && <span>+{lastFightResult.rewards.soulShards} shards</span>}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <Button
+                className="w-full bg-amber-600 hover:bg-amber-500 text-white font-semibold"
+                onClick={() => fightZoneDungeonMutation.mutate(selectedDungeonZone!)}
+                disabled={fightZoneDungeonMutation.isPending}
+              >
+                {fightZoneDungeonMutation.isPending
+                  ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Fighting…</>
+                  : <><Swords className="w-4 h-4 mr-2" />Fight Next Enemy</>}
+              </Button>
+            </div>
+          )}
+
+          {dungeonFinished && lastFightResult && (
+            <div className="space-y-3">
+              {lastFightResult.dungeonCompleted ? (
+                <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-lg px-4 py-3 text-center">
+                  <p className="text-yellow-300 font-bold text-base mb-1">🏆 Dungeon Cleared!</p>
+                  <p className="text-xs text-gray-300 mb-3">{lastFightResult.message}</p>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-gray-900/60 rounded px-2 py-1">
+                      <p className="text-gray-400">Gold Earned</p>
+                      <p className="text-yellow-300 font-bold">{(lastFightResult.rewards?.gold || 0).toLocaleString()}</p>
+                    </div>
+                    <div className="bg-gray-900/60 rounded px-2 py-1">
+                      <p className="text-gray-400">XP Earned</p>
+                      <p className="text-blue-300 font-bold">{(lastFightResult.rewards?.xp || 0).toLocaleString()}</p>
+                    </div>
+                    <div className="bg-gray-900/60 rounded px-2 py-1">
+                      <p className="text-gray-400">Training Pts</p>
+                      <p className="text-green-300 font-bold">{lastFightResult.rewards?.trainingPoints || 0}</p>
+                    </div>
+                    <div className="bg-gray-900/60 rounded px-2 py-1">
+                      <p className="text-gray-400">Soul Shards</p>
+                      <p className="text-purple-300 font-bold">{lastFightResult.rewards?.soulShards || 0}</p>
+                    </div>
+                  </div>
+                  {lastFightResult.rewards?.rareItemDropped && (
+                    <p className="mt-2 text-xs text-pink-300 font-semibold">✨ Rare item dropped: {lastFightResult.rewards.rareItemDropped}</p>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-red-900/20 border border-red-500/30 rounded-lg px-4 py-3 text-center">
+                  <p className="text-red-300 font-bold text-base mb-1">💀 Dungeon Run Ended</p>
+                  <p className="text-xs text-gray-300 mb-2">{lastFightResult.message}</p>
+                  <p className="text-xs text-gray-400">Gold earned this run: {(lastFightResult.rewards?.gold || 0).toLocaleString()}</p>
+                </div>
+              )}
+              <Button
+                className="w-full bg-violet-600 hover:bg-violet-500 text-white"
+                onClick={() => { setDungeonFinished(false); enterZoneDungeonMutation.mutate(selectedDungeonZone!); }}
+              >
+                <ChevronRight className="w-4 h-4 mr-1" />
+                Run Again
+              </Button>
+            </div>
+          )}
+
+          {!enterZoneDungeonMutation.isPending && !dungeonRun && !dungeonFinished && (
+            <div className="text-center py-4 text-gray-500 text-sm">
+              <Skull className="w-8 h-8 mx-auto mb-2 opacity-40" />
+              <p>Preparing dungeon…</p>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" className="text-gray-400 hover:text-white" onClick={() => setZoneDungeonOpen(false)}>
+            Leave Dungeon
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
     </ZoneScene>
   );
 }
