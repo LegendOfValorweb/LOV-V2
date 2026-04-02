@@ -741,6 +741,8 @@ export default function Admin() {
     status: string;
     createdAt: string;
     createdByName: string;
+    recurringType: "none" | "daily" | "weekly" | "monthly";
+    lastResetAt: string | null;
     assignments: Array<{
       id: string;
       questId: string;
@@ -1007,9 +1009,15 @@ export default function Admin() {
 
   const [createQuestDialog, setCreateQuestDialog] = useState(false);
   const [assignQuestDialog, setAssignQuestDialog] = useState<QuestWithDetails | null>(null);
-  const [newQuest, setNewQuest] = useState({
+  const [newQuest, setNewQuest] = useState<{
+    title: string;
+    description: string;
+    recurringType: "none" | "daily" | "weekly" | "monthly";
+    rewards: { gold: number; rubies: number; soulShards: number; focusedShards: number; trainingPoints: number; runes: number; petExp: number };
+  }>({
     title: "",
     description: "",
+    recurringType: "none",
     rewards: {
       gold: 0,
       rubies: 0,
@@ -1228,6 +1236,7 @@ export default function Admin() {
         title: newQuest.title,
         description: newQuest.description,
         rewards: newQuest.rewards,
+        recurringType: newQuest.recurringType,
         createdBy: account!.id,
       });
       toast({
@@ -1239,6 +1248,7 @@ export default function Admin() {
       setNewQuest({
         title: "",
         description: "",
+        recurringType: "none",
         rewards: { gold: 0, rubies: 0, soulShards: 0, focusedShards: 0, trainingPoints: 0, runes: 0, petExp: 0 },
       });
     } catch (error) {
@@ -2506,10 +2516,44 @@ export default function Admin() {
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between gap-4">
                         <div>
-                          <CardTitle className="font-serif">{quest.title}</CardTitle>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <CardTitle className="font-serif">{quest.title}</CardTitle>
+                            {quest.recurringType && quest.recurringType !== "none" && (
+                              <Badge variant="secondary" className="text-xs capitalize">
+                                <RefreshCw className="w-2.5 h-2.5 mr-1" />
+                                {quest.recurringType}
+                              </Badge>
+                            )}
+                          </div>
                           <p className="text-sm text-muted-foreground mt-1">{quest.description}</p>
+                          {quest.recurringType && quest.recurringType !== "none" && quest.lastResetAt && (
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Last reset: {new Date(quest.lastResetAt).toLocaleString()}
+                            </p>
+                          )}
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-wrap justify-end">
+                          {quest.recurringType && quest.recurringType !== "none" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-blue-600 hover:bg-blue-50"
+                              onClick={async () => {
+                                if (!window.confirm(`Reset "${quest.title}" now? All assigned players will have their progress cleared and the quest will reappear as pending.`)) return;
+                                try {
+                                  await apiRequest("POST", `/api/admin/quests/${quest.id}/reset`, {});
+                                  toast({ title: "Quest Reset", description: `${quest.title} has been reset for all assigned players.` });
+                                  queryClient.invalidateQueries({ queryKey: ["/api/admin/quests"] });
+                                } catch {
+                                  toast({ title: "Reset Failed", description: "Could not reset quest.", variant: "destructive" });
+                                }
+                              }}
+                              data-testid={`button-reset-quest-${quest.id}`}
+                            >
+                              <RefreshCw className="w-3.5 h-3.5 mr-1" />
+                              Reset Now
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="outline"
@@ -3707,6 +3751,29 @@ export default function Admin() {
                 onChange={(e) => setNewQuest({ ...newQuest, description: e.target.value })}
                 data-testid="input-quest-description"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="quest-recurring">Recurring Schedule</Label>
+              <Select
+                value={newQuest.recurringType}
+                onValueChange={(v) => setNewQuest({ ...newQuest, recurringType: v as any })}
+              >
+                <SelectTrigger id="quest-recurring" data-testid="select-quest-recurring">
+                  <SelectValue placeholder="One-time (no recurrence)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">One-time (no recurrence)</SelectItem>
+                  <SelectItem value="daily">Daily — resets every 24 hours</SelectItem>
+                  <SelectItem value="weekly">Weekly — resets every 7 days</SelectItem>
+                  <SelectItem value="monthly">Monthly — resets every 30 days</SelectItem>
+                </SelectContent>
+              </Select>
+              {newQuest.recurringType !== "none" && (
+                <p className="text-xs text-muted-foreground">
+                  When the interval passes, all assigned players will have their progress reset and the quest will reappear as pending.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">

@@ -997,6 +997,8 @@ export type QuestStatus = typeof questStatuses[number];
 export const questAssignmentStatuses = ["pending", "accepted", "completed", "rewarded"] as const;
 export type QuestAssignmentStatus = typeof questAssignmentStatuses[number];
 
+export type QuestRecurringType = "none" | "daily" | "weekly" | "monthly";
+
 export const quests = pgTable("quests", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
@@ -1006,6 +1008,8 @@ export const quests = pgTable("quests", {
   createdBy: varchar("created_by").notNull().references(() => accounts.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   expiresAt: timestamp("expires_at"),
+  recurringType: text("recurring_type").notNull().$type<QuestRecurringType>().default("none"),
+  lastResetAt: timestamp("last_reset_at"),
 });
 
 export type QuestRewards = {

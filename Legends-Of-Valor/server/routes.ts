@@ -91,7 +91,9 @@ import {
   insertAuctionSchema, 
   insertAuctionBidSchema,
   pets as petsTable,
-  leaderboardEntries
+  leaderboardEntries,
+  quests,
+  questAssignments,
 } from "@shared/schema";
 
 // V2: Max 28 players per server (2 per race x 14 races)
@@ -4562,6 +4564,63 @@ export async function registerRoutes(
   // ============ QUEST ROUTES ============
   
   // Admin: Get all quests
+  // Helper: reset a recurring quest (clear completions, re-assign to all previous participants)
+  async function resetRecurringQuest(quest: any) {
+    const assignments = await storage.getQuestAssignmentsByQuest(quest.id);
+    const participantIds = [...new Set(assignments.map((a: any) => a.accountId))];
+
+    // Remove all old assignments
+    await db.delete(questAssignments).where(eq(questAssignments.questId, quest.id));
+
+    // Re-create pending assignments for every player who was ever assigned
+    for (const accountId of participantIds) {
+      await storage.createQuestAssignment({ questId: quest.id, accountId, status: "pending" });
+      broadcastToPlayer(accountId, "questReset", {
+        questId: quest.id,
+        title: quest.title,
+        recurringType: quest.recurringType,
+      });
+    }
+
+    // Reset quest to active and stamp lastResetAt
+    await db.update(quests)
+      .set({ status: "active", lastResetAt: new Date() } as any)
+      .where(eq(quests.id, quest.id));
+
+    broadcastToAdmins("questReset", { questId: quest.id, title: quest.title, playerCount: participantIds.length });
+    console.log(`[Quests] Reset recurring quest "${quest.title}" (${quest.recurringType}) for ${participantIds.length} players`);
+  }
+
+  // Periodic check: auto-reset recurring quests whose interval has elapsed
+  const RECURRING_QUEST_INTERVALS: Record<string, number> = {
+    daily: 24 * 60 * 60 * 1000,
+    weekly: 7 * 24 * 60 * 60 * 1000,
+    monthly: 30 * 24 * 60 * 60 * 1000,
+  };
+
+  async function checkAndResetRecurringQuests() {
+    try {
+      const allQuests = await storage.getAllQuests();
+      const now = Date.now();
+      for (const quest of allQuests) {
+        const rType = (quest as any).recurringType as string;
+        if (!rType || rType === "none") continue;
+        const interval = RECURRING_QUEST_INTERVALS[rType];
+        if (!interval) continue;
+        const lastReset = (quest as any).lastResetAt ? new Date((quest as any).lastResetAt).getTime() : new Date(quest.createdAt).getTime();
+        if (now - lastReset >= interval) {
+          await resetRecurringQuest(quest);
+        }
+      }
+    } catch (err) {
+      console.error("[Quests] Error during recurring quest check:", err);
+    }
+  }
+
+  // Run once at startup, then every hour
+  checkAndResetRecurringQuests();
+  setInterval(checkAndResetRecurringQuests, 60 * 60 * 1000);
+
   app.get("/api/admin/quests", async (_req, res) => {
     try {
       const allQuests = await storage.getAllQuests();
@@ -4590,7 +4649,7 @@ export async function registerRoutes(
   // Admin: Create quest
   app.post("/api/admin/quests", async (req, res) => {
     try {
-      const { title, description, rewards, createdBy, expiresAt } = req.body;
+      const { title, description, rewards, createdBy, expiresAt, recurringType } = req.body;
       
       if (!title || !description || !createdBy) {
         return res.status(400).json({ error: "Missing required fields" });
@@ -4603,7 +4662,8 @@ export async function registerRoutes(
         createdBy,
         expiresAt: expiresAt ? new Date(expiresAt) : null,
         status: "active",
-      });
+        recurringType: recurringType || "none",
+      } as any);
 
       // Broadcast to admins
       broadcastToAdmins("questCreated", quest);
@@ -4611,6 +4671,21 @@ export async function registerRoutes(
       res.json(quest);
     } catch (error) {
       res.status(500).json({ error: "Failed to create quest" });
+    }
+  });
+
+  // Admin: Manually trigger a recurring quest reset
+  app.post("/api/admin/quests/:id/reset", async (req, res) => {
+    try {
+      const quest = await storage.getQuest(req.params.id);
+      if (!quest) return res.status(404).json({ error: "Quest not found" });
+      if ((quest as any).recurringType === "none") {
+        return res.status(400).json({ error: "Quest is not recurring" });
+      }
+      await resetRecurringQuest(quest as any);
+      res.json({ success: true, message: "Quest reset — all previous completions cleared and players re-assigned." });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to reset quest" });
     }
   });
 
