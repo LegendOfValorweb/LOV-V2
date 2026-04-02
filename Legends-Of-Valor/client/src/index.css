@@ -1135,24 +1135,113 @@
   font-size: 20px;
 }
 
-/* GHOST STATE OVERLAY */
-.hud-ghost-overlay {
-  position: absolute;
-  top: 36px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: hsl(270 60% 20% / 0.85);
-  border: 1px solid hsl(270 50% 40% / 0.6);
-  border-radius: 4px;
-  padding: 3px 12px;
+/* GHOST STATE MODAL */
+.ghost-state-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: hsl(270 60% 5% / 0.85);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.ghost-state-modal {
+  background: hsl(270 40% 12%);
+  border: 2px solid hsl(270 50% 40% / 0.7);
+  border-radius: 12px;
+  padding: 32px 36px;
+  max-width: 360px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 0 60px hsl(270 60% 30% / 0.5), 0 0 120px hsl(270 60% 20% / 0.3);
+  animation: ghostPulse 3s ease-in-out infinite;
+}
+
+.ghost-state-icon {
+  font-size: 52px;
+  margin-bottom: 12px;
+  display: block;
+  filter: drop-shadow(0 0 12px hsl(270 60% 70% / 0.8));
+}
+
+.ghost-state-title {
   font-family: var(--font-serif);
-  font-size: 11px;
+  font-size: 22px;
   font-weight: 700;
-  color: hsl(270 70% 75%);
-  text-shadow: 0 0 8px hsl(270 60% 60% / 0.5);
-  letter-spacing: 0.08em;
-  z-index: 42;
-  animation: ghostPulse 2s ease-in-out infinite;
+  color: hsl(270 70% 80%);
+  text-shadow: 0 0 12px hsl(270 60% 60% / 0.6);
+  margin-bottom: 6px;
+}
+
+.ghost-state-subtitle {
+  font-size: 13px;
+  color: hsl(270 30% 65%);
+  margin-bottom: 20px;
+}
+
+.ghost-state-error {
+  font-size: 12px;
+  color: hsl(0 70% 65%);
+  margin-bottom: 12px;
+}
+
+.ghost-state-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.ghost-respawn-btn {
+  background: hsl(270 50% 30%);
+  border: 1px solid hsl(270 50% 50% / 0.7);
+  border-radius: 8px;
+  color: hsl(270 70% 90%);
+  font-family: var(--font-serif);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s;
+  letter-spacing: 0.05em;
+}
+.ghost-respawn-btn:hover:not(:disabled) {
+  background: hsl(270 50% 40%);
+  box-shadow: 0 0 16px hsl(270 60% 40% / 0.5);
+}
+.ghost-respawn-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ghost-revive-btn {
+  background: hsl(45 70% 25%);
+  border: 1px solid hsl(45 70% 50% / 0.7);
+  border-radius: 8px;
+  color: hsl(45 90% 85%);
+  font-family: var(--font-serif);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s;
+  letter-spacing: 0.05em;
+}
+.ghost-revive-btn:hover:not(:disabled) {
+  background: hsl(45 70% 35%);
+  box-shadow: 0 0 16px hsl(45 70% 40% / 0.5);
+}
+.ghost-revive-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ghost-state-note {
+  font-size: 11px;
+  color: hsl(270 20% 50%);
+  font-style: italic;
 }
 
 /* ─── Settings Panel ──────────────────────────────────── */

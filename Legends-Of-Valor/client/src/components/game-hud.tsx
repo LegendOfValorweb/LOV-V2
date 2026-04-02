@@ -65,6 +65,86 @@ function formatNumber(n: number): string {
   return n.toLocaleString();
 }
 
+interface GhostStatePanelProps {
+  accountId: string;
+  reviveTokens: number;
+  onResolved: () => void;
+}
+
+function GhostStatePanel({ accountId, reviveTokens, onResolved }: GhostStatePanelProps) {
+  const [loading, setLoading] = useState<"respawn" | "revive" | null>(null);
+  const [error, setError] = useState("");
+  const { toast } = useToast();
+
+  const handleRespawn = async () => {
+    setLoading("respawn");
+    setError("");
+    try {
+      const res = await fetch(`/api/accounts/${accountId}/respawn`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || "Respawn failed"); return; }
+      toast({ title: "Respawned", description: data.message, duration: 5000 });
+      onResolved();
+    } catch {
+      setError("Network error — please try again.");
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleRevive = async () => {
+    setLoading("revive");
+    setError("");
+    try {
+      const res = await fetch(`/api/accounts/${accountId}/revive`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || "Revive failed"); return; }
+      toast({ title: "Revived!", description: data.message, duration: 5000 });
+      onResolved();
+    } catch {
+      setError("Network error — please try again.");
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  return (
+    <div className="ghost-state-modal-overlay">
+      <div className="ghost-state-modal">
+        <div className="ghost-state-icon">👻</div>
+        <h2 className="ghost-state-title">You Have Fallen</h2>
+        <p className="ghost-state-subtitle">You are in Ghost State. Choose how to return:</p>
+        {error && <p className="ghost-state-error">{error}</p>}
+        <div className="ghost-state-buttons">
+          <button
+            className="ghost-respawn-btn"
+            onClick={handleRespawn}
+            disabled={loading !== null}
+          >
+            {loading === "respawn" ? "Respawning..." : "⚰ Respawn at Base"}
+          </button>
+          {reviveTokens > 0 && (
+            <button
+              className="ghost-revive-btn"
+              onClick={handleRevive}
+              disabled={loading !== null}
+            >
+              {loading === "revive" ? "Reviving..." : `✦ Use Revive Token (${reviveTokens} left)`}
+            </button>
+          )}
+        </div>
+        <p className="ghost-state-note">Respawning applies a 20% weakness debuff for 5 minutes.</p>
+      </div>
+    </div>
+  );
+}
+
 export function GameHUD() {
   const [location, navigate] = useLocation();
   const { account, logout, refetchAccount } = useGame();
@@ -434,9 +514,11 @@ export function GameHUD() {
       </div>
 
       {account.ghostState && (
-        <div className="hud-ghost-overlay">
-          <span>👻 GHOST STATE</span>
-        </div>
+        <GhostStatePanel
+          accountId={account.id}
+          reviveTokens={account.reviveTokens ?? 0}
+          onResolved={() => { refetchAccount(); navigate("/base"); }}
+        />
       )}
 
       {settingsOpen && (
