@@ -94,14 +94,14 @@ export default function Barracks() {
 
   const { data: trainingQueue = [], refetch: refetchQueue } = useQuery<any[]>({
     queryKey: [`/api/accounts/${acctId}/army/training-queue`],
-    queryFn: () => apiRequest("GET", `/api/accounts/${acctId}/army/training-queue`),
+    queryFn: () => apiRequest("GET", `/api/accounts/${acctId}/army/training-queue`).then(r => r.json()),
     enabled: !!acctId,
     refetchInterval: 5000,
   });
 
   const { data: raidTargets = [] } = useQuery<any[]>({
     queryKey: [`/api/army/raid-targets`, acctId],
-    queryFn: () => apiRequest("GET", `/api/army/raid-targets?accountId=${acctId}`),
+    queryFn: () => apiRequest("GET", `/api/army/raid-targets?accountId=${acctId}`).then(r => r.json()),
     enabled: !!acctId && tab === "raid",
   });
 

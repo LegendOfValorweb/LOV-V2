@@ -64,7 +64,7 @@ import {
   getZoneExhaustionInfo,
   getRankRequirementLabel,
 } from "./resource-system";
-import { eq, sql, and, lt, lte, gt, desc, inArray } from "drizzle-orm";
+import { eq, sql, and, lt, lte, gt, gte, ne, desc, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { getActiveWorldBoss, spawnWorldBoss, recordBossDamage, MAX_ATTACKS_PER_BOSS, getPlayerBossAttackCount } from "./world-boss";
@@ -2977,8 +2977,8 @@ export async function registerRoutes(
             const lastEntry = combatState.log[combatState.log.length - 1];
             // Extract the human player's action from the log
             const sideLabel = isChallenger
-              ? (humanCombatPlayer?.name || challengerName)
-              : (humanCombatPlayer?.name || challengedName);
+              ? (humanCombatPlayer?.name || challenger?.username)
+              : (humanCombatPlayer?.name || challenged?.username);
             const afterPipe = lastEntry.split("·")[0]; // first segment before details
             const actionMatch = afterPipe.match(new RegExp(`${sideLabel}\\s*→\\s*(\\w+)`, "i"));
             if (actionMatch) opponentLastAction = actionMatch[1].toLowerCase();
@@ -3151,6 +3151,7 @@ export async function registerRoutes(
                 attacker.statusEffects as PvPStatusEffect[],
                 attacker.comboCount || 0,
                 attacker.maxHp,
+                defender.name,
                 defender.activeElement, // primed element on defender
                 defender.hp, defender.maxHp,
                 defender.statusEffects as PvPStatusEffect[],
@@ -4296,8 +4297,8 @@ export async function registerRoutes(
         if (traitIds.length > 0) {
           const { calcTraitBonuses, applyTraitStatMult } = await import("@shared/genetic-traits");
           const traitBonuses = calcTraitBonuses(traitIds);
-          const boosted = applyTraitStatMult(playerCombatStats as Record<string,number>, traitBonuses);
-          playerCombatStats = { ...playerCombatStats, ...boosted };
+          const boosted = applyTraitStatMult(playerCombatStats as unknown as Record<string,number>, traitBonuses);
+          playerCombatStats = { ...playerCombatStats, ...boosted as any };
         }
       }
       
@@ -5910,6 +5911,8 @@ export async function registerRoutes(
         focusedShards: guild.bank.focusedShards - totals.focusedShards,
         runes: guild.bank.runes - totals.runes,
         trainingPoints: (guild.bank.trainingPoints || 0) - (totals.trainingPoints || 0),
+        beakCoins: guild.bank.beakCoins || 0,
+        valorTokens: guild.bank.valorTokens || 0,
       };
       await storage.updateGuildBank(guild.id, newBank);
 
@@ -6184,6 +6187,8 @@ export async function registerRoutes(
           focusedShards: guild.bank.focusedShards,
           runes: guild.bank.runes,
           trainingPoints: guild.bank.trainingPoints || 0,
+          beakCoins: guild.bank.beakCoins || 0,
+          valorTokens: guild.bank.valorTokens || 0,
         };
         await storage.updateGuildBank(guild.id, newBank);
 
@@ -8526,7 +8531,7 @@ export async function registerRoutes(
 
   // ==================== ANTI-CHEAT SYSTEM ====================
 
-  const playerSnapshots: Map<string, { stats: any; gold: number; rubies: number; timestamp: number }> = new Map();
+  const anticheatSnapshots: Map<string, { stats: any; gold: number; rubies: number; timestamp: number }> = new Map();
   const suspiciousActivity: Map<string, { count: number; lastSeen: number; actions: string[] }> = new Map();
 
   const STAT_GROWTH_LIMITS: Record<string, number> = {
@@ -8584,7 +8589,7 @@ export async function registerRoutes(
       }
       
       const snapshot = createSnapshot(account);
-      playerSnapshots.set(accountId, snapshot);
+      anticheatSnapshots.set(accountId, snapshot);
       
       res.json({ success: true, snapshotTime: snapshot.timestamp });
     } catch (error) {
@@ -8601,7 +8606,7 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Account not found" });
       }
       
-      const snapshot = playerSnapshots.get(accountId);
+      const snapshot = anticheatSnapshots.get(accountId);
       if (!snapshot) {
         return res.json({ verified: true, message: "No snapshot to compare" });
       }
@@ -8624,7 +8629,7 @@ export async function registerRoutes(
       if (issues.length > 0) {
         res.json({ verified: false, issues, timeDelta });
       } else {
-        playerSnapshots.set(accountId, createSnapshot(account));
+        anticheatSnapshots.set(accountId, createSnapshot(account));
         res.json({ verified: true, message: "Account verified", timeDelta });
       }
     } catch (error) {
@@ -15138,7 +15143,7 @@ export async function registerRoutes(
         if (mfTraitIds.length > 0) {
           const { calcTraitBonuses, applyTraitStatMult } = await import("@shared/genetic-traits");
           const mfTb = calcTraitBonuses(mfTraitIds);
-          modifiedStats = applyTraitStatMult(modifiedStats as Record<string,number>, mfTb) as typeof modifiedStats;
+          modifiedStats = applyTraitStatMult(modifiedStats as unknown as Record<string,number>, mfTb) as unknown as typeof modifiedStats;
         }
       }
 
@@ -15440,7 +15445,7 @@ export async function registerRoutes(
         if (nfTraitIds.length > 0) {
           const { calcTraitBonuses, applyTraitStatMult } = await import("@shared/genetic-traits");
           const nfTb = calcTraitBonuses(nfTraitIds);
-          modifiedStats = applyTraitStatMult(modifiedStats as Record<string,number>, nfTb) as typeof modifiedStats;
+          modifiedStats = applyTraitStatMult(modifiedStats as unknown as Record<string,number>, nfTb) as unknown as typeof modifiedStats;
         }
       }
 
@@ -20202,7 +20207,7 @@ export async function registerRoutes(
         new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
       ).slice(0, 30);
 
-      const userIds = [...new Set(all.flatMap(r => [r.attackerId, r.defenderId]))];
+      const userIds = Array.from(new Set(all.flatMap(r => [r.attackerId, r.defenderId])));
       const users = await db.select({ id: accounts.id, username: accounts.username }).from(accounts).where(
         userIds.reduce((q, id, i) => i === 0 ? eq(accounts.id, id) : q, eq(accounts.id, userIds[0]))
       );

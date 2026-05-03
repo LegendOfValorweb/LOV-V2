@@ -105,7 +105,7 @@ export default function ShadowEchoes() {
   const { data: echoes = [], isLoading } = useQuery<Echo[]>({
     queryKey: ["/api/shadow-echoes", filterRank],
     queryFn: () =>
-      apiRequest("GET", `/api/shadow-echoes?rank=${filterRank}&exclude=${acctId ?? ""}`),
+      apiRequest("GET", `/api/shadow-echoes?rank=${filterRank}&exclude=${acctId ?? ""}`).then(r => r.json()),
     enabled: !!acctId,
   });
 
@@ -116,7 +116,7 @@ export default function ShadowEchoes() {
 
   const battleMut = useMutation({
     mutationFn: (snapshotId: string) =>
-      apiRequest("POST", `/api/shadow-echoes/${snapshotId}/battle`, { challengerId: acctId }),
+      apiRequest("POST", `/api/shadow-echoes/${snapshotId}/battle`, { challengerId: acctId }).then(r => r.json()),
     onSuccess: (data: BattleResult) => {
       setBattleResult(data);
       setReplayIdx(0);

@@ -806,7 +806,9 @@ export default function Base() {
       if (!account?.id) return [];
       const res = await fetch(`/api/accounts/${account.id}/mounts`);
       if (!res.ok) return [];
-      return res.json();
+      const data = await res.json();
+      // API returns { owned: [], active: null } — extract the owned array
+      return Array.isArray(data) ? data : (data?.owned ?? []);
     },
     enabled: !!account?.id,
   });
