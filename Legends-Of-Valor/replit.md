@@ -523,8 +523,76 @@ Three-tab page for meta-progression beyond Mythical Legend rank:
 ### Navigation
 - World Map: "War Front" zone (hard, PvP, center at 48, 68)
 
+## PHASE 19: Genetic Traits (May 2026)
+
+### New DB field
+- `geneticTraits: jsonb` on accounts — array of 3 trait ID strings, assigned at creation
+
+### Genetic Traits System — `/traits` (Trait Shrine on World Map)
+
+**Concept:** Every player is permanently assigned 3 genetic traits at character creation. These traits cannot be changed or re-rolled. Rarity ranges from Common to Mythic, with the third trait slot having the best odds of rare results. Traits stack multiplicatively with race bonuses, prestige multipliers, skill tree passives, and equipment stats.
+
+**38 Total Traits across 6 Rarities:**
+
+| Rarity | Count | Approximate Drop Rate | Typical Effect |
+|---|---|---|---|
+| Common | 10 | ~40% | +6–12% to a single stat or mechanic |
+| Uncommon | 10 | ~29% | +10–20% with dual effects |
+| Rare | 9 | ~19% | 2–3 effects including special combat keys |
+| Epic | 6 | ~9% | Major multi-stat boosts or unique mechanics |
+| Legendary | 4 | ~2.3% | Game-changing passives (undying will, true sight, etc.) |
+| Mythic | 2 | ~0.7% | Genesis Blood (+25% all stats), The Chosen One |
+
+**Slot Roll Distribution:**
+- Slot 1: 70% Common / 25% Uncommon / 5% Rare
+- Slot 2: 35% Common / 35% Uncommon / 22% Rare / 8% Epic
+- Slot 3: 15% Common / 28% Uncommon / 30% Rare / 18% Epic / 7% Legendary / 2% Mythic
+
+**6 Trait Categories:**
+- Combat — ATK, DEF, SPD, crit, dodge, lifesteal
+- Resilience — max HP, defence, healing
+- Progression — XP multipliers
+- Fortune — gold multipliers, shard drops, Luck
+- Mystical — Int, mana pool, skill damage
+- Legendary — unique special effects
+
+**Notable Special Traits:**
+- `undying_will`: Survive a killing blow with 1 HP — once per battle
+- `true_sight`: Attacks cannot be dodged; crits deal +50% extra damage
+- `bloodline_of_champions`: +18% all stats, +20% XP, +15% gold
+- `dimensional_anchor`: Immune to all debuffs + status effects
+- `genesis_blood`: +25% all stats, +25% XP, +20% gold — Mythic
+- `the_chosen_one`: +20% all stats, +50% Luck, +50% shard drops — Mythic
+
+**Combat Injection:**
+Trait stat multipliers are applied at 4 injection points:
+1. `computeCombatStats()` — PvP challenge combat
+2. NPC tower battle (`/api/accounts/:id/npc-battle`) — stats + reward multipliers
+3. Monster zone fight (`/api/accounts/:id/zones/:zoneId/fight-monster`)
+4. NPC world fight (`/api/accounts/:id/zones/:zoneId/fight-npc`)
+
+Gold and shard rewards from tower fights are multiplied by `goldMult` and `shardMult` from the player's active traits.
+
+**Retroactive Assignment:**
+Existing accounts without traits are automatically assigned on their first visit to `/api/accounts/:id/traits`. The POST `/api/accounts/:id/traits/assign` endpoint allows explicit assignment for accounts that bypassed the lazy check.
+
+**API Routes:**
+- `GET /api/accounts/:id/traits` — fetch traits (auto-assigns if none)
+- `POST /api/accounts/:id/traits/assign` — explicit one-time assignment
+
+**Frontend `/traits`:**
+- Header showing "Genetic Blueprint"
+- 3 full trait cards with rarity gradients, icons, lore, and effect badges
+- Combined Bonus Summary section listing every active effect
+- Collapsible Trait Codex showing all 38 traits (filterable by rarity)
+- "How it works" explainer section
+
+### Navigation
+- World Map: "Trait Shrine" zone (easy, no PvP, at 22, 42)
+
 ## Recent Changes
 
+- May 2026: Genetic Traits (38 traits, 6 rarities, permanent at creation, full combat injection)
 - May 2026: Army system (5 soldier types, RPS combat, raids, upkeep, peace shields)
 - May 2026: Alternate Dimensions (7 realms, dimension-specific combat rules, portals, 5-encounter runs)
 - May 2026: Shadow Echoes system (AI player clones, strategy profiles, auto-combat simulator)

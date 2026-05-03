@@ -153,6 +153,17 @@ const zones: Zone[] = [
     route: "/barracks",
   },
   {
+    id: "trait-shrine",
+    name: "Trait Shrine",
+    description: "An ancient shrine where the essence of genetics is made visible. Consult the Oracle to learn which permanent traits were woven into your bloodline at birth — and what they mean for your destiny.",
+    landmark: "dungeon",
+    difficulty: "easy",
+    pvpEnabled: false,
+    activities: ["View Traits", "Trait Codex", "Bonus Summary"],
+    coordinates: { x: 22, y: 42 },
+    route: "/traits",
+  },
+  {
     id: "portal-nexus",
     name: "Portal Nexus",
     description: "A convergence point where dimensional rifts tear open. Brave adventurers enter alternate dimensions with different physics, enemies, and rewards — if they survive.",

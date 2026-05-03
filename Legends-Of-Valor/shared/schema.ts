@@ -315,6 +315,7 @@ export const accounts = pgTable("accounts", {
   mythicSkinTickets: bigint("mythic_skin_tickets", { mode: "number" }).notNull().default(0),
   unlockedSkins: text("unlocked_skins").array().default(sql`ARRAY[]::text[]`), // Skins player owns
   activeBuffs: jsonb("active_buffs").notNull().default([]).$type<{id: string; expiresAt: string}[]>(), // Temporary boosts
+  geneticTraits: jsonb("genetic_traits").notNull().default([]).$type<string[]>(), // Permanent trait IDs assigned at creation
   vipUntil: timestamp("vip_until"), // VIP status expiration
   pets: jsonb("pets").notNull().default([]).$type<string[]>(),
   rank: text("rank").notNull().default("Novice").$type<PlayerRank>(),

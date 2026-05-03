@@ -53,6 +53,7 @@ import Prestige from "@/pages/prestige";
 import ShadowEchoes from "@/pages/shadow-echoes";
 import Dimensions from "@/pages/dimensions";
 import Barracks from "@/pages/barracks";
+import Traits from "@/pages/traits";
 import NotFound from "@/pages/not-found";
 import { MobileLandscapePrompt } from "@/components/mobile-landscape-prompt";
 import { AppLoadingWrapper } from "@/components/app-loading-wrapper";
@@ -105,6 +106,7 @@ function Router() {
       <Route path="/shadow-echoes" component={ShadowEchoes} />
       <Route path="/dimensions" component={Dimensions} />
       <Route path="/barracks" component={Barracks} />
+      <Route path="/traits" component={Traits} />
       <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>

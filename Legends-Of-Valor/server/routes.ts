@@ -516,6 +516,15 @@ export async function registerRoutes(
       stats.Luck = Math.round(stats.Luck * mult);
     }
 
+    // Apply genetic trait stat multipliers
+    const traitIds = ((account as any).geneticTraits as string[]) ?? [];
+    if (traitIds.length > 0) {
+      const { calcTraitBonuses, applyTraitStatMult } = await import("@shared/genetic-traits");
+      const traitBonuses = calcTraitBonuses(traitIds);
+      const boosted = applyTraitStatMult(stats as Record<string,number>, traitBonuses);
+      Object.assign(stats, boosted);
+    }
+
     return stats;
   }
 
@@ -1214,6 +1223,13 @@ export async function registerRoutes(
       }
       
       const account = await storage.createAccount(body);
+      // Assign genetic traits to new players immediately
+      try {
+        const { rollGeneticTraits } = await import("@shared/genetic-traits");
+        const traitIds = rollGeneticTraits();
+        await storage.updateAccount(account.id, { geneticTraits: traitIds } as any);
+        evictAccountCache(account.id);
+      } catch {}
       res.status(201).json(account);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -4239,7 +4255,17 @@ export async function registerRoutes(
       let totalStats = applyRaceModifiers(rawStats, account.race);
       totalStats = applyRacePassiveSkill(totalStats, account.equippedRacePassive);
       totalStats = applyWeaknessDebuff(totalStats, account.weaknessDebuffExpires ? new Date(account.weaknessDebuffExpires) : null);
-      const playerCombatStats: CombatStats = { ...totalStats };
+      let playerCombatStats: CombatStats = { ...totalStats };
+      // Apply genetic trait stat multipliers
+      {
+        const traitIds = ((account as any).geneticTraits as string[]) ?? [];
+        if (traitIds.length > 0) {
+          const { calcTraitBonuses, applyTraitStatMult } = await import("@shared/genetic-traits");
+          const traitBonuses = calcTraitBonuses(traitIds);
+          const boosted = applyTraitStatMult(playerCombatStats as Record<string,number>, traitBonuses);
+          playerCombatStats = { ...playerCombatStats, ...boosted };
+        }
+      }
       
       // Pet elements and elemental power (not covered by getPlayerTotalStats)
       let petElements: string[] = [];
@@ -4361,6 +4387,16 @@ export async function registerRoutes(
           petExp: globalLevel * 100,
           runes: isBoss ? floor * 10 : 0, // Bosses give runes
         };
+        // Apply genetic trait reward multipliers
+        {
+          const traitIds = ((account as any).geneticTraits as string[]) ?? [];
+          if (traitIds.length > 0) {
+            const { calcTraitBonuses } = await import("@shared/genetic-traits");
+            const tb = calcTraitBonuses(traitIds);
+            rewards.gold = Math.round(rewards.gold * tb.goldMult);
+            rewards.soulShards = Math.round(rewards.soulShards * tb.shardMult);
+          }
+        }
         
         // Advance to next level (sequential progression - no skipping)
         if (level >= 100) {
@@ -15048,6 +15084,15 @@ export async function registerRoutes(
       let modifiedStats = applyRaceModifiers(playerStats, account.race);
       modifiedStats = applyRacePassiveSkill(modifiedStats, account.equippedRacePassive);
       modifiedStats = applyWeaknessDebuff(modifiedStats, account.weaknessDebuffExpires ? new Date(account.weaknessDebuffExpires) : null);
+      // Apply genetic trait stat multipliers
+      {
+        const mfTraitIds = ((account as any).geneticTraits as string[]) ?? [];
+        if (mfTraitIds.length > 0) {
+          const { calcTraitBonuses, applyTraitStatMult } = await import("@shared/genetic-traits");
+          const mfTb = calcTraitBonuses(mfTraitIds);
+          modifiedStats = applyTraitStatMult(modifiedStats as Record<string,number>, mfTb) as typeof modifiedStats;
+        }
+      }
 
       let monsterFightSpell: any = null;
       const monsterFightEquippedSkill = await storage.getEquippedSkill(accountId);
@@ -15341,6 +15386,15 @@ export async function registerRoutes(
       let modifiedStats = applyRaceModifiers(playerStats, account.race);
       modifiedStats = applyRacePassiveSkill(modifiedStats, account.equippedRacePassive);
       modifiedStats = applyWeaknessDebuff(modifiedStats, account.weaknessDebuffExpires ? new Date(account.weaknessDebuffExpires) : null);
+      // Apply genetic trait stat multipliers
+      {
+        const nfTraitIds = ((account as any).geneticTraits as string[]) ?? [];
+        if (nfTraitIds.length > 0) {
+          const { calcTraitBonuses, applyTraitStatMult } = await import("@shared/genetic-traits");
+          const nfTb = calcTraitBonuses(nfTraitIds);
+          modifiedStats = applyTraitStatMult(modifiedStats as Record<string,number>, nfTb) as typeof modifiedStats;
+        }
+      }
 
       let npcFightSpell: any = null;
       const npcEquippedSkill = await storage.getEquippedSkill(accountId);
@@ -19373,6 +19427,54 @@ export async function registerRoutes(
     } catch (e) {
       if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
       res.status(500).json({ error: "Failed to fuse skills" });
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════
+  // GENETIC TRAITS — assigned at creation, permanent
+  // ══════════════════════════════════════════════════════════════════════
+
+  // GET traits for an account (lazy-assign if none yet)
+  app.get("/api/accounts/:accountId/traits", async (req, res) => {
+    try {
+      const { rollGeneticTraits, getTraitDef, ALL_TRAITS } = await import("@shared/genetic-traits");
+      let account = await storage.getAccount(req.params.accountId);
+      if (!account) return res.status(404).json({ error: "Not found" });
+
+      // Retroactively assign if the player has none
+      let traitIds = (account as any).geneticTraits as string[] ?? [];
+      if (!traitIds || traitIds.length === 0) {
+        traitIds = rollGeneticTraits();
+        await storage.updateAccount(req.params.accountId, { geneticTraits: traitIds } as any);
+        evictAccountCache(req.params.accountId);
+      }
+
+      const traits = traitIds.map((id: string) => getTraitDef(id)).filter(Boolean);
+      const allTraits = ALL_TRAITS;
+      res.json({ traits, allTraits });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch traits" });
+    }
+  });
+
+  // POST explicitly assign traits (for accounts that somehow skipped auto-assign)
+  app.post("/api/accounts/:accountId/traits/assign", async (req, res) => {
+    try {
+      const { rollGeneticTraits, getTraitDef, ALL_TRAITS } = await import("@shared/genetic-traits");
+      const account = await storage.getAccount(req.params.accountId);
+      if (!account) return res.status(404).json({ error: "Not found" });
+
+      const existing = (account as any).geneticTraits as string[] ?? [];
+      if (existing.length > 0) return res.status(400).json({ error: "Traits already assigned" });
+
+      const traitIds = rollGeneticTraits();
+      await storage.updateAccount(req.params.accountId, { geneticTraits: traitIds } as any);
+      evictAccountCache(req.params.accountId);
+
+      const traits = traitIds.map((id: string) => getTraitDef(id)).filter(Boolean);
+      res.json({ traits, allTraits: ALL_TRAITS });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to assign traits" });
     }
   });
 

@@ -14,7 +14,7 @@ export interface IStorage {
   updateAccountWins(id: string, wins: number): Promise<Account | undefined>;
   updateAccountLosses(id: string, losses: number): Promise<Account | undefined>;
   updateAccountResources(id: string, data: Partial<Pick<Account, "rubies" | "soulShards" | "focusedShards" | "pets" | "soulGins" | "beakCoins">>): Promise<Account | undefined>;
-  updateAccount(id: string, data: Partial<Pick<Account, "gold" | "rubies" | "soulShards" | "focusedShards" | "trainingPoints" | "petExp" | "runes" | "pets" | "stats" | "equipped" | "rank" | "wins" | "losses" | "baseTier" | "baseSkin" | "trophies" | "soulGins" | "beakCoins">>): Promise<Account | undefined>;
+  updateAccount(id: string, data: Partial<Pick<Account, "gold" | "rubies" | "soulShards" | "focusedShards" | "trainingPoints" | "petExp" | "runes" | "pets" | "stats" | "equipped" | "rank" | "wins" | "losses" | "baseTier" | "baseSkin" | "trophies" | "soulGins" | "beakCoins" | "geneticTraits">>): Promise<Account | undefined>;
   capAccountResources(id: string): Promise<void>;
   
   getInventoryByAccount(accountId: string): Promise<InventoryItem[]>;
@@ -305,7 +305,7 @@ export class DatabaseStorage implements IStorage {
     return account || undefined;
   }
 
-  async updateAccount(id: string, data: Partial<Pick<Account, "gold" | "rubies" | "soulShards" | "focusedShards" | "trainingPoints" | "petExp" | "runes" | "pets" | "stats" | "equipped" | "rank" | "wins" | "losses" | "baseTier" | "baseSkin" | "trophies" | "soulGins" | "beakCoins" | "valorTokens">>): Promise<Account | undefined> {
+  async updateAccount(id: string, data: Partial<Pick<Account, "gold" | "rubies" | "soulShards" | "focusedShards" | "trainingPoints" | "petExp" | "runes" | "pets" | "stats" | "equipped" | "rank" | "wins" | "losses" | "baseTier" | "baseSkin" | "trophies" | "soulGins" | "beakCoins" | "valorTokens" | "geneticTraits">>): Promise<Account | undefined> {
     const cap = (val: number | undefined) => val !== undefined ? Math.min(val, Number.MAX_SAFE_INTEGER) : undefined;
     const cappedData = {
       ...data,
