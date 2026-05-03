@@ -128,7 +128,7 @@ export default function PetShop() {
   const [selectedEgg, setSelectedEgg] = useState<PetEgg | null>(null);
   const [isPurchasing, setIsPurchasing] = useState(false);
 
-  if (!account || account.role !== "player") {
+  if (!account || account.role !== "player" && account.role !== "admin") {
     navigate("/");
     return null;
   }

@@ -460,7 +460,7 @@ export const guilds = pgTable("guilds", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
   masterId: varchar("master_id").notNull().references(() => accounts.id),
-  bank: jsonb("bank").notNull().default({ gold: 0, rubies: 0, soulShards: 0, focusedShards: 0, runes: 0, trainingPoints: 0 }).$type<GuildBank>(),
+  bank: jsonb("bank").notNull().default({ gold: 0, rubies: 0, soulShards: 0, focusedShards: 0, runes: 0, trainingPoints: 0, beakCoins: 0, valorTokens: 0 }).$type<GuildBank>(),
   dungeonFloor: integer("dungeon_floor").notNull().default(1),
   dungeonLevel: integer("dungeon_level").notNull().default(1),
   unityCoins: bigint("unity_coins", { mode: "number" }).notNull().default(0),
@@ -1141,6 +1141,8 @@ export const guildBankSchema = z.object({
   focusedShards: z.number().default(0),
   runes: z.number().default(0),
   trainingPoints: z.number().default(0),
+  beakCoins: z.number().default(0),
+  valorTokens: z.number().default(0),
 });
 
 export type GuildBank = z.infer<typeof guildBankSchema>;
@@ -1694,15 +1696,15 @@ export const PET_REVIVE_CONSUMABLE_COST = 500;
 // ==================== GUILD LEVEL REQUIREMENTS ====================
 export const guildLevelRequirements = [
   { level: 1, minDungeonFloor: 0, minDungeonsCompleted: 0, goldCost: 0 },
-  { level: 2, minDungeonFloor: 1, minDungeonsCompleted: 0, goldCost: 1_000_000_000 },
-  { level: 3, minDungeonFloor: 5, minDungeonsCompleted: 0, goldCost: 2_000_000_000 },
-  { level: 4, minDungeonFloor: 10, minDungeonsCompleted: 1, goldCost: 5_000_000_000 },
-  { level: 5, minDungeonFloor: 15, minDungeonsCompleted: 1, goldCost: 10_000_000_000 },
-  { level: 6, minDungeonFloor: 20, minDungeonsCompleted: 1, goldCost: 25_000_000_000 },
-  { level: 7, minDungeonFloor: 30, minDungeonsCompleted: 2, goldCost: 50_000_000_000 },
-  { level: 8, minDungeonFloor: 40, minDungeonsCompleted: 2, goldCost: 100_000_000_000 },
-  { level: 9, minDungeonFloor: 50, minDungeonsCompleted: 3, goldCost: 250_000_000_000 },
-  { level: 10, minDungeonFloor: 75, minDungeonsCompleted: 4, goldCost: 1_000_000_000_000 },
+  { level: 2, minDungeonFloor: 1, minDungeonsCompleted: 0, goldCost: 5_000_000 },
+  { level: 3, minDungeonFloor: 5, minDungeonsCompleted: 0, goldCost: 15_000_000 },
+  { level: 4, minDungeonFloor: 10, minDungeonsCompleted: 1, goldCost: 40_000_000 },
+  { level: 5, minDungeonFloor: 15, minDungeonsCompleted: 1, goldCost: 100_000_000 },
+  { level: 6, minDungeonFloor: 20, minDungeonsCompleted: 1, goldCost: 250_000_000 },
+  { level: 7, minDungeonFloor: 30, minDungeonsCompleted: 2, goldCost: 500_000_000 },
+  { level: 8, minDungeonFloor: 40, minDungeonsCompleted: 2, goldCost: 1_000_000_000 },
+  { level: 9, minDungeonFloor: 50, minDungeonsCompleted: 3, goldCost: 2_500_000_000 },
+  { level: 10, minDungeonFloor: 75, minDungeonsCompleted: 4, goldCost: 5_000_000_000 },
 ] as const;
 
 export type GuildLevelRequirement = typeof guildLevelRequirements[number];

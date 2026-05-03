@@ -287,7 +287,7 @@ export default function ValorShop() {
     }
   };
 
-  if (!account || account.role !== "player") {
+  if (!account || account.role !== "player" && account.role !== "admin") {
     navigate("/");
     return null;
   }

@@ -32,7 +32,7 @@ export default function Mining() {
   const [isMining, setIsMining] = useState<string | null>(null);
   const [miningProgress, setMiningProgress] = useState(0);
 
-  if (!account || account.role !== "player") {
+  if (!account || account.role !== "player" && account.role !== "admin") {
     navigate("/");
     return null;
   }

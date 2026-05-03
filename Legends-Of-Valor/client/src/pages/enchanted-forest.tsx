@@ -106,12 +106,12 @@ export default function EnchantedForest() {
   const [spiritMessage, setSpiritMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!account || account.role !== "player") {
+    if (!account || account.role !== "player" && account.role !== "admin") {
       navigate("/");
     }
   }, [account, navigate]);
 
-  if (!account || account.role !== "player") return null;
+  if (!account || account.role !== "player" && account.role !== "admin") return null;
 
   const playerRankIndex = playerRanks.indexOf(account.rank as any);
 

@@ -340,7 +340,7 @@ export default function Trading() {
     navigate("/");
   };
 
-  if (!account || account.role !== "player") {
+  if (!account || account.role !== "player" && account.role !== "admin") {
     navigate("/");
     return null;
   }

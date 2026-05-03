@@ -64,7 +64,7 @@ export default function NpcBattle() {
   const [isPetFainted, setIsPetFainted] = useState(false);
 
   useEffect(() => {
-    if (!account || account.role !== "player") {
+    if (!account || account.role !== "player" && account.role !== "admin") {
       navigate("/");
     }
   }, [account, navigate]);
@@ -231,7 +231,7 @@ export default function NpcBattle() {
     navigate("/");
   };
 
-  if (!account || account.role !== "player") {
+  if (!account || account.role !== "player" && account.role !== "admin") {
     return null;
   }
 

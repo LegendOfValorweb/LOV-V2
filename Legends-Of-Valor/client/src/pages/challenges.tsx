@@ -209,7 +209,7 @@ export default function Challenges() {
     navigate("/");
   };
 
-  if (!account || account.role !== "player") {
+  if (!account || account.role !== "player" && account.role !== "admin") {
     navigate("/");
     return null;
   }

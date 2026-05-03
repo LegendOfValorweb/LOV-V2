@@ -341,7 +341,7 @@ export default function HellZone() {
     }
   }, [brStatus?.status]);
 
-  if (!account || account.role !== "player") {
+  if (!account || account.role !== "player" && account.role !== "admin") {
     if (account?.role === "admin") {
     } else {
       navigate("/");

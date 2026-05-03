@@ -123,12 +123,12 @@ export default function ResearchLab() {
   const [activeTab, setActiveTab] = useState("research");
 
   useEffect(() => {
-    if (!account || account.role !== "player") {
+    if (!account || account.role !== "player" && account.role !== "admin") {
       navigate("/");
     }
   }, [account, navigate]);
 
-  if (!account || account.role !== "player") return null;
+  if (!account || account.role !== "player" && account.role !== "admin") return null;
 
   const playerRankIndex = playerRanks.indexOf(account.rank as any);
 

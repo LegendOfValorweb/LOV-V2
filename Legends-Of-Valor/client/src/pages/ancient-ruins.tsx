@@ -87,7 +87,7 @@ export default function AncientRuins() {
   const [explorationProgress, setExplorationProgress] = useState(0);
   const [lastDiscovery, setLastDiscovery] = useState<{ lore: string } | null>(null);
 
-  if (!account || account.role !== "player") {
+  if (!account || account.role !== "player" && account.role !== "admin") {
     navigate("/");
     return null;
   }

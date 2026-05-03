@@ -97,9 +97,9 @@ import {
 } from "@shared/schema";
 
 // V2: Max 28 players per server (2 per race x 14 races)
-const MAX_PLAYERS = 28;
+const MAX_PLAYERS = 999999; // Unlimited
 // V2: Max 2 players per race
-const MAX_PLAYERS_PER_RACE = 2;
+const MAX_PLAYERS_PER_RACE = 20;
 const SESSION_TIMEOUT = 5 * 60 * 1000; // 5 minutes of inactivity
 const SLEEP_TIMEOUT = 10 * 60 * 1000; // 10 minutes of inactivity to sleep the app
 
@@ -7904,7 +7904,7 @@ export async function registerRoutes(
     try {
       const schema = z.object({
         accountId: z.string(),
-        resource: z.enum(["gold", "rubies", "soulShards", "focusedShards"]),
+        resource: z.enum(["gold", "rubies", "soulShards", "focusedShards", "runes", "trainingPoints", "beakCoins", "valorTokens"]),
         amount: z.number().min(1),
       });
       const { accountId, resource, amount } = schema.parse(req.body);

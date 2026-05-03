@@ -406,7 +406,7 @@ export default function Inventory() {
     return equippedItems.accessory1 || equippedItems.accessory2;
   }, [equippedItems]);
 
-  if (!account || account.role !== "player") {
+  if (!account || account.role !== "player" && account.role !== "admin") {
     navigate("/");
     return null;
   }

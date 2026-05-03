@@ -186,7 +186,7 @@ export default function Shop() {
     return null;
   }
 
-  if (!account || account.role !== "player") {
+  if (!account || account.role !== "player" && account.role !== "admin") {
     navigate("/");
     return null;
   }

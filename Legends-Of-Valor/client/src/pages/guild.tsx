@@ -221,7 +221,7 @@ export default function GuildPage() {
   const [respondFighters, setRespondFighters] = useState<string[]>([]);
   const [depositDialogOpen, setDepositDialogOpen] = useState(false);
   const [depositAmount, setDepositAmount] = useState("");
-  const [depositResource, setDepositResource] = useState<"gold" | "rubies" | "soulShards" | "focusedShards">("gold");
+  const [depositResource, setDepositResource] = useState<"gold" | "rubies" | "soulShards" | "focusedShards" | "runes" | "trainingPoints" | "beakCoins" | "valorTokens">("gold");
   const [vaultLogsDialogOpen, setVaultLogsDialogOpen] = useState(false);
   const [roleDialogOpen, setRoleDialogOpen] = useState(false);
   const [roleTarget, setRoleTarget] = useState<{ accountId: string; username: string; currentRole: string } | null>(null);
@@ -742,7 +742,7 @@ export default function GuildPage() {
     navigate("/");
   };
 
-  if (!account || account.role !== "player") {
+  if (!account || account.role !== "player" && account.role !== "admin") {
     navigate("/");
     return null;
   }
@@ -1307,6 +1307,20 @@ export default function GuildPage() {
                       <p className="font-bold">{(guild.bank.runes || 0).toLocaleString()}</p>
                     </div>
                   </div>
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10">
+                    <Coins className="w-5 h-5 text-amber-500" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Beak Coins</p>
+                      <p className="font-bold">{((guild.bank as any).beakCoins || 0).toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10">
+                    <Star className="w-5 h-5 text-emerald-500" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Valor Tokens</p>
+                      <p className="font-bold">{((guild.bank as any).valorTokens || 0).toLocaleString()}</p>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex gap-2">
@@ -1336,6 +1350,10 @@ export default function GuildPage() {
                               <SelectItem value="rubies">Rubies ({account.rubies?.toLocaleString() || 0})</SelectItem>
                               <SelectItem value="soulShards">Soul Shards ({account.soulShards?.toLocaleString() || 0})</SelectItem>
                               <SelectItem value="focusedShards">Focused Shards ({account.focusedShards?.toLocaleString() || 0})</SelectItem>
+                              <SelectItem value="runes">Runes ({(account as any).runes?.toLocaleString() || 0})</SelectItem>
+                              <SelectItem value="trainingPoints">Training Points ({(account as any).trainingPoints?.toLocaleString() || 0})</SelectItem>
+                              <SelectItem value="beakCoins">Beak Coins ({(account as any).beakCoins?.toLocaleString() || 0})</SelectItem>
+                              <SelectItem value="valorTokens">Valor Tokens ({(account as any).valorTokens?.toLocaleString() || 0})</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
