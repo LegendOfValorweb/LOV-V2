@@ -157,7 +157,7 @@ export default function Barracks() {
     </div>
   );
 
-  const barracksLevel = (account.baseRoomLevels?.barracks) ?? 0;
+  const barracksLevel = (account.baseRoomLevels?.barracks) ?? 1;
   const totalTroops = army.reduce((s: number, t: any) => s + t.count, 0);
   const trainingCount = trainingQueue.reduce((s: number, j: any) => s + j.count, 0);
   const peaceShield = account.peaceShieldExpires ? new Date(account.peaceShieldExpires) > new Date() : false;
@@ -221,7 +221,7 @@ export default function Barracks() {
               </div>
             </div>
             {peaceShield && <div className="text-xs text-blue-400">🛡️ Peace shield: {shieldRemaining}m left</div>}
-            {barracksLevel === 0 && <div className="text-xs text-orange-400">⚠️ Build Barracks in your Base (requires Tier 3+)</div>}
+            {barracksLevel > 1 && <div className="text-xs text-indigo-400">🏗️ Barracks Level {barracksLevel} — upgraded</div>}
           </div>
         </div>
 
@@ -265,20 +265,13 @@ export default function Barracks() {
         {/* ── MY ARMY TAB ──────────────────────────────────────────────────── */}
         {tab === "army" && (
           <div className="space-y-3">
-            {barracksLevel === 0 && (
-              <div className="bg-amber-950/30 border border-amber-700 rounded-xl p-5 text-center">
-                <p className="text-3xl mb-2">🏗️</p>
-                <p className="text-amber-200 font-bold">No Barracks built yet</p>
-                <p className="text-gray-400 text-sm mt-1">Upgrade your Base to Tier 3 (Keep) or higher, then build the Barracks room to raise an army.</p>
-              </div>
-            )}
 
             {SOLDIER_DEFS.map(def => {
               const troop = getTroop(def.id);
               const locked = barracksLevel < def.unlockLv;
               const pendingJobs = trainingQueue.filter((j: any) => j.soldierType === def.id);
               const pendingCount = pendingJobs.reduce((s: number, j: any) => s + j.count, 0);
-              const canRecruit = !locked && barracksLevel > 0;
+              const canRecruit = !locked;
               const amt = recruitAmounts[def.id];
               const previewMs = calcTrainingMs(def.id, amt, barracksLevel);
               const totalCost = def.goldCost * amt;

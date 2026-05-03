@@ -19981,15 +19981,11 @@ export async function registerRoutes(
       const account = await storage.getAccount(req.params.accountId);
       if (!account) return res.status(404).json({ error: "Not found" });
 
-      // Require base tier 3+ (Keep) to command an army
-      if ((account.baseTier ?? 1) < 3) return res.status(400).json({ error: "Commanding an army requires a Base Tier 3 (Keep) or higher. Upgrade your base first." });
-
       const { getSoldierDef, SOLDIER_DEFS, calcTrainingDurationMs } = await import("@shared/army-data");
       const def = SOLDIER_DEFS.find((s: any) => s.id === type);
       if (!def) return res.status(400).json({ error: "Unknown soldier type" });
 
-      const barracksLevel = (account.baseRoomLevels as any)?.barracks ?? 0;
-      if (barracksLevel < 1) return res.status(400).json({ error: "Build a Barracks in your base first (Base → Room Upgrades → Barracks)" });
+      const barracksLevel = (account.baseRoomLevels as any)?.barracks ?? 1;
       if (barracksLevel < def.unlockBarracksLevel) return res.status(400).json({ error: `Requires Barracks level ${def.unlockBarracksLevel}` });
 
       // Enforce training batch cap — prevents instant army creation regardless of gold
