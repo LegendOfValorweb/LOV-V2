@@ -1,7 +1,8 @@
 // ─── Army System — Legends of Valor ──────────────────────────────────────────
 // Players raise armies from their Barracks (base room, unlocks tier 5+).
 // Soldiers fight in raids against other player bases, with a rock-paper-scissors
-// counter system and your hero's stats buffing the army.
+// counter system. Your hero leads the army — their equipped items/stats buff it.
+// Soldiers train over time (no hard cap). Can't train more until current batch done.
 // ──────────────────────────────────────────────────────────────────────────────
 
 export type SoldierType = "infantry" | "archer" | "cavalry" | "siege" | "elite_guard";
@@ -14,6 +15,7 @@ export type SoldierDef = {
   role: string;
   goldCost: number;          // cost to recruit one soldier
   upkeepPerHour: number;     // gold per soldier per hour
+  trainingTimeSec: number;   // seconds to train one soldier
   baseAtk: number;           // base ATK stat at level 1
   baseDef: number;           // base DEF stat at level 1
   baseHp: number;            // base HP at level 1
@@ -35,6 +37,7 @@ export const SOLDIER_DEFS: SoldierDef[] = [
     role: "Tank / Anti-Cavalry",
     goldCost: 200,
     upkeepPerHour: 2,
+    trainingTimeSec: 30,
     baseAtk: 18, baseDef: 22, baseHp: 80,
     atkPerLevel: 4, defPerLevel: 5, hpPerLevel: 15,
     counters: ["cavalry"],
@@ -50,6 +53,7 @@ export const SOLDIER_DEFS: SoldierDef[] = [
     role: "Ranged / Anti-Infantry",
     goldCost: 300,
     upkeepPerHour: 3,
+    trainingTimeSec: 45,
     baseAtk: 25, baseDef: 12, baseHp: 55,
     atkPerLevel: 6, defPerLevel: 2, hpPerLevel: 8,
     counters: ["infantry"],
@@ -65,6 +69,7 @@ export const SOLDIER_DEFS: SoldierDef[] = [
     role: "Fast / Anti-Archer",
     goldCost: 500,
     upkeepPerHour: 5,
+    trainingTimeSec: 120,
     baseAtk: 30, baseDef: 16, baseHp: 70,
     atkPerLevel: 7, defPerLevel: 3, hpPerLevel: 12,
     counters: ["archer"],
@@ -80,6 +85,7 @@ export const SOLDIER_DEFS: SoldierDef[] = [
     role: "Structure Destroyer",
     goldCost: 1200,
     upkeepPerHour: 12,
+    trainingTimeSec: 480,
     baseAtk: 12, baseDef: 8, baseHp: 100,
     atkPerLevel: 3, defPerLevel: 2, hpPerLevel: 20,
     counters: [],
@@ -91,10 +97,11 @@ export const SOLDIER_DEFS: SoldierDef[] = [
     id: "elite_guard",
     name: "Elite Guard",
     icon: "⚔️",
-    description: "Your personal guard — hand-picked warriors who inherit your hero's racial combat bonuses. Only one unit of these may exist at a time.",
+    description: "Your personal guard — hand-picked warriors who inherit your hero's racial combat bonuses. No cap, but very expensive.",
     role: "Hero Unit / All-rounder",
     goldCost: 5000,
     upkeepPerHour: 40,
+    trainingTimeSec: 1800,
     baseAtk: 45, baseDef: 40, baseHp: 150,
     atkPerLevel: 10, defPerLevel: 9, hpPerLevel: 25,
     counters: [],
@@ -108,13 +115,37 @@ export function getSoldierDef(id: SoldierType): SoldierDef {
   return SOLDIER_DEFS.find(s => s.id === id)!;
 }
 
-// ─── Army cap by barracks level ────────────────────────────────────────────────
+// ─── No army cap — soldiers are only limited by gold and barracks level ────────
+/** @deprecated — no longer enforced; kept for any legacy references */
 export const ARMY_CAP_BY_BARRACKS_LEVEL: Record<number, number> = {
-  0: 0, 1: 60, 2: 120, 3: 200, 4: 300, 5: 400,
+  0: 0, 1: 9999999, 2: 9999999, 3: 9999999, 4: 9999999, 5: 9999999,
 };
 
-export function getArmyCap(barracksLevel: number): number {
-  return ARMY_CAP_BY_BARRACKS_LEVEL[Math.min(barracksLevel, 5)] ?? 0;
+export function getArmyCap(_barracksLevel: number): number {
+  return 9999999;
+}
+
+// ─── Training time helpers ────────────────────────────────────────────────────
+/**
+ * Returns the total training duration (ms) for `count` soldiers of a given type.
+ * The barracks level can speed training in the future (e.g., lv3+ = 0.75×).
+ */
+export function calcTrainingDurationMs(type: SoldierType, count: number, barracksLevel = 1): number {
+  const def = getSoldierDef(type);
+  const speedMult = barracksLevel >= 4 ? 0.6 : barracksLevel >= 3 ? 0.75 : barracksLevel >= 2 ? 0.88 : 1.0;
+  return Math.floor(def.trainingTimeSec * count * speedMult) * 1000;
+}
+
+/** Human-readable countdown, e.g. "2h 14m 30s" */
+export function fmtDuration(ms: number): string {
+  if (ms <= 0) return "Ready";
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}h ${m}m ${sec}s`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
 }
 
 // ─── Effective stats for a soldier at a given level ───────────────────────────
@@ -194,7 +225,6 @@ export function resolveRaid(
     let waveAtkLoss = 0;
     let waveDefLoss = 0;
 
-    // Wave 1: attacker troops vs defender troops (RPS)
     const atkTypes = attackerTroops.map(t => t.type);
     const defTypes = defenderTroops.map(t => t.type);
 
@@ -204,7 +234,6 @@ export function resolveRaid(
       const atkSnapshot = attackerTroops.find(t => t.type === atkType)!;
       const atkStats = getSoldierStats(getSoldierDef(atkType), atkSnapshot.level);
 
-      // Attack each defender type
       for (const defType of defTypes) {
         const defCount = defCurrent[defType] ?? 0;
         if (defCount <= 0) continue;
@@ -222,7 +251,6 @@ export function resolveRaid(
           waveDefLoss += unitsKilled;
         }
 
-        // Counter-damage to attackers
         const counterMult = getCounterMultiplier(defType, atkType, false);
         const defEffAtk = defStats.atk * counterMult;
         const damageToAtkUnit = Math.max(1, defEffAtk - atkStats.def * 0.5);
@@ -238,9 +266,8 @@ export function resolveRaid(
     // Defense towers engage in wave 1+2
     if (wave <= 2 && defTowerTroops > 0) {
       const siegeCount = atkCurrent["siege"] ?? 0;
-      const siegeMultiplier = siegeCount > 0 ? 0.35 : 1; // Siege massively reduces tower effectiveness
+      const siegeMultiplier = siegeCount > 0 ? 0.35 : 1;
       const towerDmg = defTowerAtk * siegeMultiplier;
-      // Towers hit infantry and archers first
       const frontline = (atkCurrent["infantry"] ?? 0) + (atkCurrent["archer"] ?? 0);
       if (frontline > 0) {
         const towerKills = Math.min(frontline, Math.floor(towerDmg / 30));
@@ -270,11 +297,9 @@ export function resolveRaid(
 
   const attackerWon = atkTotal > 0 && (atkTotal > defTotal || defTotal === 0);
 
-  // Loot calculation: 25% of gold if victory, 5% if draw
   const lootPct = attackerWon ? 0.25 : 0;
   const goldLooted = Math.round(defenderGold * lootPct);
 
-  // Siege determines structure damage
   const siegeSurvivors = atkCurrent["siege"] ?? 0;
   const baseDamageDealt = attackerWon ? Math.min(100, siegeSurvivors * 2) : 0;
 
@@ -316,7 +341,6 @@ export function calcDesertion(
 ): Record<SoldierType, number> {
   if (goldShortfall <= 0) return {} as Record<SoldierType, number>;
   const result: Record<string, number> = {};
-  // Desertion proportional to shortfall — cheaper troops leave first
   const sorted = [...troops].sort((a, b) =>
     getSoldierDef(a.type).goldCost - getSoldierDef(b.type).goldCost
   );

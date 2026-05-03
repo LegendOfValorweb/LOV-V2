@@ -429,6 +429,18 @@ export const armyRaids = pgTable("army_raids", {
   baseDamageDealt: integer("base_damage_dealt").notNull().default(0),
 });
 
+// ── Army Training Queue ───────────────────────────────────────────────────────
+// Each row is one training batch enqueued by the player.
+// Soldiers graduate to the armies table when completesAt <= now.
+export const armyTrainingQueue = pgTable("army_training_queue", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  accountId: varchar("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
+  soldierType: text("soldier_type").notNull(),
+  count: integer("count").notNull(),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  completesAt: timestamp("completes_at").notNull(),
+});
+
 // ── PCG Quest System ─────────────────────────────────────────────────────────
 export const playerQuests = pgTable("player_quests", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

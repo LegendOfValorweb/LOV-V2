@@ -22,7 +22,7 @@ import {
 } from "./server-achievements";
 import { storage, evictAccountCache } from "./storage";
 import { db } from "./db";
-import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, type CombatLogEntry, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, shardEvents, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage, worldBosses, worldBossDamage, inventoryItems, playerSkills, casinoHistory, skillTreeNodes, playerModifiers, prestigeHistory, playerSnapshots, dimensionPortals, dimensionRuns, armies, armyRaids, playerQuests, worldEvents } from "@shared/schema";
+import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, type CombatLogEntry, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, shardEvents, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage, worldBosses, worldBossDamage, inventoryItems, playerSkills, casinoHistory, skillTreeNodes, playerModifiers, prestigeHistory, playerSnapshots, dimensionPortals, dimensionRuns, armies, armyRaids, armyTrainingQueue, playerQuests, worldEvents } from "@shared/schema";
 import { ZONE_NPCS, getZoneNPC, calculateNPCStats, calculateNPCRewards } from "@shared/zone-npcs";
 import { z } from "zod";
 import type { Account, Event, Challenge, PlayerRace, PlayerGender } from "@shared/schema";
@@ -64,7 +64,7 @@ import {
   getZoneExhaustionInfo,
   getRankRequirementLabel,
 } from "./resource-system";
-import { eq, sql, and, lt, gt, desc, inArray } from "drizzle-orm";
+import { eq, sql, and, lt, lte, gt, desc, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { getActiveWorldBoss, spawnWorldBoss, recordBossDamage, MAX_ATTACKS_PER_BOSS, getPlayerBossAttackCount } from "./world-boss";
@@ -19882,16 +19882,39 @@ export async function registerRoutes(
   // ARMY SYSTEM — Barracks, Recruitment, Training, Raids
   // ══════════════════════════════════════════════════════════════════════
 
-  // GET army for a player (with upkeep deduction)
+  // Helper: graduate completed training-queue entries into armies table
+  async function graduateTrainingQueue(accountId: string) {
+    const now = new Date();
+    const ready = await db.select().from(armyTrainingQueue).where(
+      and(eq(armyTrainingQueue.accountId, accountId), lte(armyTrainingQueue.completesAt, now))
+    );
+    for (const job of ready) {
+      const existing = await db.select().from(armies)
+        .where(and(eq(armies.accountId, accountId), eq(armies.soldierType, job.soldierType)))
+        .then(r => r[0]);
+      if (existing) {
+        await db.update(armies).set({ count: existing.count + job.count })
+          .where(and(eq(armies.accountId, accountId), eq(armies.soldierType, job.soldierType)));
+      } else {
+        await db.insert(armies).values({ accountId, soldierType: job.soldierType, count: job.count, level: 1 });
+      }
+      await db.delete(armyTrainingQueue).where(eq(armyTrainingQueue.id, job.id));
+    }
+  }
+
+  // GET army for a player (graduates completed training jobs + processes upkeep)
   app.get("/api/accounts/:accountId/army", async (req, res) => {
     try {
       const account = await storage.getAccount(req.params.accountId);
       if (!account) return res.status(404).json({ error: "Not found" });
 
+      // Graduate any completed training batches first
+      await graduateTrainingQueue(req.params.accountId);
+
       const rows = await db.select().from(armies).where(eq(armies.accountId, req.params.accountId));
 
       // Process upkeep
-      const { calcUpkeepOwed, calcDesertion, getSoldierDef, SOLDIER_DEFS } = await import("@shared/army-data");
+      const { calcUpkeepOwed, calcDesertion } = await import("@shared/army-data");
       const lastChecked = (account as any).armyLastCheckedAt ? new Date((account as any).armyLastCheckedAt) : new Date();
       const troops = rows.map(r => ({ type: r.soldierType as any, count: r.count, level: r.level }));
 
@@ -19902,14 +19925,13 @@ export async function registerRoutes(
           if (gold >= owed) {
             await storage.updateAccount(req.params.accountId, { gold: gold - owed } as any);
           } else {
-            // Desertion
             const shortfall = owed - gold;
             const desertions = calcDesertion(troops, shortfall);
             for (const [type, count] of Object.entries(desertions)) {
               if (count > 0) {
                 const row = rows.find(r => r.soldierType === type);
                 if (row) {
-                  const newCount = Math.max(0, row.count - count);
+                  const newCount = Math.max(0, row.count - (count as number));
                   if (newCount === 0) {
                     await db.delete(armies).where(and(eq(armies.accountId, req.params.accountId), eq(armies.soldierType, type)));
                   } else {
@@ -19930,44 +19952,60 @@ export async function registerRoutes(
     } catch { res.status(500).json({ error: "Failed to fetch army" }); }
   });
 
-  // POST recruit soldiers
+  // GET training queue for a player
+  app.get("/api/accounts/:accountId/army/training-queue", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.accountId);
+      if (!account) return res.status(404).json({ error: "Not found" });
+      // Graduate completed jobs first so queue stays clean
+      await graduateTrainingQueue(req.params.accountId);
+      const queue = await db.select().from(armyTrainingQueue)
+        .where(eq(armyTrainingQueue.accountId, req.params.accountId))
+        .orderBy(armyTrainingQueue.completesAt);
+      res.json(queue);
+    } catch { res.status(500).json({ error: "Failed to fetch training queue" }); }
+  });
+
+  // POST recruit soldiers — queues a training job instead of instant addition
   app.post("/api/accounts/:accountId/army/recruit", async (req, res) => {
     try {
-      const { type, count } = z.object({ type: z.string(), count: z.number().int().min(1).max(500) }).parse(req.body);
+      const { type, count } = z.object({ type: z.string(), count: z.number().int().min(1).max(5000) }).parse(req.body);
       const account = await storage.getAccount(req.params.accountId);
       if (!account) return res.status(404).json({ error: "Not found" });
 
-      const { getSoldierDef, ARMY_CAP_BY_BARRACKS_LEVEL, getArmyCap, SOLDIER_DEFS } = await import("@shared/army-data");
+      const { getSoldierDef, SOLDIER_DEFS, calcTrainingDurationMs } = await import("@shared/army-data");
       const def = SOLDIER_DEFS.find((s: any) => s.id === type);
       if (!def) return res.status(400).json({ error: "Unknown soldier type" });
 
       const barracksLevel = (account.baseRoomLevels as any)?.barracks ?? 0;
       if (barracksLevel < def.unlockBarracksLevel) return res.status(400).json({ error: `Requires Barracks level ${def.unlockBarracksLevel}` });
 
-      const armyCap = getArmyCap(barracksLevel);
-      const currentRows = await db.select().from(armies).where(eq(armies.accountId, req.params.accountId));
-      const totalTroops = currentRows.reduce((s, r) => s + r.count, 0);
-      const canRecruit = Math.min(count, armyCap - totalTroops, type === "elite_guard" ? Math.max(0, 50 - (currentRows.find(r => r.soldierType === "elite_guard")?.count ?? 0)) : 9999);
+      const totalCost = def.goldCost * count;
+      if ((account.gold ?? 0) < totalCost) return res.status(400).json({ error: `Not enough gold (need ${totalCost.toLocaleString()})` });
 
-      if (canRecruit <= 0) return res.status(400).json({ error: "Army is at capacity" });
-
-      const totalCost = def.goldCost * canRecruit;
-      if ((account.gold ?? 0) < totalCost) return res.status(400).json({ error: `Not enough gold (need ${totalCost})` });
-
+      // Deduct gold immediately (committed cost)
       await storage.updateAccount(req.params.accountId, { gold: (account.gold ?? 0) - totalCost } as any);
       evictAccountCache(req.params.accountId);
 
-      const existing = currentRows.find(r => r.soldierType === type);
-      if (existing) {
-        await db.update(armies).set({ count: existing.count + canRecruit }).where(and(eq(armies.accountId, req.params.accountId), eq(armies.soldierType, type)));
-      } else {
-        await db.insert(armies).values({ accountId: req.params.accountId, soldierType: type, count: canRecruit, level: 1 });
-      }
+      // Queue training job
+      const durationMs = calcTrainingDurationMs(type as any, count, barracksLevel);
+      const completesAt = new Date(Date.now() + durationMs);
+      await db.insert(armyTrainingQueue).values({
+        accountId: req.params.accountId,
+        soldierType: type,
+        count,
+        completesAt,
+      });
 
-      res.json({ message: `Recruited ${canRecruit} ${def.name} for ${totalCost.toLocaleString()} gold` });
+      const { fmtDuration } = await import("@shared/army-data");
+      res.json({
+        message: `Training ${count} ${def.name} — ready in ${fmtDuration(durationMs)}`,
+        completesAt: completesAt.toISOString(),
+        durationMs,
+      });
     } catch (e) {
       if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
-      res.status(500).json({ error: "Failed to recruit" });
+      res.status(500).json({ error: "Failed to queue training" });
     }
   });
 

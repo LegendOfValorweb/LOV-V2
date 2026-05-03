@@ -4,6 +4,27 @@
 
 Legends of Valor is a text-based fantasy RPG with trading, combat, guild systems, and extensive progression mechanics. Players choose from 14 races with unique bonuses, progress through 15 ranks from Novice to Mythical Legend, explore 12 zones, climb a 50-floor Mystic Tower, and work toward endgame content with billion-scale power.
 
+## Army System (Barracks) — Updated
+
+The army system uses a **Whiteout Survival-style training queue** with no hard troop cap.
+
+### Key Design Points
+- **No army cap** — players can train unlimited soldiers (limited only by gold and upkeep costs)
+- **Time-gated training** — gold is spent immediately; soldiers graduate to the army after a training duration
+  - Infantry: 30s/unit | Archers: 45s/unit | Cavalry: 2m/unit | Siege: 8m/unit | Elite Guard: 30m/unit
+  - Barracks Lv2 = 12% faster, Lv3 = 25% faster, Lv4+ = 40% faster
+- **Hero leads the army** — the player's equipped gear boosts their Str/Luck stats, which multiply army ATK in raids
+  - `heroAtkBonus = 1 + Str/300` | `heroLuckBonus = 1 + Luck/500`
+  - The Barracks UI shows these bonuses in real-time
+- **Training queue UI** — dedicated "⏳ Training" tab shows in-progress batches with live progress bars and countdowns (auto-refreshes every 5s)
+- **Shop items** — buying equipment from the shop equips to the hero normally; hero stats directly amplify the army via the bonus formulas above
+
+### DB Schema
+- `armies` table — active troop counts per type (infantry/archer/cavalry/siege/elite_guard) + level
+- `army_training_queue` table — in-flight training batches with `completesAt` timestamp
+  - Graduated to `armies` automatically when GET /api/accounts/:id/army or the queue endpoint is called
+- `army_raids` table — raid history with snapshots, events, losses, gold looted
+
 ## Game Math Reference (Audited & Fixed)
 
 ### HP Formula
