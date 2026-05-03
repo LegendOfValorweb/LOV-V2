@@ -22,7 +22,7 @@ import {
 } from "./server-achievements";
 import { storage, evictAccountCache } from "./storage";
 import { db } from "./db";
-import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, type CombatLogEntry, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, shardEvents, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage, worldBosses, worldBossDamage, inventoryItems, playerSkills, casinoHistory, skillTreeNodes, playerModifiers, prestigeHistory, playerSnapshots, dimensionPortals, dimensionRuns } from "@shared/schema";
+import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, type CombatLogEntry, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, shardEvents, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage, worldBosses, worldBossDamage, inventoryItems, playerSkills, casinoHistory, skillTreeNodes, playerModifiers, prestigeHistory, playerSnapshots, dimensionPortals, dimensionRuns, armies, armyRaids } from "@shared/schema";
 import { ZONE_NPCS, getZoneNPC, calculateNPCStats, calculateNPCRewards } from "@shared/zone-npcs";
 import { z } from "zod";
 import type { Account, Event, Challenge, PlayerRace, PlayerGender } from "@shared/schema";
@@ -19374,6 +19374,292 @@ export async function registerRoutes(
       if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
       res.status(500).json({ error: "Failed to fuse skills" });
     }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════
+  // ARMY SYSTEM — Barracks, Recruitment, Training, Raids
+  // ══════════════════════════════════════════════════════════════════════
+
+  // GET army for a player (with upkeep deduction)
+  app.get("/api/accounts/:accountId/army", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.accountId);
+      if (!account) return res.status(404).json({ error: "Not found" });
+
+      const rows = await db.select().from(armies).where(eq(armies.accountId, req.params.accountId));
+
+      // Process upkeep
+      const { calcUpkeepOwed, calcDesertion, getSoldierDef, SOLDIER_DEFS } = await import("@shared/army-data");
+      const lastChecked = (account as any).armyLastCheckedAt ? new Date((account as any).armyLastCheckedAt) : new Date();
+      const troops = rows.map(r => ({ type: r.soldierType as any, count: r.count, level: r.level }));
+
+      if (troops.length > 0) {
+        const owed = calcUpkeepOwed(troops, lastChecked);
+        const gold = account.gold ?? 0;
+        if (owed > 0) {
+          if (gold >= owed) {
+            await storage.updateAccount(req.params.accountId, { gold: gold - owed } as any);
+          } else {
+            // Desertion
+            const shortfall = owed - gold;
+            const desertions = calcDesertion(troops, shortfall);
+            for (const [type, count] of Object.entries(desertions)) {
+              if (count > 0) {
+                const row = rows.find(r => r.soldierType === type);
+                if (row) {
+                  const newCount = Math.max(0, row.count - count);
+                  if (newCount === 0) {
+                    await db.delete(armies).where(and(eq(armies.accountId, req.params.accountId), eq(armies.soldierType, type)));
+                  } else {
+                    await db.update(armies).set({ count: newCount }).where(and(eq(armies.accountId, req.params.accountId), eq(armies.soldierType, type)));
+                  }
+                }
+              }
+            }
+            await storage.updateAccount(req.params.accountId, { gold: 0 } as any);
+          }
+          evictAccountCache(req.params.accountId);
+        }
+        await storage.updateAccount(req.params.accountId, { armyLastCheckedAt: new Date() } as any);
+      }
+
+      const freshRows = await db.select().from(armies).where(eq(armies.accountId, req.params.accountId));
+      res.json(freshRows);
+    } catch { res.status(500).json({ error: "Failed to fetch army" }); }
+  });
+
+  // POST recruit soldiers
+  app.post("/api/accounts/:accountId/army/recruit", async (req, res) => {
+    try {
+      const { type, count } = z.object({ type: z.string(), count: z.number().int().min(1).max(500) }).parse(req.body);
+      const account = await storage.getAccount(req.params.accountId);
+      if (!account) return res.status(404).json({ error: "Not found" });
+
+      const { getSoldierDef, ARMY_CAP_BY_BARRACKS_LEVEL, getArmyCap, SOLDIER_DEFS } = await import("@shared/army-data");
+      const def = SOLDIER_DEFS.find((s: any) => s.id === type);
+      if (!def) return res.status(400).json({ error: "Unknown soldier type" });
+
+      const barracksLevel = (account.baseRoomLevels as any)?.barracks ?? 0;
+      if (barracksLevel < def.unlockBarracksLevel) return res.status(400).json({ error: `Requires Barracks level ${def.unlockBarracksLevel}` });
+
+      const armyCap = getArmyCap(barracksLevel);
+      const currentRows = await db.select().from(armies).where(eq(armies.accountId, req.params.accountId));
+      const totalTroops = currentRows.reduce((s, r) => s + r.count, 0);
+      const canRecruit = Math.min(count, armyCap - totalTroops, type === "elite_guard" ? Math.max(0, 50 - (currentRows.find(r => r.soldierType === "elite_guard")?.count ?? 0)) : 9999);
+
+      if (canRecruit <= 0) return res.status(400).json({ error: "Army is at capacity" });
+
+      const totalCost = def.goldCost * canRecruit;
+      if ((account.gold ?? 0) < totalCost) return res.status(400).json({ error: `Not enough gold (need ${totalCost})` });
+
+      await storage.updateAccount(req.params.accountId, { gold: (account.gold ?? 0) - totalCost } as any);
+      evictAccountCache(req.params.accountId);
+
+      const existing = currentRows.find(r => r.soldierType === type);
+      if (existing) {
+        await db.update(armies).set({ count: existing.count + canRecruit }).where(and(eq(armies.accountId, req.params.accountId), eq(armies.soldierType, type)));
+      } else {
+        await db.insert(armies).values({ accountId: req.params.accountId, soldierType: type, count: canRecruit, level: 1 });
+      }
+
+      res.json({ message: `Recruited ${canRecruit} ${def.name} for ${totalCost.toLocaleString()} gold` });
+    } catch (e) {
+      if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
+      res.status(500).json({ error: "Failed to recruit" });
+    }
+  });
+
+  // POST train troops (level up a soldier type)
+  app.post("/api/accounts/:accountId/army/train", async (req, res) => {
+    try {
+      const { type } = z.object({ type: z.string() }).parse(req.body);
+      const account = await storage.getAccount(req.params.accountId);
+      if (!account) return res.status(404).json({ error: "Not found" });
+
+      const { getTrainingCost } = await import("@shared/army-data");
+      const row = await db.select().from(armies).where(and(eq(armies.accountId, req.params.accountId), eq(armies.soldierType, type))).then(r => r[0]);
+      if (!row || row.count === 0) return res.status(400).json({ error: "No troops of this type" });
+      if (row.level >= 10) return res.status(400).json({ error: "Already max level" });
+
+      const cost = getTrainingCost(type as any, row.level);
+      if ((account.gold ?? 0) < cost.gold) return res.status(400).json({ error: `Need ${cost.gold.toLocaleString()} gold` });
+      if ((account.trainingPoints ?? 0) < cost.tp) return res.status(400).json({ error: `Need ${cost.tp} Training Points` });
+
+      await storage.updateAccount(req.params.accountId, {
+        gold: (account.gold ?? 0) - cost.gold,
+        trainingPoints: (account.trainingPoints ?? 0) - cost.tp,
+      } as any);
+      evictAccountCache(req.params.accountId);
+      await db.update(armies).set({ level: row.level + 1 }).where(and(eq(armies.accountId, req.params.accountId), eq(armies.soldierType, type)));
+
+      res.json({ message: `${type} trained to level ${row.level + 1}!` });
+    } catch (e) {
+      if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
+      res.status(500).json({ error: "Failed to train" });
+    }
+  });
+
+  // GET raid targets (nearby-rank players without peace shield and with gold)
+  app.get("/api/army/raid-targets", async (req, res) => {
+    try {
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.query);
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Not found" });
+
+      const rankList = ["Novice","Apprentice","Initiate","Journeyman","Adept","Expert","Master","Grandmaster","Champion","Overlord","Sovereign","Ascendant","Legend","Mythic","Mythical Legend"];
+      const myRankIdx = rankList.indexOf(account.rank);
+      const nearby = rankList.slice(Math.max(0, myRankIdx - 2), Math.min(rankList.length, myRankIdx + 3));
+
+      const now = new Date();
+      const allAccounts = await db.select({
+        id: accounts.id, username: accounts.username, rank: accounts.rank,
+        gold: accounts.gold, baseTier: accounts.baseTier, baseRoomLevels: accounts.baseRoomLevels,
+        peaceShieldExpires: accounts.peaceShieldExpires,
+      }).from(accounts)
+        .where(ne(accounts.id, accountId))
+        .limit(50);
+
+      const eligible = allAccounts.filter(a => {
+        if (!nearby.includes(a.rank)) return false;
+        if (a.peaceShieldExpires && new Date(a.peaceShieldExpires) > now) return false;
+        if ((a.gold ?? 0) < 5000) return false;
+        return true;
+      }).slice(0, 10);
+
+      // Fetch their armies
+      const results = await Promise.all(eligible.map(async (a) => {
+        const armyRows = await db.select().from(armies).where(eq(armies.accountId, a.id));
+        const armySize: Record<string, number> = {};
+        for (const row of armyRows) armySize[row.soldierType] = row.count;
+        return {
+          ...a,
+          estimatedGold: Math.round((a.gold ?? 0) * 0.25),
+          armySize,
+          defenseLevel: (a.baseRoomLevels as any)?.defenses ?? 1,
+        };
+      }));
+
+      res.json(results);
+    } catch (e) {
+      if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
+      res.status(500).json({ error: "Failed to fetch targets" });
+    }
+  });
+
+  // POST launch a raid
+  app.post("/api/army/raid", async (req, res) => {
+    try {
+      const { attackerId, defenderId } = z.object({ attackerId: z.string(), defenderId: z.string() }).parse(req.body);
+      const [attacker, defender] = await Promise.all([storage.getAccount(attackerId), storage.getAccount(defenderId)]);
+      if (!attacker || !defender) return res.status(404).json({ error: "Account not found" });
+
+      // Peace shield check
+      const now = new Date();
+      if ((attacker as any).peaceShieldExpires && new Date((attacker as any).peaceShieldExpires) > now) {
+        return res.status(400).json({ error: "You are under a peace shield" });
+      }
+
+      const [atkArmyRows, defArmyRows] = await Promise.all([
+        db.select().from(armies).where(eq(armies.accountId, attackerId)),
+        db.select().from(armies).where(eq(armies.accountId, defenderId)),
+      ]);
+
+      if (atkArmyRows.length === 0 || atkArmyRows.every(r => r.count === 0)) {
+        return res.status(400).json({ error: "No troops available to raid" });
+      }
+
+      const atkTroops = atkArmyRows.filter(r => r.count > 0).map(r => ({ type: r.soldierType as any, count: r.count, level: r.level }));
+      const defTroops = defArmyRows.filter(r => r.count > 0).map(r => ({ type: r.soldierType as any, count: r.count, level: r.level }));
+
+      const { resolveRaid } = await import("@shared/army-data");
+      const atkStats = attacker.stats as any ?? { Str: 10, Int: 10, Luck: 10 };
+      const defStats = defender.stats as any ?? { Str: 10, Def: 10 };
+      const defDefenseLevel = (defender.baseRoomLevels as any)?.defenses ?? 1;
+
+      const result = resolveRaid(atkTroops, defTroops, atkStats, defStats, defender.gold ?? 0, defDefenseLevel);
+
+      // Save raid record
+      const [raid] = await db.insert(armyRaids).values({
+        attackerId, defenderId,
+        winner: result.winner,
+        attackerArmySnapshot: atkTroops,
+        defenderArmySnapshot: defTroops,
+        events: result.events,
+        attackerLosses: result.attackerLosses,
+        defenderLosses: result.defenderLosses,
+        goldLooted: result.goldLooted,
+        baseDamageDealt: result.baseDamageDealt,
+      }).returning();
+
+      // Apply losses to attacker's army
+      for (const [type, lost] of Object.entries(result.attackerLosses)) {
+        const row = atkArmyRows.find(r => r.soldierType === type);
+        if (row) {
+          const newCount = Math.max(0, row.count - lost);
+          if (newCount === 0) {
+            await db.delete(armies).where(and(eq(armies.accountId, attackerId), eq(armies.soldierType, type)));
+          } else {
+            await db.update(armies).set({ count: newCount }).where(and(eq(armies.accountId, attackerId), eq(armies.soldierType, type)));
+          }
+        }
+      }
+
+      // Apply gold transfer and peace shield to defender
+      if (result.goldLooted > 0) {
+        await storage.updateAccount(defenderId, { gold: Math.max(0, (defender.gold ?? 0) - result.goldLooted) } as any);
+        await storage.updateAccount(attackerId, { gold: (attacker.gold ?? 0) + result.goldLooted } as any);
+      }
+
+      // 8-hour peace shield for defender after being successfully raided
+      const shieldExpiry = new Date(Date.now() + 8 * 60 * 60 * 1000);
+      await storage.updateAccount(defenderId, { peaceShieldExpires: shieldExpiry } as any);
+
+      evictAccountCache(attackerId);
+      evictAccountCache(defenderId);
+
+      res.json({ ...result, raidId: raid.id });
+    } catch (e) {
+      if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
+      res.status(500).json({ error: "Failed to execute raid" });
+    }
+  });
+
+  // GET raid history for a player
+  app.get("/api/accounts/:accountId/raid-history", async (req, res) => {
+    try {
+      const [asAttacker, asDefender] = await Promise.all([
+        db.select({
+          id: armyRaids.id, attackerId: armyRaids.attackerId, defenderId: armyRaids.defenderId,
+          startedAt: armyRaids.startedAt, winner: armyRaids.winner, goldLooted: armyRaids.goldLooted,
+          baseDamageDealt: armyRaids.baseDamageDealt, events: armyRaids.events,
+          attackerLosses: armyRaids.attackerLosses, defenderLosses: armyRaids.defenderLosses,
+        }).from(armyRaids).where(eq(armyRaids.attackerId, req.params.accountId)).orderBy(armyRaids.startedAt).limit(20),
+        db.select({
+          id: armyRaids.id, attackerId: armyRaids.attackerId, defenderId: armyRaids.defenderId,
+          startedAt: armyRaids.startedAt, winner: armyRaids.winner, goldLooted: armyRaids.goldLooted,
+          baseDamageDealt: armyRaids.baseDamageDealt, events: armyRaids.events,
+          attackerLosses: armyRaids.attackerLosses, defenderLosses: armyRaids.defenderLosses,
+        }).from(armyRaids).where(eq(armyRaids.defenderId, req.params.accountId)).orderBy(armyRaids.startedAt).limit(20),
+      ]);
+
+      // Enrich with usernames
+      const all = [...asAttacker, ...asDefender].sort((a, b) =>
+        new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
+      ).slice(0, 30);
+
+      const userIds = [...new Set(all.flatMap(r => [r.attackerId, r.defenderId]))];
+      const users = await db.select({ id: accounts.id, username: accounts.username }).from(accounts).where(
+        userIds.reduce((q, id, i) => i === 0 ? eq(accounts.id, id) : q, eq(accounts.id, userIds[0]))
+      );
+      // Simple approach — just return with IDs, client already has their own username
+      const enriched = all.map(r => ({
+        ...r,
+        attackerUsername: r.attackerId === req.params.accountId ? "You" : r.attackerId.slice(0, 8),
+        defenderUsername: r.defenderId === req.params.accountId ? "You" : r.defenderId.slice(0, 8),
+      }));
+
+      res.json(enriched);
+    } catch { res.status(500).json({ error: "Failed to fetch history" }); }
   });
 
   // ══════════════════════════════════════════════════════════════════════

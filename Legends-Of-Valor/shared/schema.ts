@@ -338,6 +338,8 @@ export const accounts = pgTable("accounts", {
   reviveTokens: integer("revive_tokens").notNull().default(1),
   respawnLocation: text("respawn_location").notNull().default("base"),
   weaknessDebuffExpires: timestamp("weakness_debuff_expires"),
+  peaceShieldExpires: timestamp("peace_shield_expires"),
+  armyLastCheckedAt: timestamp("army_last_checked_at"),
   // V2: Base system
   baseTier: integer("base_tier").notNull().default(1), // Current base tier (1-5)
   baseSkin: text("base_skin").default("default"), // Cosmetic base skin
@@ -401,6 +403,29 @@ export const prestigeHistory = pgTable("prestige_history", {
   previousRank: text("previous_rank").notNull(),
   goldKept: bigint("gold_kept", { mode: "number" }).notNull().default(0),
   prestigedAt: timestamp("prestiged_at").notNull().defaultNow(),
+});
+
+export const armies = pgTable("armies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  accountId: varchar("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
+  soldierType: text("soldier_type").notNull(),
+  count: integer("count").notNull().default(0),
+  level: integer("level").notNull().default(1),
+});
+
+export const armyRaids = pgTable("army_raids", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  attackerId: varchar("attacker_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
+  defenderId: varchar("defender_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  winner: text("winner").notNull().default("defender"),
+  attackerArmySnapshot: jsonb("attacker_army_snapshot").notNull().default([]).$type<any[]>(),
+  defenderArmySnapshot: jsonb("defender_army_snapshot").notNull().default([]).$type<any[]>(),
+  events: jsonb("events").notNull().default([]).$type<any[]>(),
+  attackerLosses: jsonb("attacker_losses").notNull().default({}).$type<Record<string,number>>(),
+  defenderLosses: jsonb("defender_losses").notNull().default({}).$type<Record<string,number>>(),
+  goldLooted: bigint("gold_looted", { mode: "number" }).notNull().default(0),
+  baseDamageDealt: integer("base_damage_dealt").notNull().default(0),
 });
 
 export const dimensionPortals = pgTable("dimension_portals", {

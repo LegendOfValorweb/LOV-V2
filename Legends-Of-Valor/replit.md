@@ -457,8 +457,75 @@ Three-tab page for meta-progression beyond Mythical Legend rank:
 ### Navigation
 - World Map: "Portal Nexus" zone (hard, center-right at 62, 52)
 
+## PHASE 18: Army System (May 2026)
+
+### New DB tables
+- `armies` — one row per soldier type per player (type, count, level)
+- `army_raids` — full raid history with army snapshots, events, losses, loot
+
+### New account fields
+- `peaceShieldExpires` — timestamp; protects from raids for 8 hours after being attacked
+- `armyLastCheckedAt` — used for upkeep calculation
+
+### Army System — `/barracks` (War Front on World Map)
+
+**Concept:** Build a Barracks at your base (Tier 5+), recruit soldiers, level them up, and raid other players' bases to steal their gold. Defenders get an 8-hour peace shield after each successful raid.
+
+**Barracks Room (Base Integration):**
+- Unlocks at Base Tier 5 (Castle) — reduced from Tier 7
+- Level 1-5 sets army cap: Lv1=60, Lv2=120, Lv3=200, Lv4=300, Lv5=400 soldiers
+- Base dialog shows troop types + "Open Barracks →" button linking to `/barracks`
+
+**5 Soldier Types (Rock-Paper-Scissors system):**
+
+| Type | Icon | Beats | Weak to | Gold/unit | Upkeep/hr | Unlock |
+|---|---|---|---|---|---|---|
+| Infantry | 🗡️ | Cavalry (1.5×) | Archers (0.65×) | 200 | 2 | Barracks Lv1 |
+| Archers | 🏹 | Infantry (1.5×) | Cavalry (0.65×) | 300 | 3 | Barracks Lv1 |
+| Cavalry | 🐴 | Archers (1.5×) | Infantry (0.65×) | 500 | 5 | Barracks Lv2 |
+| Siege Engines | 💣 | Defenses (2.5×) | Inf/Cav (0.65×) | 1,200 | 12 | Barracks Lv3 |
+| Elite Guard | ⚔️ | No weakness | No weakness | 5,000 | 40 | Barracks Lv5, max 50 |
+
+**Troop Training (levels 1-10):**
+- Each soldier type can be leveled 1-10 independently
+- Costs scale quadratically: `base × level²` gold + `base/100 × level²` Training Points
+- Each level increases ATK, DEF, and HP
+
+**Upkeep & Desertion:**
+- Soldiers require gold upkeep per hour (checked each time army page is loaded)
+- If you can't afford upkeep: cheapest troops desert first until the bill is covered
+- Max upkeep charge per load: 24 hours of back-pay
+
+**Raid System:**
+- Target browser: players within ±2 ranks of yours, with gold > 5,000, no peace shield
+- Raid resolves instantly: 3 combat waves with full event log
+- RPS counters applied per type matchup
+- Attacker's Str/Luck provides hero ATK bonus to army
+- Defender's Defense room level = passive tower troops (reduced 65% if attacker has Siege)
+- Victory: steal 25% of defender's gold; defender gets 8-hour peace shield
+- Defeat: no loot; attacker still takes losses
+- All losses applied immediately to both armies after battle
+
+**API Routes:**
+- `GET /api/accounts/:id/army` — get army (runs upkeep check on load)
+- `POST /api/accounts/:id/army/recruit` — recruit soldiers (gold cost, cap enforced)
+- `POST /api/accounts/:id/army/train` — level up a troop type (gold + TP)
+- `GET /api/army/raid-targets?accountId=` — nearby-rank targets without peace shield
+- `POST /api/army/raid` — execute raid (full auto-resolution, returns events)
+- `GET /api/accounts/:id/raid-history` — past raids as attacker and defender
+
+**Frontend features:**
+- **My Army tab**: recruit widgets with RPS counter tags, per-type count display, upkeep readout
+- **Train Troops tab**: level-up bars, current vs next-level stats, gold+TP costs
+- **Launch Raid tab**: enemy base cards showing army composition + defense level, raid button
+- **Battle Reports tab**: color-coded wins/losses, per-wave event log, gold gained/lost
+
+### Navigation
+- World Map: "War Front" zone (hard, PvP, center at 48, 68)
+
 ## Recent Changes
 
+- May 2026: Army system (5 soldier types, RPS combat, raids, upkeep, peace shields)
 - May 2026: Alternate Dimensions (7 realms, dimension-specific combat rules, portals, 5-encounter runs)
 - May 2026: Shadow Echoes system (AI player clones, strategy profiles, auto-combat simulator)
 - May 2026: Prestige system (10 tiers, permanent bonuses, shop, combat integration)

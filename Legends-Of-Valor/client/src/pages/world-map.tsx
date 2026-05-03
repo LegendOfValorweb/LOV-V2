@@ -142,6 +142,17 @@ const zones: Zone[] = [
     route: "/skill-workshop",
   },
   {
+    id: "warfront",
+    name: "War Front",
+    description: "The staging ground for army operations. Raise soldiers, manage your war camp, and launch raids against rival player bases for massive gold rewards.",
+    landmark: "dungeon",
+    difficulty: "hard",
+    pvpEnabled: true,
+    activities: ["Recruit Troops", "Train Army", "Raid Bases", "Battle Reports"],
+    coordinates: { x: 48, y: 68 },
+    route: "/barracks",
+  },
+  {
     id: "portal-nexus",
     name: "Portal Nexus",
     description: "A convergence point where dimensional rifts tear open. Brave adventurers enter alternate dimensions with different physics, enemies, and rewards — if they survive.",

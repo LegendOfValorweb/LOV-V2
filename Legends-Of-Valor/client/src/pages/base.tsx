@@ -232,7 +232,7 @@ const ALL_BUILDINGS: BuildingDef[] = [
   { id: "raids", name: "War Room", icon: <Target className="w-6 h-6" />, color: "from-red-800 to-red-900", unlockTier: 1, description: "Manage NPC raids." },
   { id: "events", name: "Events Hall", icon: <Calendar className="w-6 h-6" />, color: "from-pink-700 to-fuchsia-800", unlockTier: 1, description: "Weekly events & visitors." },
   { id: "alchemy_lab", name: "Alchemy Lab", icon: <Sparkles className="w-6 h-6" />, color: "from-teal-600 to-cyan-700", unlockTier: 6, description: "Brew potions & elixirs." },
-  { id: "barracks", name: "Barracks", icon: <Users className="w-6 h-6" />, color: "from-indigo-700 to-blue-800", unlockTier: 7, description: "Train elite soldiers." },
+  { id: "barracks", name: "Barracks", icon: <Users className="w-6 h-6" />, color: "from-indigo-700 to-blue-800", unlockTier: 5, description: "Raise armies and raid other players." },
   { id: "sanctum", name: "Sanctum", icon: <Crown className="w-6 h-6" />, color: "from-yellow-500 to-amber-600", unlockTier: 8, description: "Transcendent power chamber." },
 ];
 
@@ -2005,55 +2005,54 @@ export default function Base() {
               <Users className="w-5 h-5 text-indigo-400" />
               Barracks
             </DialogTitle>
-            <DialogDescription>Train elite soldiers and commanders to fight in your name.</DialogDescription>
+            <DialogDescription>Raise armies of Infantry, Archers, Cavalry, Siege Engines, and Elite Guards. Raid other players' bases for gold.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            {currentTier >= 7 ? (
+            {currentTier >= 5 ? (
               <>
                 {(() => {
-                  const room = baseRooms.find(r => r.id === "barracks")!;
                   const level = getRoomLevel("barracks");
                   const maxLevel = ROOM_MAX_LEVEL_BY_TIER[currentTier] || 3;
-                  const progress = (level / maxLevel) * 100;
                   const upgradeCost = ROOM_UPGRADE_BASE_COST["barracks"] * level;
+                  const armyCap = [0,60,120,200,300,400][Math.min(level,5)];
                   return (
                     <>
                       <div className="flex items-center justify-between">
                         <Badge>Level {level} / {maxLevel}</Badge>
-                        <span className="text-sm text-muted-foreground">Combat Bonus: +{level * 3}%</span>
+                        <span className="text-sm text-muted-foreground">Army cap: {armyCap} soldiers</span>
                       </div>
-                      <Progress value={progress} className="h-2" />
-                      <div className="space-y-1">
-                        {room.benefits.map((b, i) => (
-                          <div key={i} className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Sparkles className="w-3 h-3 text-indigo-400" />{b}
+                      <Progress value={(level / maxLevel) * 100} className="h-2" />
+                      <div className="grid grid-cols-5 gap-2 py-1">
+                        {[["🗡️","Infantry"],["🏹","Archers"],["🐴","Cavalry"],["💣","Siege"],["⚔️","Elite"]].map(([icon,name]) => (
+                          <div key={name} className="text-center bg-gray-800/40 rounded p-2">
+                            <div className="text-xl">{icon}</div>
+                            <div className="text-xs text-gray-400">{name}</div>
                           </div>
                         ))}
                       </div>
-                      <Button
-                        className="w-full"
-                        disabled={level >= maxLevel}
-                        onClick={() => handleUpgradeRoom("barracks")}
-                      >
-                        <Coins className="w-4 h-4 mr-2" />
-                        {level >= maxLevel ? "Max Level" : `Upgrade (${upgradeCost.toLocaleString()} Gold)`}
-                      </Button>
+                      <div className="text-xs text-gray-400 space-y-1">
+                        <p>⚔️ Rock-paper-scissors combat: Infantry &gt; Cavalry &gt; Archers &gt; Infantry</p>
+                        <p>💣 Siege engines destroy base defenses (2× bonus)</p>
+                        <p>💰 Win raids to steal 25% of enemy gold · 🛡️ Defenders get 8-hour peace shield</p>
+                        <p>🪙 Soldiers require gold upkeep — they desert if you run out</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          className="flex-1"
+                          disabled={level >= maxLevel}
+                          onClick={() => handleUpgradeRoom("barracks")}
+                        >
+                          <Coins className="w-4 h-4 mr-2" />
+                          {level >= maxLevel ? "Max Level" : `Upgrade (${upgradeCost.toLocaleString()} Gold)`}
+                        </Button>
+                        <Button variant="secondary" className="flex-1" onClick={() => { setOpenBuilding(null); window.location.href = "/barracks"; }}>
+                          <Users className="w-4 h-4 mr-2" />
+                          Open Barracks →
+                        </Button>
+                      </div>
                     </>
                   );
                 })()}
-                <div className="border-t border-border pt-4">
-                  <h4 className="text-sm font-semibold text-muted-foreground mb-3">GARRISON STATS</h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
-                      <p className="text-xs text-muted-foreground">Combat Damage Bonus</p>
-                      <p className="text-lg font-bold text-indigo-400">+{getRoomLevel("barracks") * 3}%</p>
-                    </div>
-                    <div className="p-3 rounded-lg bg-secondary/50">
-                      <p className="text-xs text-muted-foreground">Elite Soldiers</p>
-                      <p className="text-lg font-bold">{Math.max(0, getRoomLevel("barracks") - 4) * 5}</p>
-                    </div>
-                  </div>
-                </div>
               </>
             ) : (
               <div className="text-center text-muted-foreground py-6">
