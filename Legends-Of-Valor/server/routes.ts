@@ -81,7 +81,18 @@ import {
   type Combatant, 
   type CombatStats,
   type ElementalAffinity,
-  type DeathPenaltyResult
+  type DeathPenaltyResult,
+  RACE_ELEMENT,
+  rollTieredCrit,
+  getComboMultiplier,
+  applyPvPStatusEffect,
+  tickPvPStatusEffects,
+  checkPvPReaction,
+  calculatePvPDamage,
+  executePvPRaceAbility,
+  getPvPAbilityInfo,
+  type PvPStatusEffect,
+  type PvPReaction,
 } from "./combat-engine";
 import { craftItem, socketGem } from "./crafting-system";
 import { 
@@ -2666,6 +2677,8 @@ export async function registerRoutes(
       };
       const challengerHP = calcHP(challengerStats);
       const challengedHP = calcHP(challengedStats);
+      const challengerRace = challenger.race || "human";
+      const challengedRace = challenged.race || "human";
       const initialCombatState = {
         round: 1,
         player1: {
@@ -2674,6 +2687,14 @@ export async function registerRoutes(
           hp: challengerHP,
           maxHp: challengerHP,
           action: null,
+          race: challengerRace,
+          gender: challenger.gender,
+          portrait: (challenger as any).portrait,
+          element: RACE_ELEMENT[challengerRace] || "Light",
+          statusEffects: [] as PvPStatusEffect[],
+          comboCount: 0,
+          abilityCooldown: 0,
+          activeElement: undefined as string | undefined,
         },
         player2: {
           id: challenged.id,
@@ -2681,8 +2702,16 @@ export async function registerRoutes(
           hp: challengedHP,
           maxHp: challengedHP,
           action: null,
+          race: challengedRace,
+          gender: challenged.gender,
+          portrait: (challenged as any).portrait,
+          element: RACE_ELEMENT[challengedRace] || "Light",
+          statusEffects: [] as PvPStatusEffect[],
+          comboCount: 0,
+          abilityCooldown: 0,
+          activeElement: undefined as string | undefined,
         },
-        log: ["Combat has begun!"],
+        log: ["Combat has begun! Use your race ability for powerful effects!"],
         status: "waiting",
         challengerAction: null,
         challengedAction: null,
@@ -2781,7 +2810,7 @@ export async function registerRoutes(
       const schema = z.object({
         playerId: z.string().optional(),
         accountId: z.string().optional(),
-        action: z.enum(["attack", "defend", "dodge", "trick"]),
+        action: z.enum(["attack", "defend", "dodge", "trick", "ability"]),
       }).refine(data => data.playerId || data.accountId, {
         message: "Either playerId or accountId is required"
       });
@@ -2977,85 +3006,252 @@ export async function registerRoutes(
         
         const challengerStats = await getTotalCombatStats(challenger);
         const challengedStats = await getTotalCombatStats(challenged);
-        
-        // Calculate damage based on actions
-        const resolveCombat = (attackerStats: any, defenderStats: any, attackerAction: string, defenderAction: string) => {
+
+        // ── Backward-compat: ensure new fields exist on existing states ──
+        if (!combatState.player1.statusEffects) combatState.player1.statusEffects = [];
+        if (!combatState.player2.statusEffects) combatState.player2.statusEffects = [];
+        if (combatState.player1.comboCount === undefined) combatState.player1.comboCount = 0;
+        if (combatState.player2.comboCount === undefined) combatState.player2.comboCount = 0;
+        if (combatState.player1.abilityCooldown === undefined) combatState.player1.abilityCooldown = 0;
+        if (combatState.player2.abilityCooldown === undefined) combatState.player2.abilityCooldown = 0;
+        if (!combatState.player1.element) combatState.player1.element = RACE_ELEMENT[combatState.player1.race || "human"] || "Light";
+        if (!combatState.player2.element) combatState.player2.element = RACE_ELEMENT[combatState.player2.race || "human"] || "Light";
+
+        // ── Get race passives for both players ────────────────────────────
+        const [cExtras, dExtras] = await Promise.all([
+          getPlayerCombatExtras(challenger.id, challenger.equippedRacePassive),
+          getPlayerCombatExtras(challenged.id, challenged.equippedRacePassive),
+        ]);
+
+        const p1 = combatState.player1;
+        const p2 = combatState.player2;
+        const p1Action = combatState.challengerAction as string;
+        const p2Action = combatState.challengedAction as string;
+
+        // ── Helper: resolve one side of the round ─────────────────────────
+        const resolveOneSide = (
+          attacker: typeof p1, defender: typeof p2,
+          attackerStats: typeof challengerStats, defenderStats: typeof challengedStats,
+          attackerAction: string, defenderAction: string,
+          aExtras: typeof cExtras, dExtras2: typeof dExtras,
+        ) => {
+          const roundLog: string[] = [];
           let damage = 0;
-          let message = "";
-          
-          // Critical hit check (Luck-based)
-          const critChance = Math.min((attackerStats.Luck || 10) / 100, 0.5);
-          const isCrit = Math.random() < critChance;
-          const critMult = isCrit ? 1.5 : 1;
-          const str = attackerStats.Str || 10;
-          const int = attackerStats.Int || 10;
-          const spd = attackerStats.Spd || 10;
-          const defStat = defenderStats.Def || 10;
-          const defSpd = defenderStats.Spd || 10;
-          
-          if (attackerAction === "attack") {
-            if (defenderAction === "defend") {
-              damage = Math.max(1, (str - defStat) * critMult);
-              message = `Attack vs Defend: ${Math.round(damage)} damage${isCrit ? " (CRIT!)" : ""}`;
-            } else if (defenderAction === "dodge") {
-              const dodgeChance = defSpd / (str + defSpd);
-              if (Math.random() < dodgeChance) {
-                damage = 0;
-                message = "Attack vs Dodge: Missed!";
-              } else {
-                damage = str * critMult;
-                message = `Attack vs Dodge: ${Math.round(damage)} damage${isCrit ? " (CRIT!)" : ""}`;
-              }
-            } else if (defenderAction === "trick") {
-              damage = str * 1.2 * critMult;
-              message = `Attack beats Trick: ${Math.round(damage)} damage${isCrit ? " (CRIT!)" : ""}`;
-            } else {
-              damage = str * critMult;
-              message = `Attack: ${Math.round(damage)} damage${isCrit ? " (CRIT!)" : ""}`;
-            }
-          } else if (attackerAction === "trick") {
-            if (defenderAction === "defend") {
-              damage = int * 1.2 * critMult;
-              message = `Trick beats Defend: ${Math.round(damage)} damage${isCrit ? " (CRIT!)" : ""}`;
-            } else if (defenderAction === "dodge") {
-              damage = int * 0.8 * critMult;
-              message = `Trick vs Dodge: ${Math.round(damage)} damage${isCrit ? " (CRIT!)" : ""}`;
-            } else if (defenderAction === "attack") {
-              damage = 0;
-              message = "Trick loses to Attack";
-            } else {
-              damage = int * 0.5 * critMult;
-              message = `Trick vs Trick: ${Math.round(damage)} damage${isCrit ? " (CRIT!)" : ""}`;
-            }
-          } else if (attackerAction === "dodge") {
-            if (defenderAction === "trick") {
-              damage = spd * 0.5 * critMult;
-              message = `Dodge counters Trick: ${Math.round(damage)} damage${isCrit ? " (CRIT!)" : ""}`;
-            } else {
-              damage = 0;
-              message = "Dodging...";
-            }
-          } else if (attackerAction === "defend") {
-            damage = 0;
-            message = "Defending...";
+          let selfHeal = 0;
+          let selfDamage = 0;
+          let lifeSteal = 0;
+          let reactSelfHeal = 0;
+          const newDefenderEffects: PvPStatusEffect[] = [];
+          const newAttackerEffects: PvPStatusEffect[] = [];
+          let cleanseAttacker = false;
+
+          // Check if attacker is stunned — stunned players deal no damage
+          const isStunned = (attacker.statusEffects as PvPStatusEffect[]).some(e => e.type === "stun");
+          if (isStunned) {
+            roundLog.push(`💫 ${attacker.name} is stunned and cannot act!`);
+            return { damage: 0, selfHeal: 0, selfDamage: 0, lifeSteal: 0, reactSelfHeal: 0,
+              newDefenderEffects: [], newAttackerEffects: [], cleanseAttacker: false, roundLog, comboReset: true };
           }
-          
-          return { damage: Math.round(damage), message };
+
+          if (attackerAction === "ability") {
+            // ── Race Active Ability ────────────────────────────────────────
+            if ((attacker.abilityCooldown || 0) > 0) {
+              roundLog.push(`${attacker.name}'s ability is on cooldown (${attacker.abilityCooldown} rounds)!`);
+              return { damage: 0, selfHeal: 0, selfDamage: 0, lifeSteal: 0, reactSelfHeal: 0,
+                newDefenderEffects: [], newAttackerEffects: [], cleanseAttacker: false, roundLog, comboReset: false };
+            }
+            const abilityResult = executePvPRaceAbility(
+              attacker.race || "human",
+              attacker.name, defender.name,
+              defender.maxHp, attacker.maxHp,
+              { Str: attackerStats.Str, Def: attackerStats.Def, Spd: attackerStats.Spd, Int: attackerStats.Int, Luck: attackerStats.Luck },
+              { Str: defenderStats.Str, Def: defenderStats.Def, Spd: defenderStats.Spd, Int: defenderStats.Int, Luck: defenderStats.Luck },
+            );
+            damage = Math.max(0, abilityResult.damage - Math.floor(defenderStats.Def * 0.2));
+            selfHeal = abilityResult.selfHeal;
+            selfDamage = abilityResult.selfDamage;
+            cleanseAttacker = abilityResult.cleanseAttacker;
+            newDefenderEffects.push(...abilityResult.defenderEffects.map(e => ({ ...e, source: `${attacker.name}'s ability` })));
+            newAttackerEffects.push(...abilityResult.attackerEffects.map(e => ({ ...e, source: `${attacker.name}'s ability` })));
+            roundLog.push(abilityResult.message);
+            attacker.abilityCooldown = abilityResult.cooldown;
+            // Apply element to defender for future reactions
+            defender.activeElement = attacker.element;
+          } else {
+            // ── Standard action ───────────────────────────────────────────
+            // Action-counter matchup multiplier
+            let actionMult = 1.0;
+            let dodged = false;
+            if (attackerAction === "attack") {
+              if (defenderAction === "defend") { actionMult = 0.5; }
+              else if (defenderAction === "dodge") {
+                const isSlowed = (defender.statusEffects as PvPStatusEffect[]).some(e => e.type === "slow");
+                const effSpd = isSlowed ? Math.floor(defenderStats.Spd * 0.5) : defenderStats.Spd;
+                const dodgeChance = Math.min(0.70, effSpd / (attackerStats.Str + effSpd) + (aExtras.raceDodgeBonus || 0));
+                if (Math.random() < dodgeChance) { dodged = true; actionMult = 0; }
+                else { actionMult = 1.0; }
+              } else if (defenderAction === "trick") { actionMult = 1.2; }
+            } else if (attackerAction === "trick") {
+              if (defenderAction === "defend")    { actionMult = 1.2; }
+              else if (defenderAction === "dodge") { actionMult = 0.8; }
+              else if (defenderAction === "attack") { actionMult = 0; roundLog.push("Trick countered by Attack!"); }
+              else { actionMult = 0.5; }
+            } else if (attackerAction === "dodge") {
+              if (defenderAction === "trick") { actionMult = 0.6; }
+              else { actionMult = 0; }
+            } else if (attackerAction === "defend") {
+              actionMult = 0;
+            }
+
+            if (dodged) {
+              roundLog.push(`${defender.name} dodges the attack!`);
+            } else if (actionMult > 0) {
+              // Use calculatePvPDamage
+              const dmgResult = calculatePvPDamage(
+                attacker.name, attacker.element,
+                attacker.statusEffects as PvPStatusEffect[],
+                attacker.comboCount || 0,
+                attacker.maxHp,
+                defender.activeElement, // primed element on defender
+                defender.hp, defender.maxHp,
+                defender.statusEffects as PvPStatusEffect[],
+                { Str: Math.floor(attackerStats.Str * actionMult), Def: attackerStats.Def, Spd: attackerStats.Spd, Int: Math.floor(attackerStats.Int * actionMult), Luck: attackerStats.Luck },
+                { Str: defenderStats.Str, Def: defenderStats.Def, Spd: defenderStats.Spd, Int: defenderStats.Int, Luck: defenderStats.Luck },
+                attackerAction,
+                aExtras.raceCritBonus,
+                aExtras.raceLifeStealPct,
+                aExtras.raceDamageReduction,
+                aExtras.raceBonusDamagePct,
+              );
+
+              if (dmgResult.missed) {
+                roundLog.push(...dmgResult.logParts);
+              } else {
+                damage = dmgResult.finalDamage;
+                lifeSteal = dmgResult.lifeSteal;
+                reactSelfHeal = dmgResult.reactSelfHeal;
+                roundLog.push(...dmgResult.logParts);
+
+                // Apply reaction effects to defender
+                if (dmgResult.reaction) {
+                  newDefenderEffects.push(...dmgResult.reaction.defenderEffects.map(e => ({
+                    ...e, source: dmgResult.reaction!.name
+                  })));
+                  newAttackerEffects.push(...dmgResult.reaction.attackerEffects.map(e => ({
+                    ...e, source: dmgResult.reaction!.name
+                  })));
+                  // Clear defender's primed element after reaction
+                  defender.activeElement = undefined;
+                } else {
+                  // Prime defender with attacker's element for future reaction
+                  defender.activeElement = attacker.element;
+                }
+
+                // Thorns damage
+                const thornsDmg = Math.floor(damage * (dExtras2.raceThornsPct || 0));
+                if (thornsDmg > 0) {
+                  selfDamage += thornsDmg;
+                  roundLog.push(`🌿 ${defender.name}'s thorns reflect ${thornsDmg}`);
+                }
+
+                // Counter-attack chance
+                if ((dExtras2.raceCounterChance || 0) > 0 && Math.random() < dExtras2.raceCounterChance) {
+                  const counterDmg = Math.floor(defenderStats.Str * 0.3);
+                  selfDamage += counterDmg;
+                  roundLog.push(`⚔️ ${defender.name} counters for ${counterDmg}!`);
+                }
+              }
+            }
+          }
+
+          // Combo tracking
+          const didHit = damage > 0;
+          const comboReset = !didHit || (attackerAction !== "attack" && attackerAction !== "ability");
+          if (attackerAction === "attack" && didHit) {
+            attacker.comboCount = Math.min(5, (attacker.comboCount || 0) + 1);
+          } else if (attackerAction !== "ability") {
+            attacker.comboCount = 0;
+          }
+
+          return { damage, selfHeal, selfDamage, lifeSteal, reactSelfHeal,
+            newDefenderEffects, newAttackerEffects, cleanseAttacker, roundLog, comboReset };
         };
-        
-        const challengerResult = resolveCombat(challengerStats, challengedStats, combatState.challengerAction, combatState.challengedAction);
-        const challengedResult = resolveCombat(challengedStats, challengerStats, combatState.challengedAction, combatState.challengerAction);
-        
-        // Update HP in player1/player2 format
-        if (combatState.player1) {
-          combatState.player1.hp -= challengedResult.damage;
+
+        // ── Resolve both sides simultaneously ─────────────────────────────
+        const r1 = resolveOneSide(p1, p2, challengerStats, challengedStats, p1Action, p2Action, cExtras, dExtras);
+        const r2 = resolveOneSide(p2, p1, challengedStats, challengerStats, p2Action, p1Action, dExtras, cExtras);
+
+        // ── Apply status effects from this round ──────────────────────────
+        for (const fx of r1.newDefenderEffects) {
+          p2.statusEffects = applyPvPStatusEffect(p2.statusEffects as PvPStatusEffect[], fx);
         }
-        if (combatState.player2) {
-          combatState.player2.hp -= challengerResult.damage;
+        for (const fx of r1.newAttackerEffects) {
+          p1.statusEffects = applyPvPStatusEffect(p1.statusEffects as PvPStatusEffect[], fx);
         }
-        
-        // Add round to log
-        const logEntry = `Round ${combatState.round}: ${combatState.player1?.name || 'Challenger'} used ${combatState.challengerAction} (${challengerResult.message}), ${combatState.player2?.name || 'Challenged'} used ${combatState.challengedAction} (${challengedResult.message})`;
+        for (const fx of r2.newDefenderEffects) {
+          p1.statusEffects = applyPvPStatusEffect(p1.statusEffects as PvPStatusEffect[], fx);
+        }
+        for (const fx of r2.newAttackerEffects) {
+          p2.statusEffects = applyPvPStatusEffect(p2.statusEffects as PvPStatusEffect[], fx);
+        }
+        if (r1.cleanseAttacker) {
+          p1.statusEffects = (p1.statusEffects as PvPStatusEffect[]).filter(e =>
+            !["burn","poison","bleed","stun","slow","blind","weakness"].includes(e.type)
+          );
+        }
+        if (r2.cleanseAttacker) {
+          p2.statusEffects = (p2.statusEffects as PvPStatusEffect[]).filter(e =>
+            !["burn","poison","bleed","stun","slow","blind","weakness"].includes(e.type)
+          );
+        }
+
+        // ── Tick end-of-round status effects ──────────────────────────────
+        const tick1 = tickPvPStatusEffects(p1.name, p1.maxHp, p1.statusEffects as PvPStatusEffect[]);
+        const tick2 = tickPvPStatusEffects(p2.name, p2.maxHp, p2.statusEffects as PvPStatusEffect[]);
+        p1.statusEffects = tick1.updatedEffects;
+        p2.statusEffects = tick2.updatedEffects;
+
+        // ── Apply all HP changes ───────────────────────────────────────────
+        // p1 loses HP from: r2 attack, DoTs, r1 self-damage
+        // p1 gains HP from: r1 life-steal, r1 reaction-heal, r1 self-heal (ability), tick regen
+        p1.hp = Math.max(0, Math.min(p1.maxHp,
+          p1.hp
+            - r2.damage
+            - tick1.dotDamage
+            + tick1.healAmount
+            + (r1.lifeSteal || 0)
+            + (r1.reactSelfHeal || 0)
+            + (r1.selfHeal || 0)
+            - (r1.selfDamage || 0)
+        ));
+        // p2 loses HP from: r1 attack, DoTs, r2 self-damage
+        // p2 gains HP from: r2 life-steal, r2 reaction-heal, r2 self-heal (ability), tick regen
+        p2.hp = Math.max(0, Math.min(p2.maxHp,
+          p2.hp
+            - r1.damage
+            - tick2.dotDamage
+            + tick2.healAmount
+            + (r2.lifeSteal || 0)
+            + (r2.reactSelfHeal || 0)
+            + (r2.selfHeal || 0)
+            - (r2.selfDamage || 0)
+        ));
+
+        // ── Tick ability cooldowns ─────────────────────────────────────────
+        if ((p1.abilityCooldown || 0) > 0 && p1Action !== "ability") p1.abilityCooldown = Math.max(0, (p1.abilityCooldown || 0) - 1);
+        if ((p2.abilityCooldown || 0) > 0 && p2Action !== "ability") p2.abilityCooldown = Math.max(0, (p2.abilityCooldown || 0) - 1);
+
+        // ── Build round log entry ─────────────────────────────────────────
+        const allLogParts = [
+          ...r1.roundLog.map(s => `  ${s}`),
+          ...r2.roundLog.map(s => `  ${s}`),
+          ...tick1.log,
+          ...tick2.log,
+        ].filter(Boolean);
+        const logEntry = [
+          `Round ${combatState.round}: ${p1.name} → ${p1Action} | ${p2.name} → ${p2Action}`,
+          ...allLogParts,
+        ].join(" · ");
         if (Array.isArray(combatState.log)) {
           combatState.log.push(logEntry);
         }
@@ -3229,6 +3425,8 @@ export async function registerRoutes(
           };
           const challengerHP = calcHP(challenger.stats as any);
           const challengedHP = calcHP(challenged.stats as any);
+          const cRace = challenger.race || "human";
+          const dRace = challenged.race || "human";
           const initialCombatState = {
             round: 1,
             player1: {
@@ -3237,6 +3435,14 @@ export async function registerRoutes(
               hp: challengerHP,
               maxHp: challengerHP,
               action: null,
+              race: cRace,
+              gender: challenger.gender,
+              portrait: (challenger as any).portrait,
+              element: RACE_ELEMENT[cRace] || "Light",
+              statusEffects: [] as PvPStatusEffect[],
+              comboCount: 0,
+              abilityCooldown: 0,
+              activeElement: undefined as string | undefined,
             },
             player2: {
               id: challenged.id,
@@ -3244,8 +3450,16 @@ export async function registerRoutes(
               hp: challengedHP,
               maxHp: challengedHP,
               action: null,
+              race: dRace,
+              gender: challenged.gender,
+              portrait: (challenged as any).portrait,
+              element: RACE_ELEMENT[dRace] || "Light",
+              statusEffects: [] as PvPStatusEffect[],
+              comboCount: 0,
+              abilityCooldown: 0,
+              activeElement: undefined as string | undefined,
             },
-            log: ["Combat has begun!"],
+            log: ["Combat has begun! Use your race ability for powerful effects!"],
             status: "waiting",
             challengerAction: null,
             challengedAction: null,

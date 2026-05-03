@@ -42,10 +42,18 @@ Legends-Of-Valor/
 - 15 ranks: Novice → Mythical Legend with quintillion-safe power tiers
 
 ### PHASE 2: Combat System
-- V2 turn-based combat with Attack/Defend/Trick/Dodge actions
+- V2 turn-based PvP combat with Attack/Defend/Trick/Dodge/Ability (5 actions)
 - Initiative system based on Speed stat
-- Damage, defense, critical hit, and dodge mechanics
-- Elemental stacking (x2 for 2 elements, x5 for 3+)
+- **Tiered critical hits**: Normal (1.5×), Heavy (2.0×), Perfect (2.5×) — Luck + race bonus
+- **Combo chain system**: Up to 5× consecutive attacks, each adding +12% damage per stack
+- **Elemental reactions**: 20+ unique reactions when elements clash (e.g. Fire+Water=Steam Burst, Dark+Light=Void Collapse)
+- **Status effect stacking**: Burn (3 stacks), Poison (5), Bleed (3) with max-HP-scaling DoT; Stun, Slow, Blind, Empower, Shield, Regen
+- **14 unique race active abilities** with per-race cooldowns (3–5 rounds):
+  - Human: Adaptability, Elf: Arcane Shot, Dwarf: Stone Fortress, Orc: Blood Frenzy
+  - Beastfolk: Savage Lunge, Mystic: Nature's Wrath, Fae: Mirror Veil, Elemental: Elemental Surge
+  - Undead: Necrotic Drain, Demon: Hellgate, Draconic: Dragon's Roar, Celestial: Divine Grace
+  - Aquatic: Tidal Surge, Titan: Earthshatter
+- Race passives (critBonus, lifeSteal, thorns, counter-attack, damage reduction) fully applied in PvP
 - Death/revival mechanics with PvP drops and respawn
 
 ### PHASE 3: Pet/Bird/Fish Systems

@@ -1669,3 +1669,684 @@ export function getRaceActiveSpellInfo(activeSkillId: string | null | undefined,
     return null;
   }
 }
+
+// ================================================================
+// PVP COMBAT EXPANSION — Tiered Crits, Combos, Elemental Reactions,
+// Status Effect Stacking, and Unique Race Active Abilities
+// ================================================================
+
+// ─── Race → Primary Element mapping ─────────────────────────────
+export const RACE_ELEMENT: Record<string, string> = {
+  human:     "Light",
+  elf:       "Nature",
+  dwarf:     "Earth",
+  orc:       "Fire",
+  beastfolk: "Air",
+  mystic:    "Nature",
+  fae:       "Light",
+  elemental: "Lightning",
+  undead:    "Dark",
+  demon:     "Dark",
+  draconic:  "Fire",
+  celestial: "Light",
+  aquatic:   "Water",
+  titan:     "Earth",
+};
+
+// ─── Tiered Critical Hit System ──────────────────────────────────
+// Normal crit  (1.5×): up to 50% chance  (Luck/100 + race bonus)
+// Heavy crit   (2.0×): up to 30% chance  (Luck/200 + race bonus×0.7)
+// Perfect crit (2.5×): up to 15% chance  (Luck/500 + race bonus×0.4)
+
+export interface TieredCritResult {
+  tier: 0 | 1 | 2 | 3;
+  mult: number;
+  label: string;
+}
+
+export function rollTieredCrit(luck: number, raceCritBonus: number = 0): TieredCritResult {
+  const normalChance  = Math.min(luck / 100 + raceCritBonus,        0.50);
+  const heavyChance   = Math.min(luck / 200 + raceCritBonus * 0.70, 0.30);
+  const perfectChance = Math.min(luck / 500 + raceCritBonus * 0.40, 0.15);
+
+  const roll = Math.random();
+  if (roll < perfectChance) return { tier: 3, mult: 2.5, label: "✨ PERFECT CRIT" };
+  if (roll < heavyChance)   return { tier: 2, mult: 2.0, label: "💥 HEAVY CRIT"   };
+  if (roll < normalChance)  return { tier: 1, mult: 1.5, label: "⚡ CRIT"          };
+  return { tier: 0, mult: 1.0, label: "" };
+}
+
+// ─── Combo Chain System ──────────────────────────────────────────
+// Each consecutive "attack" that lands adds +1 combo (max 5).
+// Non-attack/non-ability actions reset the combo.
+// Bonus: +12% damage per combo stack.
+
+export function getComboMultiplier(comboCount: number): number {
+  return 1.0 + Math.min(5, comboCount) * 0.12;
+}
+
+// ─── PvP Status Effects ──────────────────────────────────────────
+// Stored directly in combatState.player1/player2.statusEffects
+// (not in the Map-based trackers used by auto-combat)
+
+export interface PvPStatusEffect {
+  type: string;
+  magnitude: number;   // multiplier or stack count
+  duration: number;    // rounds remaining
+  source: string;
+}
+
+interface StackRule { max: number }
+const PVP_STACK_RULES: Record<string, StackRule> = {
+  burn:     { max: 3 },
+  poison:   { max: 5 },
+  bleed:    { max: 3 },
+  stun:     { max: 1 },
+  slow:     { max: 1 },
+  blind:    { max: 1 },
+  empower:  { max: 1 },
+  shield:   { max: 1 },
+  regen:    { max: 1 },
+  weakness: { max: 1 },
+};
+
+export function applyPvPStatusEffect(
+  effects: PvPStatusEffect[],
+  newEffect: PvPStatusEffect,
+): PvPStatusEffect[] {
+  const rule = PVP_STACK_RULES[newEffect.type];
+  if (!rule) return effects;
+
+  const existing = effects.filter(e => e.type === newEffect.type);
+  if (existing.length >= rule.max) {
+    // Refresh the first matching instance
+    return effects.map((e, i) => {
+      if (e.type === newEffect.type && effects.indexOf(e) === effects.findIndex(x => x.type === newEffect.type)) {
+        return { ...e, duration: Math.max(e.duration, newEffect.duration), magnitude: Math.max(e.magnitude, newEffect.magnitude) };
+      }
+      return e;
+    });
+  }
+  return [...effects, { ...newEffect }];
+}
+
+export interface PvPStatusTickResult {
+  dotDamage: number;
+  healAmount: number;
+  isStunned: boolean;
+  updatedEffects: PvPStatusEffect[];
+  log: string[];
+}
+
+export function tickPvPStatusEffects(
+  playerName: string,
+  maxHp: number,
+  effects: PvPStatusEffect[],
+): PvPStatusTickResult {
+  let dotDamage = 0;
+  let healAmount = 0;
+  let isStunned = false;
+  const log: string[] = [];
+
+  const surviving: PvPStatusEffect[] = [];
+
+  for (const fx of effects) {
+    switch (fx.type) {
+      case "burn": {
+        const dmg = Math.floor(maxHp * 0.05 * fx.magnitude);
+        dotDamage += dmg;
+        log.push(`🔥 ${playerName} burns for ${dmg}`);
+        break;
+      }
+      case "poison": {
+        const dmg = Math.floor(maxHp * 0.03 * fx.magnitude);
+        dotDamage += dmg;
+        log.push(`☠️ ${playerName} poisoned for ${dmg}`);
+        break;
+      }
+      case "bleed": {
+        const dmg = Math.floor(maxHp * 0.04 * fx.magnitude);
+        dotDamage += dmg;
+        log.push(`🩸 ${playerName} bleeds for ${dmg}`);
+        break;
+      }
+      case "stun":
+        isStunned = true;
+        log.push(`💫 ${playerName} is stunned!`);
+        break;
+      case "regen": {
+        const heal = Math.floor(maxHp * 0.08);
+        healAmount += heal;
+        log.push(`💚 ${playerName} regenerates ${heal} HP`);
+        break;
+      }
+    }
+
+    const remaining = fx.duration - 1;
+    if (remaining > 0) {
+      surviving.push({ ...fx, duration: remaining });
+    } else {
+      log.push(`${fx.type.charAt(0).toUpperCase() + fx.type.slice(1)} on ${playerName} faded`);
+    }
+  }
+
+  return { dotDamage, healAmount, isStunned, updatedEffects: surviving, log };
+}
+
+// ─── Elemental Reaction Table ────────────────────────────────────
+
+export interface PvPReaction {
+  name: string;
+  description: string;
+  bonusDamagePct: number;       // fraction of base hit added
+  instantCurrentHpPct: number;  // fraction of defender's current HP
+  selfHealPct: number;          // fraction of attacker's maxHP healed
+  defenderEffects: Omit<PvPStatusEffect, "source">[];
+  attackerEffects: Omit<PvPStatusEffect, "source">[];
+}
+
+const PVP_REACTIONS: Record<string, PvPReaction> = {
+  "Fire+Water": {
+    name: "Steam Burst", description: "Scalding steam blinds the target",
+    bonusDamagePct: 0.10, instantCurrentHpPct: 0, selfHealPct: 0,
+    defenderEffects: [{ type: "blind",  magnitude: 1, duration: 2 }], attackerEffects: [],
+  },
+  "Water+Fire": {
+    name: "Steam Burst", description: "Scalding steam blinds the target",
+    bonusDamagePct: 0.10, instantCurrentHpPct: 0, selfHealPct: 0,
+    defenderEffects: [{ type: "blind",  magnitude: 1, duration: 2 }], attackerEffects: [],
+  },
+  "Fire+Lightning": {
+    name: "Overload", description: "Explosive electrical surge — double bonus damage",
+    bonusDamagePct: 1.00, instantCurrentHpPct: 0, selfHealPct: 0,
+    defenderEffects: [], attackerEffects: [],
+  },
+  "Lightning+Fire": {
+    name: "Overload", description: "Explosive electrical surge — double bonus damage",
+    bonusDamagePct: 1.00, instantCurrentHpPct: 0, selfHealPct: 0,
+    defenderEffects: [], attackerEffects: [],
+  },
+  "Fire+Earth": {
+    name: "Magma Seal", description: "Molten rock burns and slows",
+    bonusDamagePct: 0.20, instantCurrentHpPct: 0, selfHealPct: 0,
+    defenderEffects: [{ type: "burn", magnitude: 2, duration: 2 }, { type: "slow", magnitude: 1, duration: 2 }],
+    attackerEffects: [],
+  },
+  "Earth+Fire": {
+    name: "Magma Seal", description: "Molten rock burns and slows",
+    bonusDamagePct: 0.20, instantCurrentHpPct: 0, selfHealPct: 0,
+    defenderEffects: [{ type: "burn", magnitude: 2, duration: 2 }, { type: "slow", magnitude: 1, duration: 2 }],
+    attackerEffects: [],
+  },
+  "Water+Lightning": {
+    name: "Electrocution", description: "Conducted electricity stuns",
+    bonusDamagePct: 0.30, instantCurrentHpPct: 0, selfHealPct: 0,
+    defenderEffects: [{ type: "stun", magnitude: 1, duration: 1 }], attackerEffects: [],
+  },
+  "Lightning+Water": {
+    name: "Electrocution", description: "Conducted electricity stuns",
+    bonusDamagePct: 0.30, instantCurrentHpPct: 0, selfHealPct: 0,
+    defenderEffects: [{ type: "stun", magnitude: 1, duration: 1 }], attackerEffects: [],
+  },
+  "Water+Earth": {
+    name: "Mud Trap", description: "Slick mud slows for 3 rounds",
+    bonusDamagePct: 0, instantCurrentHpPct: 0, selfHealPct: 0,
+    defenderEffects: [{ type: "slow", magnitude: 1, duration: 3 }], attackerEffects: [],
+  },
+  "Earth+Water": {
+    name: "Mud Trap", description: "Slick mud slows for 3 rounds",
+    bonusDamagePct: 0, instantCurrentHpPct: 0, selfHealPct: 0,
+    defenderEffects: [{ type: "slow", magnitude: 1, duration: 3 }], attackerEffects: [],
+  },
+  "Dark+Light": {
+    name: "Void Collapse", description: "Reality tears — 15% of current HP bonus damage",
+    bonusDamagePct: 0, instantCurrentHpPct: 0.15, selfHealPct: 0,
+    defenderEffects: [], attackerEffects: [],
+  },
+  "Light+Dark": {
+    name: "Void Collapse", description: "Reality tears — 15% of current HP bonus damage",
+    bonusDamagePct: 0, instantCurrentHpPct: 0.15, selfHealPct: 0,
+    defenderEffects: [], attackerEffects: [],
+  },
+  "Dark+Fire": {
+    name: "Hellfire", description: "Cursed flames — 3-stack burn for 3 rounds",
+    bonusDamagePct: 0.20, instantCurrentHpPct: 0, selfHealPct: 0,
+    defenderEffects: [{ type: "burn", magnitude: 3, duration: 3 }], attackerEffects: [],
+  },
+  "Fire+Dark": {
+    name: "Hellfire", description: "Cursed flames — 3-stack burn for 3 rounds",
+    bonusDamagePct: 0.20, instantCurrentHpPct: 0, selfHealPct: 0,
+    defenderEffects: [{ type: "burn", magnitude: 3, duration: 3 }], attackerEffects: [],
+  },
+  "Air+Lightning": {
+    name: "Storm Surge", description: "Howling winds empower the attacker for 2 rounds",
+    bonusDamagePct: 0.30, instantCurrentHpPct: 0, selfHealPct: 0,
+    defenderEffects: [], attackerEffects: [{ type: "empower", magnitude: 1.4, duration: 2 }],
+  },
+  "Lightning+Air": {
+    name: "Storm Surge", description: "Howling winds empower the attacker for 2 rounds",
+    bonusDamagePct: 0.30, instantCurrentHpPct: 0, selfHealPct: 0,
+    defenderEffects: [], attackerEffects: [{ type: "empower", magnitude: 1.4, duration: 2 }],
+  },
+  "Earth+Light": {
+    name: "Sacred Ground", description: "Holy earth heals the attacker for 10% max HP",
+    bonusDamagePct: 0, instantCurrentHpPct: 0, selfHealPct: 0.10,
+    defenderEffects: [], attackerEffects: [],
+  },
+  "Light+Earth": {
+    name: "Sacred Ground", description: "Holy earth heals the attacker for 10% max HP",
+    bonusDamagePct: 0, instantCurrentHpPct: 0, selfHealPct: 0.10,
+    defenderEffects: [], attackerEffects: [],
+  },
+  "Nature+Dark": {
+    name: "Decay", description: "Life corrupted — 3-stack poison for 3 rounds",
+    bonusDamagePct: 0.10, instantCurrentHpPct: 0, selfHealPct: 0,
+    defenderEffects: [{ type: "poison", magnitude: 3, duration: 3 }], attackerEffects: [],
+  },
+  "Dark+Nature": {
+    name: "Decay", description: "Life corrupted — 3-stack poison for 3 rounds",
+    bonusDamagePct: 0.10, instantCurrentHpPct: 0, selfHealPct: 0,
+    defenderEffects: [{ type: "poison", magnitude: 3, duration: 3 }], attackerEffects: [],
+  },
+  "Nature+Water": {
+    name: "Overgrowth", description: "Roots ensnare — slow 2 rounds + regen attacker",
+    bonusDamagePct: 0, instantCurrentHpPct: 0, selfHealPct: 0.05,
+    defenderEffects: [{ type: "slow", magnitude: 1, duration: 2 }], attackerEffects: [],
+  },
+  "Water+Nature": {
+    name: "Overgrowth", description: "Roots ensnare — slow 2 rounds + regen attacker",
+    bonusDamagePct: 0, instantCurrentHpPct: 0, selfHealPct: 0.05,
+    defenderEffects: [{ type: "slow", magnitude: 1, duration: 2 }], attackerEffects: [],
+  },
+};
+
+export function checkPvPReaction(
+  attackerElement: string | undefined,
+  defenderPrimedElement: string | undefined,
+): PvPReaction | null {
+  if (!attackerElement || !defenderPrimedElement) return null;
+  if (attackerElement === defenderPrimedElement) return null;
+  return PVP_REACTIONS[`${attackerElement}+${defenderPrimedElement}`] ?? null;
+}
+
+// ─── Race Active Abilities ────────────────────────────────────────
+
+export interface PvPAbilityResult {
+  damage: number;
+  selfHeal: number;
+  selfDamage: number;
+  defenderEffects: PvPStatusEffect[];
+  attackerEffects: PvPStatusEffect[];
+  cleanseAttacker: boolean;
+  message: string;
+  isForcedCrit: boolean;
+  cooldown: number;
+}
+
+interface PvPAbilityDef {
+  name: string;
+  description: string;
+  cooldown: number;
+  execute: (
+    attackerName: string,
+    defenderName: string,
+    defenderMaxHp: number,
+    attackerMaxHp: number,
+    aStr: number, aDef: number, aSpd: number, aInt: number, aLuck: number,
+    dStr: number, dDef: number, dSpd: number, dInt: number, dLuck: number,
+  ) => Omit<PvPAbilityResult, "cooldown">;
+}
+
+const RACE_PVP_ABILITIES: Record<string, PvPAbilityDef> = {
+  human: {
+    name: "Adaptability", description: "Read the field — Empower self 2 rounds based on opponent's top stat",
+    cooldown: 3,
+    execute(aName, dName, dMaxHp, aMaxHp, aStr, aDef, aSpd, aInt, aLuck, dStr, dDef, dSpd, dInt) {
+      const top = Math.max(dStr, dInt, dSpd);
+      const mag = top === dInt ? 1.35 : top === dSpd ? 1.30 : 1.25;
+      return {
+        damage: 0, selfHeal: 0, selfDamage: 0,
+        defenderEffects: [],
+        attackerEffects: [{ type: "empower", magnitude: mag, duration: 2, source: "Adaptability" }],
+        cleanseAttacker: false, isForcedCrit: false,
+        message: `${aName} reads the battlefield and adapts — Empowered for 2 rounds!`,
+      };
+    },
+  },
+  elf: {
+    name: "Arcane Shot", description: "Guaranteed hit — 1.4× INT damage + blind 2 rounds",
+    cooldown: 3,
+    execute(aName, dName, dMaxHp, aMaxHp, aStr, aDef, aSpd, aInt) {
+      const dmg = Math.floor(aInt * 1.4);
+      return {
+        damage: dmg, selfHeal: 0, selfDamage: 0,
+        defenderEffects: [{ type: "blind", magnitude: 1, duration: 2, source: "Arcane Shot" }],
+        attackerEffects: [],
+        cleanseAttacker: false, isForcedCrit: false,
+        message: `${aName} fires an Arcane Shot — ${dmg} magic damage! ${dName} is blinded for 2 rounds!`,
+      };
+    },
+  },
+  dwarf: {
+    name: "Stone Fortress", description: "Absorb 50% incoming damage for 2 rounds",
+    cooldown: 4,
+    execute(aName) {
+      return {
+        damage: 0, selfHeal: 0, selfDamage: 0,
+        defenderEffects: [],
+        attackerEffects: [{ type: "shield", magnitude: 0.50, duration: 2, source: "Stone Fortress" }],
+        cleanseAttacker: false, isForcedCrit: false,
+        message: `${aName} raises a Stone Fortress — 50% damage shield for 2 rounds!`,
+      };
+    },
+  },
+  orc: {
+    name: "Blood Frenzy", description: "2.5× STR damage — sacrifice 15% own max HP",
+    cooldown: 3,
+    execute(aName, dName, dMaxHp, aMaxHp, aStr) {
+      const dmg    = Math.floor(aStr * 2.5);
+      const selfDmg = Math.floor(aMaxHp * 0.15);
+      return {
+        damage: dmg, selfHeal: 0, selfDamage: selfDmg,
+        defenderEffects: [],
+        attackerEffects: [],
+        cleanseAttacker: false, isForcedCrit: false,
+        message: `${aName} enters Blood Frenzy — ${dmg} savage damage! Lost ${selfDmg} HP to the rage!`,
+      };
+    },
+  },
+  beastfolk: {
+    name: "Savage Lunge", description: "Forced Perfect Crit (2.5×) — 1.8× STR + bleed 3 rounds",
+    cooldown: 3,
+    execute(aName, dName, dMaxHp, aMaxHp, aStr) {
+      const dmg = Math.floor(aStr * 1.8 * 2.5);
+      return {
+        damage: dmg, selfHeal: 0, selfDamage: 0,
+        defenderEffects: [{ type: "bleed", magnitude: 2, duration: 3, source: "Savage Lunge" }],
+        attackerEffects: [],
+        cleanseAttacker: false, isForcedCrit: true,
+        message: `${aName} leaps with a Savage Lunge — ${dmg} PERFECT CRIT! ${dName} bleeds for 3 rounds!`,
+      };
+    },
+  },
+  mystic: {
+    name: "Nature's Wrath", description: "1.5× INT damage + poison 3 stacks + stun 1 round",
+    cooldown: 3,
+    execute(aName, dName, dMaxHp, aMaxHp, aStr, aDef, aSpd, aInt) {
+      const dmg = Math.floor(aInt * 1.5);
+      return {
+        damage: dmg, selfHeal: 0, selfDamage: 0,
+        defenderEffects: [
+          { type: "poison", magnitude: 3, duration: 3, source: "Nature's Wrath" },
+          { type: "stun",   magnitude: 1, duration: 1, source: "Nature's Wrath" },
+        ],
+        attackerEffects: [],
+        cleanseAttacker: false, isForcedCrit: false,
+        message: `${aName} calls Nature's Wrath — ${dmg} nature damage! ${dName} is poisoned and rooted!`,
+      };
+    },
+  },
+  fae: {
+    name: "Mirror Veil", description: "Blind opponent 2 rounds + Empower self 2 rounds",
+    cooldown: 4,
+    execute(aName, dName) {
+      return {
+        damage: 0, selfHeal: 0, selfDamage: 0,
+        defenderEffects: [{ type: "blind",   magnitude: 2, duration: 2, source: "Mirror Veil" }],
+        attackerEffects: [{ type: "empower", magnitude: 1.25, duration: 2, source: "Mirror Veil" }],
+        cleanseAttacker: false, isForcedCrit: false,
+        message: `${aName} weaves a Mirror Veil — ${dName} blinded, ${aName} empowered for 2 rounds!`,
+      };
+    },
+  },
+  elemental: {
+    name: "Elemental Surge", description: "2.5× INT damage + 3-stack burn for 3 rounds",
+    cooldown: 3,
+    execute(aName, dName, dMaxHp, aMaxHp, aStr, aDef, aSpd, aInt) {
+      const dmg = Math.floor(aInt * 2.5);
+      return {
+        damage: dmg, selfHeal: 0, selfDamage: 0,
+        defenderEffects: [{ type: "burn", magnitude: 3, duration: 3, source: "Elemental Surge" }],
+        attackerEffects: [],
+        cleanseAttacker: false, isForcedCrit: false,
+        message: `${aName} unleashes an Elemental Surge — ${dmg} elemental damage! ${dName} burns for 3 rounds!`,
+      };
+    },
+  },
+  undead: {
+    name: "Necrotic Drain", description: "1.6× STR + 0.6× INT — heals 80% of damage dealt",
+    cooldown: 3,
+    execute(aName, dName, dMaxHp, aMaxHp, aStr, aDef, aSpd, aInt) {
+      const dmg  = Math.floor(aStr * 1.6 + aInt * 0.6);
+      const heal = Math.floor(dmg * 0.80);
+      return {
+        damage: dmg, selfHeal: heal, selfDamage: 0,
+        defenderEffects: [],
+        attackerEffects: [],
+        cleanseAttacker: false, isForcedCrit: false,
+        message: `${aName} drains life with Necrotic Drain — ${dmg} damage, healed ${heal} HP!`,
+      };
+    },
+  },
+  demon: {
+    name: "Hellgate", description: "3× STR + 2-stack burn — sacrifice 25% own max HP",
+    cooldown: 3,
+    execute(aName, dName, dMaxHp, aMaxHp, aStr) {
+      const dmg    = Math.floor(aStr * 3.0);
+      const selfDmg = Math.floor(aMaxHp * 0.25);
+      return {
+        damage: dmg, selfHeal: 0, selfDamage: selfDmg,
+        defenderEffects: [{ type: "burn", magnitude: 2, duration: 2, source: "Hellgate" }],
+        attackerEffects: [],
+        cleanseAttacker: false, isForcedCrit: false,
+        message: `${aName} opens a Hellgate — ${dmg} infernal damage! ${dName} burns! (${selfDmg} self-sacrifice)`,
+      };
+    },
+  },
+  draconic: {
+    name: "Dragon's Roar", description: "20% opponent max HP fire damage + 2-stack burn",
+    cooldown: 4,
+    execute(aName, dName, dMaxHp, aMaxHp, aStr) {
+      const dmg = Math.floor(dMaxHp * 0.20 + aStr * 0.5);
+      return {
+        damage: dmg, selfHeal: 0, selfDamage: 0,
+        defenderEffects: [{ type: "burn", magnitude: 2, duration: 2, source: "Dragon's Roar" }],
+        attackerEffects: [],
+        cleanseAttacker: false, isForcedCrit: false,
+        message: `${aName} breathes Dragon Fire — ${dmg} true fire damage! ${dName} is burning!`,
+      };
+    },
+  },
+  celestial: {
+    name: "Divine Grace", description: "Heal self 30% max HP + blind opponent 2 rounds + Empower self",
+    cooldown: 3,
+    execute(aName, dName, dMaxHp, aMaxHp) {
+      const heal = Math.floor(aMaxHp * 0.30);
+      return {
+        damage: 0, selfHeal: heal, selfDamage: 0,
+        defenderEffects: [{ type: "blind",   magnitude: 1, duration: 2, source: "Divine Grace" }],
+        attackerEffects: [{ type: "empower", magnitude: 1.20, duration: 2, source: "Divine Grace" }],
+        cleanseAttacker: false, isForcedCrit: false,
+        message: `${aName} invokes Divine Grace — +${heal} HP, ${dName} blinded, self Empowered!`,
+      };
+    },
+  },
+  aquatic: {
+    name: "Tidal Surge", description: "1.6× SPD + 0.5× INT water damage — slow + cleanse self",
+    cooldown: 3,
+    execute(aName, dName, dMaxHp, aMaxHp, aStr, aDef, aSpd, aInt) {
+      const dmg = Math.floor(aSpd * 1.6 + aInt * 0.5);
+      return {
+        damage: dmg, selfHeal: 0, selfDamage: 0,
+        defenderEffects: [{ type: "slow", magnitude: 1, duration: 2, source: "Tidal Surge" }],
+        attackerEffects: [],
+        cleanseAttacker: true, isForcedCrit: false,
+        message: `${aName} unleashes a Tidal Surge — ${dmg} water damage, ${dName} slowed, ${aName} cleansed!`,
+      };
+    },
+  },
+  titan: {
+    name: "Earthshatter", description: "3× STR damage + guaranteed stun 1 round — 5-round cooldown",
+    cooldown: 5,
+    execute(aName, dName, dMaxHp, aMaxHp, aStr) {
+      const dmg = Math.floor(aStr * 3.0);
+      return {
+        damage: dmg, selfHeal: 0, selfDamage: 0,
+        defenderEffects: [{ type: "stun", magnitude: 1, duration: 1, source: "Earthshatter" }],
+        attackerEffects: [],
+        cleanseAttacker: false, isForcedCrit: false,
+        message: `${aName} strikes with Earthshatter — ${dmg} crushing damage! ${dName} is stunned!`,
+      };
+    },
+  },
+};
+
+export function executePvPRaceAbility(
+  race: string,
+  attackerName: string,
+  defenderName: string,
+  defenderMaxHp: number,
+  attackerMaxHp: number,
+  aStats: { Str: number; Def: number; Spd: number; Int: number; Luck: number },
+  dStats: { Str: number; Def: number; Spd: number; Int: number; Luck: number },
+): PvPAbilityResult {
+  const def = RACE_PVP_ABILITIES[race];
+  if (!def) {
+    const dmg = Math.floor(aStats.Str * 1.2);
+    return {
+      damage: dmg, selfHeal: 0, selfDamage: 0,
+      defenderEffects: [], attackerEffects: [],
+      cleanseAttacker: false, isForcedCrit: false,
+      message: `${attackerName} uses a powerful strike for ${dmg}!`,
+      cooldown: 3,
+    };
+  }
+  const res = def.execute(
+    attackerName, defenderName, defenderMaxHp, attackerMaxHp,
+    aStats.Str, aStats.Def, aStats.Spd, aStats.Int, aStats.Luck,
+    dStats.Str, dStats.Def, dStats.Spd, dStats.Int, dStats.Luck,
+  );
+  return { ...res, cooldown: def.cooldown };
+}
+
+export function getPvPAbilityInfo(race: string): { name: string; description: string; cooldown: number } {
+  const def = RACE_PVP_ABILITIES[race];
+  if (!def) return { name: "Special Strike", description: "A powerful racial ability", cooldown: 3 };
+  return { name: def.name, description: def.description, cooldown: def.cooldown };
+}
+
+// ─── PvP Damage Formula ───────────────────────────────────────────
+//
+//  baseDamage        = Str  (attack) or  Int  (trick)
+//  critMult          = rollTieredCrit → 1.0 | 1.5 | 2.0 | 2.5
+//  comboMult         = 1.0 + min(5, comboCount) × 0.12
+//  empowerMult       = empower.magnitude if active, else 1.0
+//  raceBonusMult     = 1.0 + raceBonusDamagePct
+//  rawDmg            = baseDamage × critMult × comboMult × empowerMult × raceBonusMult
+//  defense           = Def × 0.40 × (1 - raceDamageReduction)
+//  shieldAbsorb      = shield.magnitude if active on defender, else 0
+//  hitDamage         = max(1, floor((rawDmg - defense) × (1 - shieldAbsorb)))
+//  reactionBonus     = hitDamage × reaction.bonusDamagePct
+//                    + defender.hp × reaction.instantCurrentHpPct
+//  finalDamage       = hitDamage + reactionBonus
+//  lifeSteal         = finalDamage × raceLifeStealPct
+//  reactSelfHeal     = attacker.maxHp × reaction.selfHealPct
+
+export interface PvPDamageResult {
+  finalDamage: number;
+  crit: TieredCritResult;
+  comboMultiplier: number;
+  lifeSteal: number;
+  reaction: PvPReaction | null;
+  reactionBonusDamage: number;
+  reactSelfHeal: number;
+  missed: boolean;
+  logParts: string[];
+}
+
+export function calculatePvPDamage(
+  attackerName: string,
+  attackerElement: string | undefined,
+  attackerEffects: PvPStatusEffect[],
+  attackerComboCount: number,
+  attackerMaxHp: number,
+  defenderName: string,
+  defenderElement: string | undefined,     // primed element on defender (for reaction)
+  defenderCurrentHp: number,
+  defenderMaxHp: number,
+  defenderEffects: PvPStatusEffect[],
+  aStats: { Str: number; Def: number; Spd: number; Int: number; Luck: number },
+  dStats: { Str: number; Def: number; Spd: number; Int: number; Luck: number },
+  action: string,
+  raceCritBonus: number,
+  raceLifeStealPct: number,
+  raceDamageReduction: number,
+  raceBonusDamagePct: number,
+): PvPDamageResult {
+  const logParts: string[] = [];
+
+  // Blind check — 40% miss chance on attack/trick
+  const isBlinded = attackerEffects.some(e => e.type === "blind");
+  if (isBlinded && (action === "attack" || action === "trick") && Math.random() < 0.40) {
+    return {
+      finalDamage: 0, crit: { tier: 0, mult: 1.0, label: "" },
+      comboMultiplier: 1, lifeSteal: 0,
+      reaction: null, reactionBonusDamage: 0, reactSelfHeal: 0,
+      missed: true,
+      logParts: [`${attackerName} is blinded and misses!`],
+    };
+  }
+
+  // Base damage
+  const baseDamage = action === "trick" ? aStats.Int * 1.0 : aStats.Str * 1.0;
+
+  // Tiered crit
+  const crit = rollTieredCrit(aStats.Luck, raceCritBonus);
+  if (crit.tier > 0) logParts.push(crit.label + "!");
+
+  // Combo multiplier
+  const comboMult = getComboMultiplier(attackerComboCount);
+  if (attackerComboCount >= 2) logParts.push(`${attackerComboCount}× Combo!`);
+
+  // Empower
+  const empowerFx = attackerEffects.find(e => e.type === "empower");
+  const empowerMult = empowerFx ? empowerFx.magnitude : 1.0;
+
+  // Race bonus
+  const raceBonusMult = 1.0 + (raceBonusDamagePct || 0);
+
+  // Raw damage
+  const rawDmg = baseDamage * crit.mult * comboMult * empowerMult * raceBonusMult;
+
+  // Defense
+  const shieldFx = defenderEffects.find(e => e.type === "shield");
+  const shieldAbsorb = shieldFx ? Math.min(0.75, shieldFx.magnitude) : 0;
+  const defReduction = Math.min(0.75, raceDamageReduction || 0);
+  const defense = dStats.Def * 0.40 * (1 - defReduction);
+
+  const hitDamage = Math.max(1, Math.floor((rawDmg - defense) * (1 - shieldAbsorb)));
+
+  // Elemental reaction
+  let reaction: PvPReaction | null = null;
+  let reactionBonusDamage = 0;
+  let reactSelfHeal = 0;
+
+  if (attackerElement && defenderElement) {
+    reaction = checkPvPReaction(attackerElement, defenderElement);
+    if (reaction) {
+      reactionBonusDamage = Math.floor(hitDamage * reaction.bonusDamagePct)
+        + Math.floor(defenderCurrentHp * reaction.instantCurrentHpPct);
+      reactSelfHeal = Math.floor(attackerMaxHp * reaction.selfHealPct);
+      logParts.push(`⚗️ ${reaction.name}: ${reaction.description}!`);
+    }
+  }
+
+  const finalDamage = hitDamage + reactionBonusDamage;
+  const lifeSteal = Math.floor(finalDamage * (raceLifeStealPct || 0));
+
+  return {
+    finalDamage, crit, comboMultiplier: comboMult,
+    lifeSteal, reaction, reactionBonusDamage, reactSelfHeal,
+    missed: false, logParts,
+  };
+}

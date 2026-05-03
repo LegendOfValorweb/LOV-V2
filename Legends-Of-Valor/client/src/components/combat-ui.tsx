@@ -3,34 +3,34 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
+interface PvPStatusEffect {
+  type: string;
+  magnitude: number;
+  duration: number;
+  source: string;
+}
+
+interface CombatPlayerState {
+  id: string;
+  name: string;
+  hp: number;
+  maxHp: number;
+  action: string | null;
+  element?: string;
+  activeElement?: string;
+  portrait?: string;
+  race?: string;
+  gender?: string;
+  pet?: { name: string; element: string; tier: string } | null;
+  statusEffects?: PvPStatusEffect[];
+  comboCount?: number;
+  abilityCooldown?: number;
+}
+
 interface CombatState {
   round: number;
-  player1: {
-    id: string;
-    name: string;
-    hp: number;
-    maxHp: number;
-    action: string | null;
-    element?: string;
-    portrait?: string;
-    race?: string;
-    gender?: string;
-    pet?: { name: string; element: string; tier: string } | null;
-    statusEffects?: { type: string; turns: number }[];
-  };
-  player2: {
-    id: string;
-    name: string;
-    hp: number;
-    maxHp: number;
-    action: string | null;
-    element?: string;
-    portrait?: string;
-    race?: string;
-    gender?: string;
-    pet?: { name: string; element: string; tier: string } | null;
-    statusEffects?: { type: string; turns: number }[];
-  };
+  player1: CombatPlayerState;
+  player2: CombatPlayerState;
   log: string[];
   status: "waiting" | "resolved" | "finished";
   winnerId?: string;
@@ -73,6 +73,7 @@ const ELEMENT_COLORS: Record<string, string> = {
   Nature: "#22cc44",
   Light: "#ffee88",
   Dark: "#8833aa",
+  Lightning: "#ffdd00",
   Plasma: "#ff44aa",
   Space: "#6666ff",
   Time: "#ddaa33",
@@ -94,17 +95,29 @@ const STATUS_ICONS: Record<string, string> = {
   poison: "☠️",
   bleed: "🩸",
   weakness: "⬇️",
+  slow: "🐌",
+  blind: "👁️",
+  empower: "✨",
+  shield: "🛡️",
+  regen: "💚",
   buff_str: "⬆️",
   buff_def: "🛡️",
   buff_spd: "💨",
   buff_int: "🧠",
 };
 
+const STATUS_LABEL: Record<string, string> = {
+  stun: "Stunned", freeze: "Frozen", silence: "Silenced",
+  burn: "Burning", poison: "Poisoned", bleed: "Bleeding",
+  weakness: "Weakened", slow: "Slowed", blind: "Blinded",
+  empower: "Empowered", shield: "Shielded", regen: "Regenerating",
+};
+
 const ACTION_DATA = {
   attack: { icon: "⚔️", label: "Attack", desc: "Strike with STR", color: "combat-btn-attack" },
   defend: { icon: "🛡️", label: "Defend", desc: "Guard with DEF", color: "combat-btn-defend" },
-  dodge: { icon: "💨", label: "Dodge", desc: "Evade with SPD", color: "combat-btn-dodge" },
-  spell: { icon: "✨", label: "Spell", desc: "Cast with INT", color: "combat-btn-spell" },
+  dodge:  { icon: "💨", label: "Dodge",  desc: "Evade with SPD", color: "combat-btn-dodge"  },
+  trick:  { icon: "🎭", label: "Trick",  desc: "Deceive with INT", color: "combat-btn-spell" },
 } as const;
 
 let floatingIdCounter = 0;
@@ -128,6 +141,7 @@ export default function CombatUI({
   const [showDefeat, setShowDefeat] = useState(false);
   const [playerDefeated, setPlayerDefeated] = useState(false);
   const [enemyDefeated, setEnemyDefeated] = useState(false);
+  const [reactionFlash, setReactionFlash] = useState<string | null>(null);
   const prevStateRef = useRef<CombatState | null>(null);
   const battlefieldRef = useRef<HTMLDivElement>(null);
 
@@ -221,13 +235,24 @@ export default function CombatUI({
 
         const lastLog = curr.log[curr.log.length - 1] || "";
         const isCrit = lastLog.toLowerCase().includes("crit");
-        const color = isCrit ? "#ffdd00" : "#ffffff";
+        const isPerfect = lastLog.includes("PERFECT");
+        const isHeavy = lastLog.includes("HEAVY");
+        const color = isPerfect ? "#aa00ff" : isHeavy ? "#ff8800" : isCrit ? "#ffdd00" : "#ffffff";
         spawnFloatingNumber(`-${dmg}`, "enemy", color, isCrit);
         triggerHitSpark("enemy", myState.element || "Fire");
 
         if (isCrit) {
           setCritFlash(true);
           setTimeout(() => setCritFlash(false), 300);
+        }
+
+        // Reaction flash
+        if (lastLog.includes("⚗️")) {
+          const match = lastLog.match(/⚗️ ([^:]+):/);
+          if (match) {
+            setReactionFlash(match[1].trim());
+            setTimeout(() => setReactionFlash(null), 1800);
+          }
         }
       }
 
@@ -291,7 +316,7 @@ export default function CombatUI({
   const hasSubmittedAction = myState.action !== null;
   const waitingForOpponent = hasSubmittedAction && opponentState.action === null;
 
-  const getPortrait = (state: CombatState["player1"]) => {
+  const getPortrait = (state: CombatPlayerState) => {
     if (state.portrait) {
       if (state.portrait.startsWith("skins/")) return `/${state.portrait}.png`;
       if (state.portrait.includes("/")) return state.portrait;
@@ -305,6 +330,42 @@ export default function CombatUI({
   const hpColor = (pct: number) =>
     pct > 60 ? "combat-hp-high" : pct > 25 ? "combat-hp-mid" : "combat-hp-low";
 
+  const abilityCooldown = myState.abilityCooldown || 0;
+  const comboCount = myState.comboCount || 0;
+  const myRace = myState.race || "human";
+  const abilityReady = abilityCooldown === 0;
+
+  // Get ability display name from race
+  const RACE_ABILITY_NAMES: Record<string, string> = {
+    human: "Adaptability", elf: "Arcane Shot", dwarf: "Stone Fortress",
+    orc: "Blood Frenzy", beastfolk: "Savage Lunge", mystic: "Nature's Wrath",
+    fae: "Mirror Veil", elemental: "Elemental Surge", undead: "Necrotic Drain",
+    demon: "Hellgate", draconic: "Dragon's Roar", celestial: "Divine Grace",
+    aquatic: "Tidal Surge", titan: "Earthshatter",
+  };
+  const abilityName = RACE_ABILITY_NAMES[myRace] || "Special Strike";
+
+  const renderStatusEffects = (effects: PvPStatusEffect[] | undefined) => {
+    if (!effects || effects.length === 0) return null;
+    return (
+      <div className="combat-status-effects">
+        {effects.map((fx, i) => (
+          <div
+            key={i}
+            className={`combat-status-icon combat-status-${fx.type}`}
+            title={`${STATUS_LABEL[fx.type] || fx.type} ×${fx.magnitude} (${fx.duration} rounds) — from ${fx.source}`}
+          >
+            <span>{STATUS_ICONS[fx.type] || "❓"}</span>
+            {fx.magnitude > 1 && fx.type !== "empower" && fx.type !== "shield" && (
+              <span className="combat-status-stack">×{fx.magnitude}</span>
+            )}
+            <span className="combat-status-turns">{fx.duration}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   if (showVictory) {
     return (
       <div className="combat-scene">
@@ -314,9 +375,7 @@ export default function CombatUI({
           <div className="combat-victory-text">You defeated {opponentState.name}!</div>
           <div className="combat-log-mini">
             {combatState.log.slice(-5).map((entry, i) => (
-              <div key={i} className="combat-log-entry">
-                {entry}
-              </div>
+              <div key={i} className="combat-log-entry">{entry}</div>
             ))}
           </div>
         </div>
@@ -333,9 +392,7 @@ export default function CombatUI({
           <div className="combat-defeat-text">You were defeated by {opponentState.name}</div>
           <div className="combat-log-mini">
             {combatState.log.slice(-5).map((entry, i) => (
-              <div key={i} className="combat-log-entry">
-                {entry}
-              </div>
+              <div key={i} className="combat-log-entry">{entry}</div>
             ))}
           </div>
         </div>
@@ -357,9 +414,7 @@ export default function CombatUI({
           </div>
           <div className="combat-log-mini">
             {combatState.log.slice(-5).map((entry, i) => (
-              <div key={i} className="combat-log-entry">
-                {entry}
-              </div>
+              <div key={i} className="combat-log-entry">{entry}</div>
             ))}
           </div>
         </div>
@@ -370,6 +425,12 @@ export default function CombatUI({
   return (
     <div className={`combat-scene ${screenShake ? "combat-screen-shake" : ""}`}>
       {critFlash && <div className="combat-crit-flash" />}
+
+      {reactionFlash && (
+        <div className="combat-reaction-flash">
+          <span>⚗️ {reactionFlash}!</span>
+        </div>
+      )}
 
       <div className="combat-backdrop combat-backdrop-arena" />
       <div className="combat-backdrop-vignette" />
@@ -386,14 +447,23 @@ export default function CombatUI({
 
       <div className="combat-battlefield" ref={battlefieldRef}>
         <div className={`combat-combatant combat-combatant-player ${playerShake ? "combat-shake" : ""} ${playerDefeated ? "combat-defeated" : ""}`}>
-          <div className="combat-status-effects">
-            {(myState.statusEffects || []).map((fx, i) => (
-              <div key={i} className="combat-status-icon" title={`${fx.type} (${fx.turns} turns)`}>
-                <span>{STATUS_ICONS[fx.type] || "❓"}</span>
-                <span className="combat-status-turns">{fx.turns}</span>
-              </div>
-            ))}
-          </div>
+          {renderStatusEffects(myState.statusEffects)}
+
+          {comboCount >= 2 && (
+            <div className="combat-combo-badge" title={`${comboCount}× Combo — +${(comboCount * 12).toFixed(0)}% damage`}>
+              ⚡{comboCount}× COMBO
+            </div>
+          )}
+
+          {myState.activeElement && (
+            <div
+              className="combat-primed-badge"
+              style={{ color: ELEMENT_COLORS[myState.activeElement] || "#fff" }}
+              title={`${myState.activeElement} primed — reaction ready!`}
+            >
+              🔮 {myState.activeElement}
+            </div>
+          )}
 
           <div className="combat-hp-bar-container">
             <div className="combat-combatant-name">{myState.name}</div>
@@ -413,9 +483,7 @@ export default function CombatUI({
               src={getPortrait(myState)}
               alt={myState.name}
               className="combat-sprite-img"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = "/portraits/human_male.png";
-              }}
+              onError={(e) => { (e.target as HTMLImageElement).src = "/portraits/human_male.png"; }}
             />
             {myState.element && (
               <div
@@ -440,14 +508,23 @@ export default function CombatUI({
         </div>
 
         <div className={`combat-combatant combat-combatant-enemy ${enemyShake ? "combat-shake" : ""} ${enemyDefeated ? "combat-defeated" : ""}`}>
-          <div className="combat-status-effects">
-            {(opponentState.statusEffects || []).map((fx, i) => (
-              <div key={i} className="combat-status-icon" title={`${fx.type} (${fx.turns} turns)`}>
-                <span>{STATUS_ICONS[fx.type] || "❓"}</span>
-                <span className="combat-status-turns">{fx.turns}</span>
-              </div>
-            ))}
-          </div>
+          {renderStatusEffects(opponentState.statusEffects)}
+
+          {(opponentState.comboCount || 0) >= 2 && (
+            <div className="combat-combo-badge combat-combo-enemy" title={`${opponentState.comboCount}× Combo`}>
+              ⚡{opponentState.comboCount}× COMBO
+            </div>
+          )}
+
+          {opponentState.activeElement && (
+            <div
+              className="combat-primed-badge"
+              style={{ color: ELEMENT_COLORS[opponentState.activeElement] || "#fff" }}
+              title={`${opponentState.activeElement} primed — reaction ready!`}
+            >
+              🔮 {opponentState.activeElement}
+            </div>
+          )}
 
           <div className="combat-hp-bar-container">
             <div className="combat-combatant-name">{opponentState.name}</div>
@@ -467,9 +544,7 @@ export default function CombatUI({
               src={getPortrait(opponentState)}
               alt={opponentState.name}
               className="combat-sprite-img"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = "/portraits/human_male.png";
-              }}
+              onError={(e) => { (e.target as HTMLImageElement).src = "/portraits/human_male.png"; }}
             />
             {opponentState.element && (
               <div
@@ -493,11 +568,7 @@ export default function CombatUI({
           <div
             key={fn.id}
             className={`combat-floating-number ${fn.isCrit ? "combat-floating-crit" : ""}`}
-            style={{
-              left: `${fn.x}%`,
-              top: `${fn.y}%`,
-              color: fn.color,
-            }}
+            style={{ left: `${fn.x}%`, top: `${fn.y}%`, color: fn.color }}
           >
             {fn.value}
           </div>
@@ -518,9 +589,7 @@ export default function CombatUI({
       {combatState.log.length > 0 && (
         <div className="combat-log-panel">
           {combatState.log.slice(-3).map((entry, i) => (
-            <div key={i} className="combat-log-entry">
-              {entry}
-            </div>
+            <div key={i} className="combat-log-entry">{entry}</div>
           ))}
         </div>
       )}
@@ -536,7 +605,7 @@ export default function CombatUI({
             <span>Action submitted: <strong className="capitalize">{myState.action}</strong></span>
           </div>
         ) : (
-          <div className="combat-action-grid">
+          <div className="combat-action-grid combat-action-grid-5">
             {(Object.keys(ACTION_DATA) as Array<keyof typeof ACTION_DATA>).map((action) => {
               const data = ACTION_DATA[action];
               return (
@@ -552,6 +621,23 @@ export default function CombatUI({
                 </button>
               );
             })}
+
+            <button
+              className={`combat-action-btn combat-btn-ability ${selectedAction === "ability" ? "combat-action-selected" : ""} ${!abilityReady ? "combat-btn-cooldown" : "combat-btn-ability-ready"}`}
+              onClick={() => abilityReady && handleAction("ability")}
+              disabled={actionMutation.isPending || !abilityReady}
+              title={abilityReady ? `Use ${abilityName}` : `${abilityName} — ${abilityCooldown} rounds cooldown`}
+            >
+              <span className="combat-action-icon">🌟</span>
+              <span className="combat-action-label">{abilityName}</span>
+              {abilityReady ? (
+                <span className="combat-action-desc">Race Ability</span>
+              ) : (
+                <span className="combat-action-desc combat-cooldown-text">
+                  Cooldown: {abilityCooldown}
+                </span>
+              )}
+            </button>
           </div>
         )}
       </div>
