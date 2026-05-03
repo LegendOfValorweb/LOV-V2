@@ -1406,6 +1406,15 @@ export const playerSkills = pgTable("player_skills", {
   isEquipped: boolean("is_equipped").notNull().default(false),
   acquiredAt: timestamp("acquired_at").notNull().defaultNow(),
   source: text("source").notNull().default("auction"), // auction, quest, admin
+  upgradeLevel: integer("upgrade_level").notNull().default(0),
+  attachedModifiers: jsonb("attached_modifiers").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+});
+
+export const playerModifiers = pgTable("player_modifiers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  accountId: varchar("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
+  modifierId: text("modifier_id").notNull(),
+  quantity: integer("quantity").notNull().default(1),
 });
 
 export const activityFeed = pgTable("activity_feed", {

@@ -48,6 +48,7 @@ import CoopMode from "@/pages/coop";
 import CombatLog from "@/pages/combat-log";
 import Casino from "@/pages/casino";
 import SkillTree from "@/pages/skill-tree";
+import SkillWorkshop from "@/pages/skill-workshop";
 import NotFound from "@/pages/not-found";
 import { MobileLandscapePrompt } from "@/components/mobile-landscape-prompt";
 import { AppLoadingWrapper } from "@/components/app-loading-wrapper";
@@ -95,6 +96,7 @@ function Router() {
       <Route path="/combat-log" component={CombatLog} />
       <Route path="/casino" component={Casino} />
       <Route path="/skill-tree" component={SkillTree} />
+      <Route path="/skill-workshop" component={SkillWorkshop} />
       <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>

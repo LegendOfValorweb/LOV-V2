@@ -131,6 +131,17 @@ const zones: Zone[] = [
     route: "/skill-tree",
   },
   {
+    id: "skill-workshop",
+    name: "Skill Workshop",
+    description: "Upgrade your skills through five power tiers, attach modifier crystals for bonus effects, and fuse two skills into a rarer one.",
+    landmark: "forge",
+    difficulty: "starter",
+    pvpEnabled: false,
+    activities: ["Upgrade", "Modifiers", "Fusion"],
+    coordinates: { x: 35, y: 72 },
+    route: "/skill-workshop",
+  },
+  {
     id: "pet-training",
     name: "Pet Training Grounds",
     description: "Train and evolve your pets to become powerful battle companions.",

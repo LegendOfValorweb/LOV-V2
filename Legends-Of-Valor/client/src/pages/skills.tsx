@@ -514,10 +514,20 @@ export default function Skills() {
                     <span className="text-muted-foreground">Training Points available: </span>
                     <span className="font-bold text-yellow-400">{account.trainingPoints ?? 0}</span>
                   </div>
-                  <Button size="sm" className="bg-purple-700 hover:bg-purple-600 text-white"
-                    onClick={() => navigate("/skill-tree")}>
-                    <GitBranch className="h-4 w-4 mr-1" /> Open Skill Tree
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button size="sm" className="bg-purple-700 hover:bg-purple-600 text-white"
+                      onClick={() => navigate("/skill-tree")}>
+                      <GitBranch className="h-4 w-4 mr-1" /> Skill Tree
+                    </Button>
+                    <Button size="sm" className="bg-indigo-700 hover:bg-indigo-600 text-white"
+                      onClick={() => navigate("/skill-workshop")}>
+                      ⚗️ Workshop
+                    </Button>
+                  </div>
+                </div>
+                <div className="p-3 bg-indigo-900/20 rounded-lg border border-indigo-700/30 text-sm">
+                  <p className="text-indigo-300 font-semibold mb-1">⚗️ Skill Workshop</p>
+                  <p className="text-muted-foreground text-xs">Upgrade skills up to Level 5 for up to 2.1× power. Attach modifier crystals (Burning, Piercing, Vampiric…) for unique combat effects. Fuse two same-rarity skills into a rarer one.</p>
                 </div>
               </CardContent>
             </Card>

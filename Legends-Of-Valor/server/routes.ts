@@ -22,7 +22,7 @@ import {
 } from "./server-achievements";
 import { storage, evictAccountCache } from "./storage";
 import { db } from "./db";
-import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, type CombatLogEntry, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, shardEvents, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage, worldBosses, worldBossDamage, inventoryItems, playerSkills, casinoHistory, skillTreeNodes } from "@shared/schema";
+import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, type CombatLogEntry, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, shardEvents, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage, worldBosses, worldBossDamage, inventoryItems, playerSkills, casinoHistory, skillTreeNodes, playerModifiers } from "@shared/schema";
 import { ZONE_NPCS, getZoneNPC, calculateNPCStats, calculateNPCRewards } from "@shared/zone-npcs";
 import { z } from "zod";
 import type { Account, Event, Challenge, PlayerRace, PlayerGender } from "@shared/schema";
@@ -4248,22 +4248,35 @@ export async function registerRoutes(
       const equippedSkillRecord = await storage.getEquippedSkill(account.id);
       if (equippedSkillRecord) {
         const { getSkillById, RANK_MULTIPLIER } = await import("@shared/skills-data");
+        const { applySkillModifiers } = await import("@shared/skill-modifiers-data");
         const skillDef = getSkillById(equippedSkillRecord.skillId);
         if (skillDef) {
           const rankMult = RANK_MULTIPLIER[account.rank || "Novice"] || 1.0;
+          const mods = (equippedSkillRecord.attachedModifiers as string[]) || [];
+          const enhanced = applySkillModifiers(skillDef.spellPower || 1.5, skillDef.cooldown || 5, equippedSkillRecord.upgradeLevel || 0, mods);
           playerSpell = {
             name: skillDef.name,
-            multiplier: skillDef.spellPower || 1.5,
+            multiplier: enhanced.spellPower,
             element: skillDef.element,
             isAoE: skillDef.spellCategory === "aoe",
             targetCount: skillDef.targetCount,
             spellCategory: skillDef.spellCategory || "damage",
-            spellPower: skillDef.spellPower || 1.5,
+            spellPower: enhanced.spellPower,
             ccType: skillDef.ccType,
             ccDuration: skillDef.ccDuration,
             buffStat: skillDef.buffStat,
             buffAmount: skillDef.buffAmount,
             rankMultiplier: rankMult,
+            cooldown: enhanced.cooldown,
+            critBoost: enhanced.critBoost,
+            lifestealBoost: enhanced.lifestealBoost,
+            defPierce: enhanced.defPierce,
+            selfDamagePct: enhanced.selfDamagePct,
+            statusEffects: enhanced.statusEffects,
+            aoeExtraHits: enhanced.aoeExtraHits,
+            damageToHealing: enhanced.damageToHealing,
+            defBoostAfterCast: enhanced.defBoostAfterCast,
+            upgradeLevel: equippedSkillRecord.upgradeLevel || 0,
           };
         }
       }
@@ -15026,22 +15039,35 @@ export async function registerRoutes(
       const monsterFightEquippedSkill = await storage.getEquippedSkill(accountId);
       if (monsterFightEquippedSkill) {
         const { getSkillById, RANK_MULTIPLIER } = await import("@shared/skills-data");
+        const { applySkillModifiers } = await import("@shared/skill-modifiers-data");
         const skillDef = getSkillById(monsterFightEquippedSkill.skillId);
         if (skillDef) {
           const rankMult = RANK_MULTIPLIER[account.rank || "Novice"] || 1.0;
+          const mods = (monsterFightEquippedSkill.attachedModifiers as string[]) || [];
+          const enhanced = applySkillModifiers(skillDef.spellPower || 1.5, skillDef.cooldown || 5, monsterFightEquippedSkill.upgradeLevel || 0, mods);
           monsterFightSpell = {
             name: skillDef.name,
-            multiplier: skillDef.spellPower || 1.5,
+            multiplier: enhanced.spellPower,
             element: skillDef.element,
             isAoE: skillDef.spellCategory === "aoe",
             targetCount: skillDef.targetCount,
             spellCategory: skillDef.spellCategory || "damage",
-            spellPower: skillDef.spellPower || 1.5,
+            spellPower: enhanced.spellPower,
             ccType: skillDef.ccType,
             ccDuration: skillDef.ccDuration,
             buffStat: skillDef.buffStat,
             buffAmount: skillDef.buffAmount,
             rankMultiplier: rankMult,
+            cooldown: enhanced.cooldown,
+            critBoost: enhanced.critBoost,
+            lifestealBoost: enhanced.lifestealBoost,
+            defPierce: enhanced.defPierce,
+            selfDamagePct: enhanced.selfDamagePct,
+            statusEffects: enhanced.statusEffects,
+            aoeExtraHits: enhanced.aoeExtraHits,
+            damageToHealing: enhanced.damageToHealing,
+            defBoostAfterCast: enhanced.defBoostAfterCast,
+            upgradeLevel: monsterFightEquippedSkill.upgradeLevel || 0,
           };
         }
       }
@@ -15306,21 +15332,34 @@ export async function registerRoutes(
       const npcEquippedSkill = await storage.getEquippedSkill(accountId);
       if (npcEquippedSkill) {
         const { getSkillById, RANK_MULTIPLIER } = await import("@shared/skills-data");
+        const { applySkillModifiers } = await import("@shared/skill-modifiers-data");
         const skillDef = getSkillById(npcEquippedSkill.skillId);
         if (skillDef) {
           const rankMult = RANK_MULTIPLIER[account.rank || "Novice"] || 1.0;
+          const mods = (npcEquippedSkill.attachedModifiers as string[]) || [];
+          const enhanced = applySkillModifiers(skillDef.spellPower || 1.5, skillDef.cooldown || 5, npcEquippedSkill.upgradeLevel || 0, mods);
           npcFightSpell = {
             name: skillDef.name,
-            multiplier: skillDef.spellPower || 1.5,
+            multiplier: enhanced.spellPower,
             element: skillDef.element,
             isAoE: skillDef.spellCategory === "aoe",
             spellCategory: skillDef.spellCategory || "damage",
-            spellPower: skillDef.spellPower || 1.5,
+            spellPower: enhanced.spellPower,
             ccType: skillDef.ccType,
             ccDuration: skillDef.ccDuration,
             buffStat: skillDef.buffStat,
             buffAmount: skillDef.buffAmount,
             rankMultiplier: rankMult,
+            cooldown: enhanced.cooldown,
+            critBoost: enhanced.critBoost,
+            lifestealBoost: enhanced.lifestealBoost,
+            defPierce: enhanced.defPierce,
+            selfDamagePct: enhanced.selfDamagePct,
+            statusEffects: enhanced.statusEffects,
+            aoeExtraHits: enhanced.aoeExtraHits,
+            damageToHealing: enhanced.damageToHealing,
+            defBoostAfterCast: enhanced.defBoostAfterCast,
+            upgradeLevel: npcEquippedSkill.upgradeLevel || 0,
           };
         }
       }
@@ -15894,22 +15933,35 @@ export async function registerRoutes(
       const dungeonEquippedSkill = await storage.getEquippedSkill(accountId);
       if (dungeonEquippedSkill) {
         const { getSkillById, RANK_MULTIPLIER } = await import("@shared/skills-data");
+        const { applySkillModifiers } = await import("@shared/skill-modifiers-data");
         const skillDef = getSkillById(dungeonEquippedSkill.skillId);
         if (skillDef) {
           const rankMult = RANK_MULTIPLIER[account.rank || "Novice"] || 1.0;
+          const mods = (dungeonEquippedSkill.attachedModifiers as string[]) || [];
+          const enhanced = applySkillModifiers(skillDef.spellPower || 1.5, skillDef.cooldown || 5, dungeonEquippedSkill.upgradeLevel || 0, mods);
           dungeonSpell = {
             name: skillDef.name,
-            multiplier: skillDef.spellPower || 1.5,
+            multiplier: enhanced.spellPower,
             element: skillDef.element,
             isAoE: skillDef.spellCategory === "aoe",
             targetCount: skillDef.targetCount,
             spellCategory: skillDef.spellCategory || "damage",
-            spellPower: skillDef.spellPower || 1.5,
+            spellPower: enhanced.spellPower,
             ccType: skillDef.ccType,
             ccDuration: skillDef.ccDuration,
             buffStat: skillDef.buffStat,
             buffAmount: skillDef.buffAmount,
             rankMultiplier: rankMult,
+            cooldown: enhanced.cooldown,
+            critBoost: enhanced.critBoost,
+            lifestealBoost: enhanced.lifestealBoost,
+            defPierce: enhanced.defPierce,
+            selfDamagePct: enhanced.selfDamagePct,
+            statusEffects: enhanced.statusEffects,
+            aoeExtraHits: enhanced.aoeExtraHits,
+            damageToHealing: enhanced.damageToHealing,
+            defBoostAfterCast: enhanced.defBoostAfterCast,
+            upgradeLevel: dungeonEquippedSkill.upgradeLevel || 0,
           };
         }
       }
@@ -18881,6 +18933,279 @@ export async function registerRoutes(
     } catch (e) {
       if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
       res.status(500).json({ error: "Failed to unlock node" });
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════
+  // SKILL WORKSHOP — Upgrade / Modifiers / Fusion
+  // ══════════════════════════════════════════════════════════════════════
+
+  // GET player modifier inventory
+  app.get("/api/accounts/:accountId/modifiers", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.accountId);
+      if (!account) return res.status(404).json({ error: "Not found" });
+      const rows = await db.select().from(playerModifiers)
+        .where(eq(playerModifiers.accountId, req.params.accountId));
+      res.json(rows);
+    } catch {
+      res.status(500).json({ error: "Failed to load modifiers" });
+    }
+  });
+
+  // POST buy a modifier from the shard shop
+  app.post("/api/accounts/:accountId/modifiers/buy", async (req, res) => {
+    try {
+      const { modifierId } = z.object({ modifierId: z.string() }).parse(req.body);
+      const { MODIFIER_MAP } = await import("@shared/skill-modifiers-data");
+      const modDef = MODIFIER_MAP[modifierId];
+      if (!modDef) return res.status(404).json({ error: "Unknown modifier" });
+
+      const account = await storage.getAccount(req.params.accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+      if ((account.soulShards ?? 0) < modDef.shardCost) {
+        return res.status(400).json({ error: `Need ${modDef.shardCost} Soul Shards (you have ${account.soulShards ?? 0})` });
+      }
+
+      await storage.updateAccount(req.params.accountId, { soulShards: (account.soulShards ?? 0) - modDef.shardCost });
+
+      const existing = await db.select().from(playerModifiers)
+        .where(and(eq(playerModifiers.accountId, req.params.accountId), eq(playerModifiers.modifierId, modifierId)))
+        .limit(1);
+      if (existing.length > 0) {
+        await db.update(playerModifiers)
+          .set({ quantity: existing[0].quantity + 1 })
+          .where(eq(playerModifiers.id, existing[0].id));
+      } else {
+        await db.insert(playerModifiers).values({ accountId: req.params.accountId, modifierId, quantity: 1 });
+      }
+      evictAccountCache(req.params.accountId);
+      res.json({ success: true, modifierName: modDef.name, shardsRemaining: (account.soulShards ?? 0) - modDef.shardCost });
+    } catch (e) {
+      if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
+      res.status(500).json({ error: "Failed to buy modifier" });
+    }
+  });
+
+  // POST upgrade a skill
+  app.post("/api/accounts/:accountId/skills/:skillId/upgrade", async (req, res) => {
+    try {
+      const { accountId, skillId } = req.params;
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const playerSkill = await storage.getPlayerSkill(skillId);
+      if (!playerSkill || playerSkill.accountId !== accountId) {
+        return res.status(404).json({ error: "Skill not found" });
+      }
+
+      const { getSkillById } = await import("@shared/skills-data");
+      const { UPGRADE_GOLD_COST, UPGRADE_TP_COST, UPGRADE_SPELL_MULT } = await import("@shared/skill-modifiers-data");
+      const skillDef = getSkillById(playerSkill.skillId);
+      if (!skillDef) return res.status(404).json({ error: "Skill definition not found" });
+
+      const currentLevel = playerSkill.upgradeLevel ?? 0;
+      if (currentLevel >= 5) return res.status(400).json({ error: "Skill is already at max level (5)" });
+
+      const rarityKey = skillDef.rarity as string;
+      const goldCost = (UPGRADE_GOLD_COST[rarityKey] ?? UPGRADE_GOLD_COST["common"])[currentLevel];
+      const tpCost = UPGRADE_TP_COST[currentLevel];
+
+      if ((account.gold ?? 0) < goldCost) {
+        return res.status(400).json({ error: `Need ${goldCost.toLocaleString()} gold (you have ${(account.gold ?? 0).toLocaleString()})` });
+      }
+      if ((account.trainingPoints ?? 0) < tpCost) {
+        return res.status(400).json({ error: `Need ${tpCost} TP (you have ${account.trainingPoints ?? 0})` });
+      }
+
+      const newLevel = currentLevel + 1;
+      await storage.updatePlayerSkill(skillId, { upgradeLevel: newLevel } as any);
+      await storage.updateAccount(accountId, {
+        gold: (account.gold ?? 0) - goldCost,
+        trainingPoints: (account.trainingPoints ?? 0) - tpCost,
+      });
+      evictAccountCache(accountId);
+
+      const newMult = UPGRADE_SPELL_MULT[newLevel];
+      res.json({
+        success: true,
+        newLevel,
+        newSpellPowerMult: newMult,
+        skillName: skillDef.name,
+        goldSpent: goldCost,
+        tpSpent: tpCost,
+      });
+    } catch (e) {
+      if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
+      res.status(500).json({ error: "Failed to upgrade skill" });
+    }
+  });
+
+  // POST attach a modifier to a skill
+  app.post("/api/accounts/:accountId/skills/:skillId/attach-modifier", async (req, res) => {
+    try {
+      const { accountId, skillId } = req.params;
+      const { modifierId } = z.object({ modifierId: z.string() }).parse(req.body);
+
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const playerSkill = await storage.getPlayerSkill(skillId);
+      if (!playerSkill || playerSkill.accountId !== accountId) {
+        return res.status(404).json({ error: "Skill not found" });
+      }
+
+      const { getSkillById } = await import("@shared/skills-data");
+      const { MODIFIER_MAP, getModifierSlots } = await import("@shared/skill-modifiers-data");
+
+      const skillDef = getSkillById(playerSkill.skillId);
+      if (!skillDef) return res.status(404).json({ error: "Skill definition not found" });
+      const modDef = MODIFIER_MAP[modifierId];
+      if (!modDef) return res.status(404).json({ error: "Unknown modifier" });
+
+      const current = (playerSkill.attachedModifiers as string[]) || [];
+      const maxSlots = getModifierSlots(skillDef.rarity, playerSkill.upgradeLevel ?? 0);
+      if (current.length >= maxSlots) {
+        return res.status(400).json({ error: `Skill only has ${maxSlots} modifier slot(s) at this upgrade level` });
+      }
+
+      const modRow = await db.select().from(playerModifiers)
+        .where(and(eq(playerModifiers.accountId, accountId), eq(playerModifiers.modifierId, modifierId)))
+        .limit(1);
+      if (!modRow.length || modRow[0].quantity < 1) {
+        return res.status(400).json({ error: "You don't own this modifier" });
+      }
+
+      if (modRow[0].quantity <= 1) {
+        await db.delete(playerModifiers).where(eq(playerModifiers.id, modRow[0].id));
+      } else {
+        await db.update(playerModifiers).set({ quantity: modRow[0].quantity - 1 }).where(eq(playerModifiers.id, modRow[0].id));
+      }
+
+      const updated = [...current, modifierId];
+      await storage.updatePlayerSkill(skillId, { attachedModifiers: updated } as any);
+
+      res.json({ success: true, modifierName: modDef.name, attachedModifiers: updated });
+    } catch (e) {
+      if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
+      res.status(500).json({ error: "Failed to attach modifier" });
+    }
+  });
+
+  // POST detach a modifier from a skill (returns it to inventory)
+  app.post("/api/accounts/:accountId/skills/:skillId/detach-modifier", async (req, res) => {
+    try {
+      const { accountId, skillId } = req.params;
+      const { modifierId } = z.object({ modifierId: z.string() }).parse(req.body);
+
+      const playerSkill = await storage.getPlayerSkill(skillId);
+      if (!playerSkill || playerSkill.accountId !== accountId) {
+        return res.status(404).json({ error: "Skill not found" });
+      }
+
+      const current = (playerSkill.attachedModifiers as string[]) || [];
+      const idx = current.indexOf(modifierId);
+      if (idx === -1) return res.status(400).json({ error: "Modifier not attached to this skill" });
+
+      const updated = [...current];
+      updated.splice(idx, 1);
+      await storage.updatePlayerSkill(skillId, { attachedModifiers: updated } as any);
+
+      const existing = await db.select().from(playerModifiers)
+        .where(and(eq(playerModifiers.accountId, accountId), eq(playerModifiers.modifierId, modifierId)))
+        .limit(1);
+      if (existing.length > 0) {
+        await db.update(playerModifiers).set({ quantity: existing[0].quantity + 1 }).where(eq(playerModifiers.id, existing[0].id));
+      } else {
+        await db.insert(playerModifiers).values({ accountId, modifierId, quantity: 1 });
+      }
+
+      const { MODIFIER_MAP } = await import("@shared/skill-modifiers-data");
+      res.json({ success: true, modifierName: MODIFIER_MAP[modifierId]?.name ?? modifierId, attachedModifiers: updated });
+    } catch (e) {
+      if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
+      res.status(500).json({ error: "Failed to detach modifier" });
+    }
+  });
+
+  // POST fuse two skills into a higher-rarity skill
+  app.post("/api/accounts/:accountId/skills/fuse", async (req, res) => {
+    try {
+      const { skillId1, skillId2 } = z.object({ skillId1: z.string(), skillId2: z.string() }).parse(req.body);
+      const { accountId } = req.params;
+      if (skillId1 === skillId2) return res.status(400).json({ error: "Cannot fuse a skill with itself" });
+
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const ps1 = await storage.getPlayerSkill(skillId1);
+      const ps2 = await storage.getPlayerSkill(skillId2);
+      if (!ps1 || ps1.accountId !== accountId) return res.status(404).json({ error: "Skill 1 not found" });
+      if (!ps2 || ps2.accountId !== accountId) return res.status(404).json({ error: "Skill 2 not found" });
+
+      const { getSkillById, ALL_SKILLS } = await import("@shared/skills-data");
+      const { FUSION_TP_COST } = await import("@shared/skill-modifiers-data");
+
+      const def1 = getSkillById(ps1.skillId);
+      const def2 = getSkillById(ps2.skillId);
+      if (!def1 || !def2) return res.status(404).json({ error: "Skill definition not found" });
+      if (def1.rarity !== def2.rarity) {
+        return res.status(400).json({ error: `Both skills must be the same rarity (${def1.rarity} vs ${def2.rarity})` });
+      }
+
+      const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary", "mythic"];
+      const currentIdx = RARITY_ORDER.indexOf(def1.rarity);
+      if (currentIdx === -1 || currentIdx >= RARITY_ORDER.length - 1) {
+        return res.status(400).json({ error: "Cannot fuse mythic skills" });
+      }
+      const targetRarity = RARITY_ORDER[currentIdx + 1];
+      const tpCost = FUSION_TP_COST[def1.rarity] ?? 3;
+
+      if ((account.trainingPoints ?? 0) < tpCost) {
+        return res.status(400).json({ error: `Need ${tpCost} TP to fuse (you have ${account.trainingPoints ?? 0})` });
+      }
+
+      const candidates = ALL_SKILLS.filter(s =>
+        s.rarity === targetRarity &&
+        !s.isAdminExclusive &&
+        !s.isValorExclusive
+      );
+      if (!candidates.length) return res.status(500).json({ error: "No skills of target rarity available" });
+
+      const resultDef = candidates[Math.floor(Math.random() * candidates.length)];
+
+      // Carry one random modifier from source skills (if any)
+      const allMods = [
+        ...((ps1.attachedModifiers as string[]) || []),
+        ...((ps2.attachedModifiers as string[]) || []),
+      ];
+      const inheritedMod = allMods.length > 0 ? [allMods[Math.floor(Math.random() * allMods.length)]] : [];
+
+      // Delete both source skills
+      await db.delete(playerSkills).where(eq(playerSkills.id, skillId1));
+      await db.delete(playerSkills).where(eq(playerSkills.id, skillId2));
+
+      // Insert new fused skill
+      const [newSkill] = await db.insert(playerSkills).values({
+        accountId,
+        skillId: resultDef.id,
+        isEquipped: false,
+        source: "fusion",
+        upgradeLevel: 0,
+        attachedModifiers: inheritedMod,
+      } as any).returning();
+
+      await storage.updateAccount(accountId, { trainingPoints: (account.trainingPoints ?? 0) - tpCost });
+      evictAccountCache(accountId);
+
+      res.json({
+        success: true,
+        resultSkill: { id: newSkill.id, skillId: resultDef.id, name: resultDef.name, rarity: resultDef.rarity, inheritedMod },
+        tpSpent: tpCost,
+      });
+    } catch (e) {
+      if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
+      res.status(500).json({ error: "Failed to fuse skills" });
     }
   });
 

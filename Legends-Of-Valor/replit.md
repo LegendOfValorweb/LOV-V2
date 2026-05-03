@@ -257,8 +257,48 @@ Three server-side RNG games with rank-scaled bet limits (min 100 gold, max 500M 
 - World Map: "The Golden Den" zone (casino) and "Skill Sanctum" zone (skill tree)
 - Skills page: 5th tab "Skill Tree" with overview card + direct link
 
+## PHASE 14: Modular Ability Workshop (May 2026)
+
+### New DB tables
+- `player_modifiers` — tracks each player's modifier crystal inventory (modifierId + quantity)
+- `player_skills` extended — added `upgradeLevel` (integer, 0–5) and `attachedModifiers` (jsonb string[])
+
+### Skill Workshop — `/skill-workshop`
+Three-tab workshop for deep customisation of owned skills:
+
+**Upgrade Tab:**
+- Skills have 5 upgrade levels; each level multiplies spellPower (1.0→1.15→1.32→1.52→1.75→2.10×)
+- Cooldown reduced by 1 at Lv 3, by 2 at Lv 5
+- Extra modifier slot unlocked at Lv 3 and Lv 5
+- Cost per rarity scales from 1K gold / 1 TP (Common Lv1) up to 1B gold / 25 TP (Mythic Lv5)
+
+**Modifiers Tab:**
+- 20 modifier crystals across 5 rarities: Common / Rare / Epic / Legendary / Mythic
+- Common: Empowered (+20% power), Swift (-2 CDR), Burning (35% burn), Freezing (25% freeze), Mana Efficient (-30% mana)
+- Rare: Piercing (25% DEF pierce), Critical Eye (+15% crit), Draining (+10% lifesteal), Fortifying (+20% DEF after cast), Poisonous (40% poison), Volatile (+40% dmg / 8% self dmg), Bleeding (30% bleed)
+- Epic: Arcane Infusion (+30% / 10% DEF pierce), Runic (-3 CDR / -40% mana), Vampiric (+15% lifesteal / 20% stun), Divine Echo (25% dmg→heal), Explosive (strike twice)
+- Legendary: Stoic Fury (+50% / -4 CDR / 20% pierce), Masterful (+40% / +20% crit / +12% lifesteal)
+- Mythic: Transcendent (+65% / -5 CDR / -50% mana / +25% crit)
+- Modifier slots per skill: Common/Uncommon = 1, Rare/Epic = 2, Legendary/Mythic = 3 (plus upgrade bonuses)
+- Buy modifiers from the in-workshop shop using Soul Shards
+- Attach/detach modifiers freely (detach returns to inventory)
+
+**Fusion Tab:**
+- Combine two skills of the same rarity → random skill of next rarity tier
+- Common+Common → Uncommon (3 TP), Uncommon+Uncommon → Rare (5 TP), ..., Legendary → Mythic (50 TP)
+- One modifier randomly inherited from source skills
+- Both source skills consumed (irreversible, warned in UI)
+
+### Combat integration
+All 4 combat entry points (Tower, monster fight, NPC fight, dungeon) now call `applySkillModifiers()` from `skill-modifiers-data.ts` before building the spell object. Combat receives: adjusted spellPower, cooldown, critBoost, lifestealBoost, defPierce, selfDamagePct, statusEffects (with chance), aoeExtraHits, damageToHealing, defBoostAfterCast.
+
+### Navigation
+- World Map: "Skill Workshop" zone added at (35, 72)
+- Skills page → Skill Tree tab: "⚗️ Workshop" button + description card
+
 ## Recent Changes
 
+- May 2026: Modular ability workshop (upgrade / modifiers / fusion), combat modifier integration
 - May 2026: Casino system (3 games + history), Skill Tree (210 nodes × 14 races), passive combat integration
 - January 2026: Complete V2 implementation
 - Phase 11: Voice TTS, skins, $Valor shop, 1000+ achievements, tournaments
