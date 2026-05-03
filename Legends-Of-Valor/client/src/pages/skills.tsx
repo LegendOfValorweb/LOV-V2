@@ -16,7 +16,7 @@ import { GoldDisplay } from "@/components/gold-display";
 import { 
   Gavel, Package, LogOut, ShoppingBag, Heart, Users, Swords, Shield, 
   Zap, Clock, Sparkles, Timer, Flame, Snowflake, Eye, Activity, 
-  ArrowLeft, Trophy, ArrowLeftRight, Map
+  ArrowLeft, Trophy, ArrowLeftRight, Map, GitBranch
 } from "lucide-react";
 import {
   Dialog,
@@ -330,20 +330,24 @@ export default function Skills() {
 
       <main className="container mx-auto px-4 py-6">
           <Tabs defaultValue="auction" className="space-y-6">
-            <TabsList className="flex w-full mb-6 overflow-x-auto no-scrollbar justify-start sm:grid sm:grid-cols-4">
-              <TabsTrigger value="auction" className="flex-1 min-w-[100px]" data-testid="tab-skills-auction">
+            <TabsList className="flex w-full mb-6 overflow-x-auto no-scrollbar justify-start sm:grid sm:grid-cols-5">
+              <TabsTrigger value="auction" className="flex-1 min-w-[90px]" data-testid="tab-skills-auction">
                 <Gavel className="h-4 w-4 mr-2 shrink-0" />
                 <span className="truncate">Auction</span>
               </TabsTrigger>
-              <TabsTrigger value="my-skills" className="flex-1 min-w-[100px]" data-testid="tab-skills-equipped">
+              <TabsTrigger value="my-skills" className="flex-1 min-w-[90px]" data-testid="tab-skills-equipped">
                 <Sparkles className="h-4 w-4 mr-2 shrink-0" />
                 <span className="truncate">My Skills</span>
               </TabsTrigger>
-              <TabsTrigger value="race-skills" className="flex-1 min-w-[100px]" data-testid="tab-skills-race">
+              <TabsTrigger value="race-skills" className="flex-1 min-w-[90px]" data-testid="tab-skills-race">
                 <Shield className="h-4 w-4 mr-2 shrink-0" />
                 <span className="truncate">Race Skills</span>
               </TabsTrigger>
-              <TabsTrigger value="news" className="flex-1 min-w-[100px]" data-testid="tab-skills-news">
+              <TabsTrigger value="skill-tree" className="flex-1 min-w-[90px]" data-testid="tab-skills-tree">
+                <GitBranch className="h-4 w-4 mr-2 shrink-0" />
+                <span className="truncate">Skill Tree</span>
+              </TabsTrigger>
+              <TabsTrigger value="news" className="flex-1 min-w-[90px]" data-testid="tab-skills-news">
                 <Activity className="h-4 w-4 mr-2 shrink-0" />
                 <span className="truncate">News</span>
               </TabsTrigger>
@@ -474,6 +478,47 @@ export default function Skills() {
                     })}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="skill-tree" className="space-y-4">
+            <Card className="bg-gradient-to-br from-purple-950/40 to-card border-purple-700/30">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-purple-300">
+                  <GitBranch className="h-5 w-5" /> Deep Skill Tree
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Invest your <span className="text-yellow-400 font-semibold">Training Points</span> to unlock
+                  powerful passive bonuses and active abilities along three race-specific branches —
+                  Combat, Mastery, and Ascension. Each branch has 5 nodes arranged in tiers, with
+                  powerful Keystones at the top.
+                </p>
+                <div className="grid grid-cols-3 gap-3 text-xs text-center">
+                  {[
+                    { icon: "⚔️", label: "Combat", desc: "Offensive power, crits & damage" },
+                    { icon: "🛡️", label: "Mastery", desc: "Defense, dodge & lifesteal" },
+                    { icon: "✨", label: "Ascension", desc: "All-stats, gold & XP bonuses" },
+                  ].map(b => (
+                    <div key={b.label} className="p-3 rounded-lg bg-black/30 border border-white/10">
+                      <div className="text-2xl mb-1">{b.icon}</div>
+                      <div className="font-bold text-foreground">{b.label}</div>
+                      <div className="text-muted-foreground mt-0.5">{b.desc}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center justify-between p-3 bg-yellow-900/20 rounded-lg border border-yellow-700/30">
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">Training Points available: </span>
+                    <span className="font-bold text-yellow-400">{account.trainingPoints ?? 0}</span>
+                  </div>
+                  <Button size="sm" className="bg-purple-700 hover:bg-purple-600 text-white"
+                    onClick={() => navigate("/skill-tree")}>
+                    <GitBranch className="h-4 w-4 mr-1" /> Open Skill Tree
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

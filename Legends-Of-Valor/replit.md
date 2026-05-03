@@ -230,8 +230,36 @@ cd Legends-Of-Valor && npm run build && npm run start
   - 4th: 1M gold, 750 rubies, 250 shards, 50 focused, 1K TP
   - 5th: 500K gold, 500 rubies, 100 shards, 500 TP
 
+## PHASE 13: Casino System (May 2026)
+
+### New DB tables
+- `casino_history` — stores every game result (game type, bet, payout, netGain, outcome jsonb, indexed by accountId)
+- `skill_tree_nodes` — tracks unlocked skill tree nodes per player (unique accountId+nodeId)
+
+### Casino — `/casino` (The Golden Den)
+Three server-side RNG games with rank-scaled bet limits (min 100 gold, max 500M at Mythical Legend):
+- **Lucky Dice** — Pick HIGH (4-6) or LOW (1-3) → 1.9× payout (5% house edge); or exact number (1-6) → 5.5× payout (~8% house edge)
+- **Card War** — Draw card 1-13 vs dealer; higher wins 1.9×, tie = push, lower = lose (~4.6% edge)
+- **Fortune Wheel** — 20 segments: 12 lose, 5×1.9×, 2×3.5×, 1×10× jackpot
+- Full game history and stats tracker (total wagered, net gain, biggest win)
+- All randomness computed server-side (no client manipulation)
+
+### Skill Tree — `/skill-tree` (Skill Sanctum)
+210-node deep progression system for all 14 races:
+- 3 branches per race: **Combat** (Str/damage/crit), **Mastery** (Def/dodge/lifesteal), **Ascension** (all-stats/gold/XP)
+- 5 nodes per branch in a diamond pattern: T1 entry → T2a/T2b fork → T3 convergence → T4 Keystone
+- Cost: 1/2/3/5 Training Points per tier
+- Prerequisites enforced server-side; rank requirements enforced (Novice through Champion)
+- **Passive stat bonuses automatically applied in combat** via `computeCombatStats` integration
+- Accessible from Skills page (new "Skill Tree" tab) and World Map (Skill Sanctum zone)
+
+### Navigation additions
+- World Map: "The Golden Den" zone (casino) and "Skill Sanctum" zone (skill tree)
+- Skills page: 5th tab "Skill Tree" with overview card + direct link
+
 ## Recent Changes
 
+- May 2026: Casino system (3 games + history), Skill Tree (210 nodes × 14 races), passive combat integration
 - January 2026: Complete V2 implementation
 - Phase 11: Voice TTS, skins, $Valor shop, 1000+ achievements, tournaments
 - 14 races × 2 genders with stat modifiers

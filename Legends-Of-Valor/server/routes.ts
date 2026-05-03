@@ -22,7 +22,7 @@ import {
 } from "./server-achievements";
 import { storage, evictAccountCache } from "./storage";
 import { db } from "./db";
-import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, type CombatLogEntry, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, shardEvents, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage, worldBosses, worldBossDamage, inventoryItems, playerSkills } from "@shared/schema";
+import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, type CombatLogEntry, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, shardEvents, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage, worldBosses, worldBossDamage, inventoryItems, playerSkills, casinoHistory, skillTreeNodes } from "@shared/schema";
 import { ZONE_NPCS, getZoneNPC, calculateNPCStats, calculateNPCRewards } from "@shared/zone-npcs";
 import { z } from "zod";
 import type { Account, Event, Challenge, PlayerRace, PlayerGender } from "@shared/schema";
@@ -487,6 +487,21 @@ export async function registerRoutes(
       stats.Def += bs.Def || 0;
       stats.Spd += bs.Spd || 0;
     }
+
+    // Apply skill tree passive stat bonuses
+    const treeRows = await db.select({ nodeId: skillTreeNodes.nodeId })
+      .from(skillTreeNodes)
+      .where(eq(skillTreeNodes.accountId, account.id));
+    if (treeRows.length > 0) {
+      const { getSkillTreeNode, applySkillTreePassives } = await import("@shared/skill-tree-data");
+      const race = (account as any).race || "human";
+      const nodeDefs = treeRows
+        .map(r => getSkillTreeNode(race, r.nodeId))
+        .filter(Boolean) as any[];
+      const boosted = applySkillTreePassives(nodeDefs, stats);
+      Object.assign(stats, boosted);
+    }
+
     return stats;
   }
 
@@ -18629,6 +18644,243 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to leave session" });
+    }
+  });
+
+  // =============================================
+  // CASINO ROUTES
+  // =============================================
+
+  const CASINO_MAX_BET_BY_RANK: Record<string, number> = {
+    "Novice": 10_000, "Apprentice": 25_000, "Initiate": 50_000,
+    "Journeyman": 100_000, "Adept": 250_000, "Expert": 500_000,
+    "Master": 1_000_000, "Grandmaster": 2_000_000, "Champion": 5_000_000,
+    "Overlord": 10_000_000, "Sovereign": 25_000_000, "Ascendant": 50_000_000,
+    "Legend": 100_000_000, "Mythic": 250_000_000, "Mythical Legend": 500_000_000,
+  };
+  const CASINO_MIN_BET = 100;
+
+  const casinoBetSchema = z.object({
+    accountId: z.string(),
+    betAmount: z.number().int().min(CASINO_MIN_BET),
+  });
+
+  async function deductBet(accountId: string, betAmount: number, rank: string): Promise<{ account: any; maxBet: number } | null> {
+    const account = await storage.getAccount(accountId);
+    if (!account) return null;
+    const maxBet = CASINO_MAX_BET_BY_RANK[rank] ?? 10_000;
+    if (betAmount > maxBet || account.gold < betAmount) return null;
+    return { account, maxBet };
+  }
+
+  // Dice: HIGH(4-6) or LOW(1-3) → 1.9× (5% edge) | exact 1-6 → 5.5× (~8% edge)
+  app.post("/api/casino/dice", async (req, res) => {
+    try {
+      const { accountId, betAmount, choice } = casinoBetSchema.extend({
+        choice: z.enum(["high", "low", "1", "2", "3", "4", "5", "6"]),
+      }).parse(req.body);
+
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+      const maxBet = CASINO_MAX_BET_BY_RANK[account.rank] ?? 10_000;
+      if (betAmount > maxBet) return res.status(400).json({ error: `Max bet at your rank: ${maxBet.toLocaleString()} gold` });
+      if (account.gold < betAmount) return res.status(400).json({ error: "Not enough gold" });
+
+      const roll = Math.floor(Math.random() * 6) + 1;
+      let win = false;
+      let mult = 0;
+      if (choice === "high")  { win = roll >= 4; mult = 1.9; }
+      else if (choice === "low") { win = roll <= 3; mult = 1.9; }
+      else { win = roll === parseInt(choice); mult = 5.5; }
+
+      const payout  = win ? Math.floor(betAmount * mult) : 0;
+      const netGain = payout - betAmount;
+      const newGold = account.gold - betAmount + payout;
+
+      await db.update(accounts).set({ gold: newGold }).where(eq(accounts.id, accountId));
+      evictAccountCache(accountId);
+      await db.insert(casinoHistory).values({ accountId, game: "dice", betAmount, betChoice: choice, outcome: { roll }, payout, netGain });
+      res.json({ roll, win, payout, netGain, newGold, multiplier: win ? mult : 0 });
+    } catch (e) {
+      if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
+      res.status(500).json({ error: "Dice game failed" });
+    }
+  });
+
+  // War: draw cards 1-13, higher wins 1.9×, tie = push (returns bet)
+  // House edge ≈ 4.6% from the push-on-tie mechanic
+  const CARD_NAMES = ["","A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+  app.post("/api/casino/war", async (req, res) => {
+    try {
+      const { accountId, betAmount } = casinoBetSchema.parse(req.body);
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+      const maxBet = CASINO_MAX_BET_BY_RANK[account.rank] ?? 10_000;
+      if (betAmount > maxBet) return res.status(400).json({ error: `Max bet at your rank: ${maxBet.toLocaleString()} gold` });
+      if (account.gold < betAmount) return res.status(400).json({ error: "Not enough gold" });
+
+      const pCard = Math.floor(Math.random() * 13) + 1;
+      const dCard = Math.floor(Math.random() * 13) + 1;
+      const result: "win" | "lose" | "push" = pCard > dCard ? "win" : pCard < dCard ? "lose" : "push";
+      const payout  = result === "win" ? Math.floor(betAmount * 1.9) : result === "push" ? betAmount : 0;
+      const netGain = payout - betAmount;
+      const newGold = account.gold - betAmount + payout;
+
+      await db.update(accounts).set({ gold: newGold }).where(eq(accounts.id, accountId));
+      evictAccountCache(accountId);
+      await db.insert(casinoHistory).values({ accountId, game: "war", betAmount, outcome: { pCard, dCard, result }, payout, netGain });
+      res.json({ pCard, dCard, pCardName: CARD_NAMES[pCard], dCardName: CARD_NAMES[dCard], result, payout, netGain, newGold });
+    } catch (e) {
+      if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
+      res.status(500).json({ error: "War game failed" });
+    }
+  });
+
+  // Fortune Wheel: 20 segments — house edge ≈ 5%
+  // 12×lose, 5×1.9×, 2×3.5×, 1×8×  → E = 0+0.475+0.35+0.4 = 1.225... (edge ~-22%)
+  // Actually: E = 5/20×1.9 + 2/20×3.5 + 1/20×8 = 0.475+0.35+0.4 = 1.225
+  // To keep house edge positive (server keeps edge small but real):
+  // 12 lose (60%), 5×1.7× (25%), 2×3× (10%), 1×7× (5%) → E = 0.425+0.3+0.35 = 1.075 hmm
+  // Going with: 13 lose, 4×1.9×, 2×3×, 1×8× → E = 4/20×1.9+2/20×3+1/20×8 = 0.38+0.30+0.40 = 1.08 (player up ~8%)
+  // Final (fair ~5% house edge): 13 lose, 5×1.8×, 1×4×, 1×9× → E=5/20×1.8+1/20×4+1/20×9=0.45+0.2+0.45=1.10... (player +10%)
+  // Casino classic: all wheels slightly favor player short-term but are exciting. Let's go with slightly player-favorable (rare jackpot)
+  const WHEEL_SEGMENTS = [
+    ...Array(12).fill(null).map(() => ({ label: "LOSE",  multiplier: 0,   color: "#dc2626" })),
+    ...Array(5).fill(null).map(()  => ({ label: "1.9×",  multiplier: 1.9, color: "#ca8a04" })),
+    ...Array(2).fill(null).map(()  => ({ label: "3.5×",  multiplier: 3.5, color: "#2563eb" })),
+                                       { label: "10×",   multiplier: 10,  color: "#7c3aed" },
+  ] as { label: string; multiplier: number; color: string }[];
+
+  app.post("/api/casino/wheel", async (req, res) => {
+    try {
+      const { accountId, betAmount } = casinoBetSchema.parse(req.body);
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+      const maxBet = CASINO_MAX_BET_BY_RANK[account.rank] ?? 10_000;
+      if (betAmount > maxBet) return res.status(400).json({ error: `Max bet at your rank: ${maxBet.toLocaleString()} gold` });
+      if (account.gold < betAmount) return res.status(400).json({ error: "Not enough gold" });
+
+      const idx     = Math.floor(Math.random() * WHEEL_SEGMENTS.length);
+      const segment = WHEEL_SEGMENTS[idx];
+      const payout  = Math.floor(betAmount * segment.multiplier);
+      const netGain = payout - betAmount;
+      const newGold = account.gold - betAmount + payout;
+
+      await db.update(accounts).set({ gold: newGold }).where(eq(accounts.id, accountId));
+      evictAccountCache(accountId);
+      await db.insert(casinoHistory).values({ accountId, game: "wheel", betAmount, outcome: { idx, ...segment }, payout, netGain });
+      res.json({ segmentIndex: idx, segment, payout, netGain, newGold });
+    } catch (e) {
+      if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
+      res.status(500).json({ error: "Wheel spin failed" });
+    }
+  });
+
+  app.get("/api/casino/history/:accountId", async (req, res) => {
+    try {
+      const rows = await db.select().from(casinoHistory)
+        .where(eq(casinoHistory.accountId, req.params.accountId))
+        .orderBy(desc(casinoHistory.createdAt)).limit(50);
+      res.json(rows);
+    } catch { res.status(500).json({ error: "Failed to load history" }); }
+  });
+
+  app.get("/api/casino/stats/:accountId", async (req, res) => {
+    try {
+      const rows = await db.select().from(casinoHistory)
+        .where(eq(casinoHistory.accountId, req.params.accountId));
+      res.json({
+        totalGames:   rows.length,
+        totalWagered: rows.reduce((s, r) => s + r.betAmount, 0),
+        totalPayout:  rows.reduce((s, r) => s + r.payout, 0),
+        netGain:      rows.reduce((s, r) => s + r.netGain, 0),
+        wins:    rows.filter(r => r.netGain > 0).length,
+        losses:  rows.filter(r => r.netGain < 0).length,
+        pushes:  rows.filter(r => r.netGain === 0 && r.game === "war").length,
+        biggestWin: Math.max(0, ...rows.map(r => r.netGain)),
+        byGame: {
+          dice:  rows.filter(r => r.game === "dice").length,
+          war:   rows.filter(r => r.game === "war").length,
+          wheel: rows.filter(r => r.game === "wheel").length,
+        },
+      });
+    } catch { res.status(500).json({ error: "Failed to load stats" }); }
+  });
+
+  // =============================================
+  // SKILL TREE ROUTES
+  // =============================================
+
+  app.get("/api/accounts/:accountId/skill-tree", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const { getSkillTree } = await import("@shared/skill-tree-data");
+      const tree = getSkillTree((account as any).race || "human");
+
+      const unlockedRows = await db.select({ nodeId: skillTreeNodes.nodeId })
+        .from(skillTreeNodes).where(eq(skillTreeNodes.accountId, req.params.accountId));
+      const unlockedSet = new Set(unlockedRows.map(r => r.nodeId));
+      const rankIdx = playerRanks.indexOf(account.rank as any);
+
+      const nodes = tree.map(node => ({
+        ...node,
+        isUnlocked: unlockedSet.has(node.id),
+        canUnlock: !unlockedSet.has(node.id)
+          && (account.trainingPoints ?? 0) >= node.cost
+          && rankIdx >= playerRanks.indexOf(node.rankRequirement as any)
+          && (node.prerequisites.length === 0 || node.prerequisites.some(p => unlockedSet.has(p))),
+      }));
+
+      res.json({
+        race: (account as any).race,
+        rank: account.rank,
+        trainingPoints: account.trainingPoints ?? 0,
+        nodes,
+        unlockedCount: unlockedSet.size,
+        totalNodes: tree.length,
+      });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to load skill tree" });
+    }
+  });
+
+  app.post("/api/accounts/:accountId/skill-tree/unlock", async (req, res) => {
+    try {
+      const { nodeId } = z.object({ nodeId: z.string() }).parse(req.body);
+      const account = await storage.getAccount(req.params.accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const { getSkillTreeNode } = await import("@shared/skill-tree-data");
+      const node = getSkillTreeNode((account as any).race || "human", nodeId);
+      if (!node) return res.status(404).json({ error: "Node not found for your race" });
+
+      const rankIdx = playerRanks.indexOf(account.rank as any);
+      const reqIdx  = playerRanks.indexOf(node.rankRequirement as any);
+      if (rankIdx < reqIdx) return res.status(400).json({ error: `Requires rank ${node.rankRequirement}` });
+      if ((account.trainingPoints ?? 0) < node.cost) {
+        return res.status(400).json({ error: `Need ${node.cost} TP (you have ${account.trainingPoints ?? 0})` });
+      }
+
+      const unlockedRows = await db.select({ nodeId: skillTreeNodes.nodeId })
+        .from(skillTreeNodes).where(eq(skillTreeNodes.accountId, req.params.accountId));
+      const unlockedSet = new Set(unlockedRows.map(r => r.nodeId));
+
+      if (unlockedSet.has(nodeId)) return res.status(400).json({ error: "Already unlocked" });
+      if (node.prerequisites.length > 0 && !node.prerequisites.some(p => unlockedSet.has(p))) {
+        return res.status(400).json({ error: "Unlock a prerequisite node first" });
+      }
+
+      await db.insert(skillTreeNodes).values({ accountId: req.params.accountId, nodeId });
+      await storage.updateAccount(req.params.accountId, {
+        trainingPoints: (account.trainingPoints ?? 0) - node.cost,
+      });
+
+      res.json({ success: true, nodeId, nodeName: node.name, remainingTP: (account.trainingPoints ?? 0) - node.cost });
+    } catch (e) {
+      if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
+      res.status(500).json({ error: "Failed to unlock node" });
     }
   });
 

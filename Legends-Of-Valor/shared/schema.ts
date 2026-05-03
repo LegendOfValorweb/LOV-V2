@@ -2530,3 +2530,46 @@ export const coopSessionsRelations = relations(coopSessions, ({ one }) => ({
 export const insertCoopSessionSchema = createInsertSchema(coopSessions).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertCoopSession = z.infer<typeof insertCoopSessionSchema>;
 export type CoopSession = typeof coopSessions.$inferSelect;
+
+// ─── Casino ───────────────────────────────────────────────────────────────────
+export const casinoGameTypes = ["dice", "war", "wheel"] as const;
+export type CasinoGameType = typeof casinoGameTypes[number];
+
+export const casinoHistory = pgTable("casino_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  accountId: varchar("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
+  game: text("game").notNull().$type<CasinoGameType>(),
+  betAmount: bigint("bet_amount", { mode: "number" }).notNull(),
+  betChoice: text("bet_choice"),
+  outcome: jsonb("outcome").notNull().default({}),
+  payout: bigint("payout", { mode: "number" }).notNull(),
+  netGain: bigint("net_gain", { mode: "number" }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("casino_history_account_id_idx").on(t.accountId),
+]);
+
+export const casinoHistoryRelations = relations(casinoHistory, ({ one }) => ({
+  account: one(accounts, { fields: [casinoHistory.accountId], references: [accounts.id] }),
+}));
+
+export const insertCasinoHistorySchema = createInsertSchema(casinoHistory).omit({ id: true, createdAt: true });
+export type InsertCasinoHistory = z.infer<typeof insertCasinoHistorySchema>;
+export type CasinoHistory = typeof casinoHistory.$inferSelect;
+
+// ─── Skill Tree ───────────────────────────────────────────────────────────────
+export const skillTreeNodes = pgTable("skill_tree_nodes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  accountId: varchar("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
+  nodeId: text("node_id").notNull(),
+  unlockedAt: timestamp("unlocked_at").notNull().defaultNow(),
+}, (t) => [
+  index("skill_tree_nodes_account_id_idx").on(t.accountId),
+  uniqueIndex("skill_tree_nodes_account_node_uidx").on(t.accountId, t.nodeId),
+]);
+
+export const skillTreeNodesRelations = relations(skillTreeNodes, ({ one }) => ({
+  account: one(accounts, { fields: [skillTreeNodes.accountId], references: [accounts.id] }),
+}));
+
+export type SkillTreeNode = typeof skillTreeNodes.$inferSelect;
