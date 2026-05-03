@@ -1,0 +1,20 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "UFFaJQZCatQMlRFiq7mdE"
+uri = "file://artifacts/mockup-sandbox/public/images/gritty-bg.png"
+type = "image"
+title = "Gritty fantasy ruins landscape"
+
+[[generated]]
+id = "2vXCIPWebGsseuEdYqzga"
+uri = "file://artifacts/mockup-sandbox/public/images/gothic-hero-bg.png"
+type = "image"
+title = "Dark gothic castle background"
+
+[[generated]]
+id = "bQjSvd1V77Ag39OPZQ2B5"
+uri = "file://artifacts/mockup-sandbox/public/images/lov-cinematic-bg.png"
+type = "image"
+title = "Cinematic dark fantasy landscape"
