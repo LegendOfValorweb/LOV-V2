@@ -84,6 +84,14 @@ cd Legends-Of-Valor && npm run db:push
 
 ## Recent Changes
 
+- May 2026: Performance optimization pass:
+  - **db.ts** — Pool capped at 20 connections, idle/connection timeouts added
+  - **index.ts** — gzip compression middleware; response logging truncated to 200 chars
+  - **storage.ts** — In-process TTL cache (15 s accounts, 20 s inventory); all account write methods populate cache; inventory writes invalidate by accountId
+  - **routes.ts** — `birds` added to static imports; shared `computeCombatStats()` helper using `Promise.all` replaces 3 duplicate inline sequential functions; `activeCombatStates` in-memory Map eliminates per-action DB writes (write to DB every 5 rounds checkpoint + on finish); GET combat endpoint also reads from memory; winner/loser accounts fetched in parallel
+  - **client** — hell-zone.tsx: 3 s→8 s / 2 s→5 s; coop.tsx: 3 s→8 s / 2 s→4 s; combat-ui.tsx: 3 s→5 s
+  - **combat-engine.ts** — Strategic NPC AI with 4 behavior archetypes (aggressive, defensive, trickster, boss)
+
 - May 2026: Fixed 6 frontend/backend mismatches:
   - **Research Lab** — `handleResearch` now calls `POST /api/accounts/:id/research` (deducts gold, boosts stat, grants TP); `handleCraft` calls same route with goldCost only; enchanting tab replaced with redirect to Inventory (real enchanting via Soul Shards)
   - **Ancient Ruins** — `handleExplore` now calls `POST /api/ancient-ruins/explore` instead of the old mining endpoint with unsupported override params

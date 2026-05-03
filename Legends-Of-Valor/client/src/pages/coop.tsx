@@ -212,17 +212,17 @@ export default function CoopPage() {
   const { data: sessionsData, isLoading: sessionsLoading } = useQuery({
     queryKey: ["/api/coop/sessions", account.id],
     queryFn: () => apiRequest("GET", `/api/coop/sessions?accountId=${account.id}`).then(r => r.json()),
-    refetchInterval: 3000,
+    refetchInterval: 8000,
   });
 
-  // Poll active session every 2s when in a session
+  // Poll active session every 4s when in a session
   const { data: activeData } = useQuery({
     queryKey: ["/api/coop/sessions", activeSessionId],
     queryFn: () => activeSessionId
       ? apiRequest("GET", `/api/coop/sessions/${activeSessionId}`).then(r => r.json())
       : null,
     enabled: !!activeSessionId,
-    refetchInterval: 2000,
+    refetchInterval: 4000,
   });
 
   const sessions: CoopSession[] = sessionsData?.sessions || [];

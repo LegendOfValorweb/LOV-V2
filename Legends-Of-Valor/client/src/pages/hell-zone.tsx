@@ -200,7 +200,7 @@ export default function HellZone() {
       const res = await fetch("/api/battle-royale/status");
       return res.json();
     },
-    refetchInterval: 3000,
+    refetchInterval: 8000,
   });
 
   const { data: myBRStatus, refetch: refetchMyBR } = useQuery<MyBRStatus>({
@@ -210,7 +210,7 @@ export default function HellZone() {
       return res.json();
     },
     enabled: !!account?.id,
-    refetchInterval: 2000,
+    refetchInterval: 5000,
   });
 
   const registerMutation = useMutation({

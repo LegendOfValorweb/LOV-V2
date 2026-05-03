@@ -152,7 +152,7 @@ export default function CombatUI({
       if (!res.ok) throw new Error("Failed to fetch combat state");
       return res.json();
     },
-    refetchInterval: 3000,
+    refetchInterval: 5000,
   });
 
   const actionMutation = useMutation({

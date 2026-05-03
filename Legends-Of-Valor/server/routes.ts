@@ -106,6 +106,7 @@ import {
   insertAuctionSchema, 
   insertAuctionBidSchema,
   pets as petsTable,
+  birds,
   leaderboardEntries,
   quests,
   questAssignments,
@@ -434,6 +435,60 @@ export async function registerRoutes(
 
   // Initialize server achievements (Honour Hall)
   initServerAchievements().catch(err => console.error("[HonourHall] Init error:", err));
+
+  // ── In-memory combat state: avoid a DB write on every round ────────────────
+  // Keyed by challenge ID. Cleared on combat finish or server restart.
+  // Falls back to DB-stored combatState when a key is missing (e.g. after restart).
+  const activeCombatStates = new Map<string, any>();
+
+  // ── Shared combat-stat resolver ──────────────────────────────────────────────
+  // Fetches inventory + pet + birds in parallel (3× faster than sequential) and
+  // sums them into a flat stat object. Used by both combat accept AND round resolution.
+  async function computeCombatStats(account: Account): Promise<{
+    Str: number; Def: number; Spd: number; Int: number; Luck: number;
+  }> {
+    const base = (account.stats as any) || {};
+    const stats = {
+      Str: base.Str || 10,
+      Def: base.Def || 10,
+      Spd: base.Spd || 10,
+      Int: base.Int || 10,
+      Luck: base.Luck || 10,
+    };
+
+    const equipped = (account.equipped || {}) as Record<string, string | null | undefined>;
+    const [inventory, petRows, birdRows] = await Promise.all([
+      storage.getInventoryByAccount(account.id),
+      account.equippedPetId
+        ? db.select().from(petsTable).where(eq(petsTable.id, account.equippedPetId))
+        : Promise.resolve([]),
+      db.select().from(birds).where(eq(birds.accountId, account.id)),
+    ]);
+
+    for (const invItem of resolveEquippedItems(equipped, inventory)) {
+      if (invItem.stats) {
+        const s = invItem.stats as Record<string, unknown>;
+        stats.Str  += Number(s.Str)  || 0;
+        stats.Def  += Number(s.Def)  || 0;
+        stats.Spd  += Number(s.Spd)  || 0;
+        stats.Int  += Number(s.Int)  || 0;
+        stats.Luck += Number(s.Luck) || 0;
+      }
+    }
+    if (petRows.length > 0) {
+      const ps = (petRows[0] as any).stats || {};
+      stats.Str  += ps.Str  || 0;
+      stats.Spd  += ps.Spd  || 0;
+      stats.Luck += ps.Luck || 0;
+      stats.Int  += ps.ElementalPower || 0;
+    }
+    for (const bird of birdRows) {
+      const bs = (bird as any).stats || {};
+      stats.Def += bs.Def || 0;
+      stats.Spd += bs.Spd || 0;
+    }
+    return stats;
+  }
 
   // Helper: resolve equipped inventory items by UUID (new) or itemId (legacy fallback).
   // Returns deduplicated items per slot; call once per equipped object to avoid double-counting.
@@ -2617,60 +2672,12 @@ export async function registerRoutes(
         return res.status(403).json({ error: "You are in Ghost State and cannot accept PvP challenges. Respawn first." });
       }
       
-      // Get pets and birds for both players to add their stats
-      const { pets, birds } = await import("@shared/schema");
-      
-      // Helper to get total combat stats including equipped gear, pets, and birds
-      const getTotalCombatStats = async (account: typeof challenger) => {
-        const baseStats = account.stats as any || {};
-        const stats = {
-          Str: baseStats.Str || 10,
-          Def: baseStats.Def || 10,
-          Spd: baseStats.Spd || 10,
-          Int: baseStats.Int || 10,
-          Luck: baseStats.Luck || 10,
-        };
-
-        // Add equipped item stats (weapon, armor, accessories)
-        const inventory = await storage.getInventoryByAccount(account.id);
-        const equipped = (account.equipped || {}) as Record<string, string | null | undefined>;
-        for (const invItem of resolveEquippedItems(equipped, inventory)) {
-          if (invItem.stats) {
-            const s = invItem.stats as Record<string, unknown>;
-            stats.Str += Number(s.Str) || 0;
-            stats.Def += Number(s.Def) || 0;
-            stats.Spd += Number(s.Spd) || 0;
-            stats.Int += Number(s.Int) || 0;
-            stats.Luck += Number(s.Luck) || 0;
-          }
-        }
-        
-        // Add equipped pet stats
-        if (account.equippedPetId) {
-          const [equippedPet] = await db.select().from(pets).where(eq(pets.id, account.equippedPetId));
-          if (equippedPet) {
-            const petStats = equippedPet.stats as any || {};
-            stats.Str += petStats.Str || 0;
-            stats.Spd += petStats.Spd || 0;
-            stats.Luck += petStats.Luck || 0;
-            stats.Int += petStats.ElementalPower || 0;
-          }
-        }
-        
-        // Add all bird stats (birds provide Def and Spd)
-        const accountBirds = await db.select().from(birds).where(eq(birds.accountId, account.id));
-        for (const bird of accountBirds) {
-          const birdStats = bird.stats as any || {};
-          stats.Def += birdStats.Def || 0;
-          stats.Spd += birdStats.Spd || 0;
-        }
-        
-        return stats;
-      };
-      
       // Initialize combat state - HP scales with all stats including equipped gear, pets, and birds
-      const challengerStats = await getTotalCombatStats(challenger);
-      const challengedStats = await getTotalCombatStats(challenged);
+      // Both players' stats fetched in parallel for speed
+      const [challengerStats, challengedStats] = await Promise.all([
+        computeCombatStats(challenger),
+        computeCombatStats(challenged),
+      ]);
       const calcHP = (stats: any) => {
         const str = stats?.Str || 10;
         const def = stats?.Def || 10;
@@ -2835,8 +2842,8 @@ export async function registerRoutes(
         return res.status(403).json({ error: "You are not a participant in this challenge" });
       }
       
-      // Get combat state from challenge
-      let combatState = (challenge as any).combatState;
+      // Get combat state — prefer in-memory (fastest) then fall back to DB copy
+      let combatState = activeCombatStates.get(req.params.id) ?? (challenge as any).combatState;
       
       if (!combatState) {
         return res.status(400).json({ error: "Combat not initialized" });
@@ -2855,7 +2862,6 @@ export async function registerRoutes(
       
       // Check if opponent is an NPC and auto-select action for them (only if they haven't already chosen)
       const { isNPCAccount } = await import("./npc-accounts");
-      const { pets, birds } = await import("@shared/schema");
       const challenger = await storage.getAccount(challenge.challengerId);
       const challenged = await storage.getAccount(challenge.challengedId);
       
@@ -2866,54 +2872,8 @@ export async function registerRoutes(
           : !combatState.challengerAction;
         
         if (isNPCAccount(opponentAccount.username) && npcNeedsAction) {
-          // Helper to get total combat stats including equipped gear, pets, and birds
-          const getNPCTotalStats = async (account: typeof opponentAccount) => {
-            const baseStats = account.stats as any || {};
-            const stats = {
-              Str: baseStats.Str || 10,
-              Def: baseStats.Def || 10,
-              Spd: baseStats.Spd || 10,
-              Int: baseStats.Int || 10,
-              Luck: baseStats.Luck || 10,
-            };
-
-            // Add equipped item stats
-            const inventory = await storage.getInventoryByAccount(account.id);
-            const equipped = (account.equipped || {}) as Record<string, string | null | undefined>;
-            for (const invItem of resolveEquippedItems(equipped, inventory)) {
-              if (invItem.stats) {
-                const s = invItem.stats as Record<string, unknown>;
-                stats.Str += Number(s.Str) || 0;
-                stats.Def += Number(s.Def) || 0;
-                stats.Spd += Number(s.Spd) || 0;
-                stats.Int += Number(s.Int) || 0;
-                stats.Luck += Number(s.Luck) || 0;
-              }
-            }
-            
-            if (account.equippedPetId) {
-              const [equippedPet] = await db.select().from(pets).where(eq(pets.id, account.equippedPetId));
-              if (equippedPet) {
-                const petStats = equippedPet.stats as any || {};
-                stats.Str += petStats.Str || 0;
-                stats.Spd += petStats.Spd || 0;
-                stats.Luck += petStats.Luck || 0;
-                stats.Int += petStats.ElementalPower || 0;
-              }
-            }
-            
-            const accountBirds = await db.select().from(birds).where(eq(birds.accountId, account.id));
-            for (const bird of accountBirds) {
-              const birdStats = bird.stats as any || {};
-              stats.Def += birdStats.Def || 0;
-              stats.Spd += birdStats.Spd || 0;
-            }
-            
-            return stats;
-          };
-          
           // ── Strategic NPC AI — behavior-aware decision making ──────────
-          const npcStats = await getNPCTotalStats(opponentAccount);
+          const npcStats = await computeCombatStats(opponentAccount);
 
           // Identify which combat state belongs to NPC vs player
           const npcCombatPlayer  = isChallenger ? combatState.player2 : combatState.player1;
@@ -2989,58 +2949,11 @@ export async function registerRoutes(
           return res.status(404).json({ error: "Player not found" });
         }
         
-        // Get total combat stats including equipped gear, pets, and birds
-        const { pets, birds } = await import("@shared/schema");
-        
-        const getTotalCombatStats = async (account: typeof challenger) => {
-          const baseStats = account.stats as any || {};
-          const stats = {
-            Str: baseStats.Str || 10,
-            Def: baseStats.Def || 10,
-            Spd: baseStats.Spd || 10,
-            Int: baseStats.Int || 10,
-            Luck: baseStats.Luck || 10,
-          };
-
-          // Add equipped item stats (weapon, armor, accessories)
-          const inventory = await storage.getInventoryByAccount(account.id);
-          const equipped = (account.equipped || {}) as Record<string, string | null | undefined>;
-          for (const invItem of resolveEquippedItems(equipped, inventory)) {
-            if (invItem.stats) {
-              const s = invItem.stats as Record<string, unknown>;
-              stats.Str += Number(s.Str) || 0;
-              stats.Def += Number(s.Def) || 0;
-              stats.Spd += Number(s.Spd) || 0;
-              stats.Int += Number(s.Int) || 0;
-              stats.Luck += Number(s.Luck) || 0;
-            }
-          }
-          
-          // Add equipped pet stats
-          if (account.equippedPetId) {
-            const [equippedPet] = await db.select().from(pets).where(eq(pets.id, account.equippedPetId));
-            if (equippedPet) {
-              const petStats = equippedPet.stats as any || {};
-              stats.Str += petStats.Str || 0;
-              stats.Spd += petStats.Spd || 0;
-              stats.Luck += petStats.Luck || 0;
-              stats.Int += petStats.ElementalPower || 0;
-            }
-          }
-          
-          // Add all bird stats
-          const accountBirds = await db.select().from(birds).where(eq(birds.accountId, account.id));
-          for (const bird of accountBirds) {
-            const birdStats = bird.stats as any || {};
-            stats.Def += birdStats.Def || 0;
-            stats.Spd += birdStats.Spd || 0;
-          }
-          
-          return stats;
-        };
-        
-        const challengerStats = await getTotalCombatStats(challenger);
-        const challengedStats = await getTotalCombatStats(challenged);
+        // Fetch both players' combat stats in parallel using shared helper
+        const [challengerStats, challengedStats] = await Promise.all([
+          computeCombatStats(challenger),
+          computeCombatStats(challenged),
+        ]);
 
         // ── Backward-compat: ensure new fields exist on existing states ──
         if (!combatState.player1.statusEffects) combatState.player1.statusEffects = [];
@@ -3310,11 +3223,14 @@ export async function registerRoutes(
           combatState.status = "finished";
           combatState.winnerId = winnerId;
           
+          activeCombatStates.delete(req.params.id); // clear in-memory; always persist finish to DB
           await storage.updateChallengeCombatState(req.params.id, combatState);
           await storage.setChallengeWinner(req.params.id, winnerId);
           
-          const winner = await storage.getAccount(winnerId);
-          const loser = await storage.getAccount(loserId);
+          const [winner, loser] = await Promise.all([
+            storage.getAccount(winnerId),
+            storage.getAccount(loserId),
+          ]);
           
           if (winner) await storage.updateAccountWins(winnerId, winner.wins + 1);
           if (loser) await storage.updateAccountLosses(loserId, loser.losses + 1);
@@ -3417,15 +3333,19 @@ export async function registerRoutes(
         if (combatState.player2) combatState.player2.action = null;
         combatState.status = "waiting";
         
-        await storage.updateChallengeCombatState(req.params.id, combatState);
+        // Always keep in-memory current; persist to DB only every 5 rounds as a checkpoint
+        activeCombatStates.set(req.params.id, combatState);
+        if (combatState.round % 5 === 0) {
+          await storage.updateChallengeCombatState(req.params.id, combatState);
+        }
         
         broadcastToPlayer(challenge.challengerId, "combatRound", { challengeId: req.params.id, combatState });
         broadcastToPlayer(challenge.challengedId, "combatRound", { challengeId: req.params.id, combatState });
         
         res.json({ combatState, finished: false });
       } else {
-        // Waiting for other player
-        await storage.updateChallengeCombatState(req.params.id, combatState);
+        // Waiting for other player — store in memory only, no DB write needed
+        activeCombatStates.set(req.params.id, combatState);
         res.json({ combatState, waiting: true, yourAction: action });
       }
     } catch (error) {
@@ -3442,7 +3362,8 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Challenge not found" });
       }
       
-      const combatState = (challenge as any).combatState;
+      // Serve from in-memory first — avoids a DB round-trip for every poll tick
+      const combatState = activeCombatStates.get(req.params.id) ?? (challenge as any).combatState;
       
       // If no combat state exists but challenge is accepted, initialize it
       if (!combatState && challenge.status === "accepted") {

@@ -1,9 +1,13 @@
 import express, { type Request, Response, NextFunction } from "express";
+import compression from "compression";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 
 const app = express();
 const httpServer = createServer(app);
+
+// Compress all HTTP responses (gzip/deflate) — cuts bandwidth 60–80 % for JSON
+app.use(compression());
 
 declare module "http" {
   interface IncomingMessage {
@@ -101,7 +105,10 @@ app.use((req, res, next) => {
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        // Truncate large payloads (e.g. combat state, leaderboards) so logging
+        // doesn't serialize megabytes of JSON on every request.
+        const raw = JSON.stringify(capturedJsonResponse);
+        logLine += ` :: ${raw.length > 200 ? raw.slice(0, 200) + "…" : raw}`;
       }
 
       log(logLine);

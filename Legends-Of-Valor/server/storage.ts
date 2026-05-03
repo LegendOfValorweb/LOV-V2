@@ -161,14 +161,51 @@ export interface IStorage {
   updateSoulLink(id: string, data: Partial<SoulLink>): Promise<SoulLink | undefined>;
 }
 
+// ── In-process TTL cache ─────────────────────────────────────────────────────
+// Dramatically reduces DB round-trips for the most-queried data. Short TTLs
+// ensure data stays fresh; writes always populate the cache with fresh data.
+const ACCT_TTL = 15_000;  // 15 s
+const INV_TTL  = 20_000;  // 20 s
+
+interface CE<T> { v: T; exp: number }
+const _accId  = new Map<string, CE<Account>>();
+const _accUsr = new Map<string, CE<Account>>();
+const _inv    = new Map<string, CE<InventoryItem[]>>();
+
+function cg<T>(m: Map<string, CE<T>>, k: string): T | undefined {
+  const e = m.get(k);
+  if (!e) return undefined;
+  if (Date.now() > e.exp) { m.delete(k); return undefined; }
+  return e.v;
+}
+function cs<T>(m: Map<string, CE<T>>, k: string, v: T, ttl: number): void {
+  m.set(k, { v, exp: Date.now() + ttl });
+}
+function cacheAcct(a: Account): void {
+  cs(_accId,  a.id,       a, ACCT_TTL);
+  cs(_accUsr, a.username, a, ACCT_TTL);
+}
+function evictAcct(id: string): void {
+  const e = _accId.get(id);
+  if (e) _accUsr.delete(e.v.username);
+  _accId.delete(id);
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export class DatabaseStorage implements IStorage {
   async getAccount(id: string): Promise<Account | undefined> {
+    const cached = cg(_accId, id);
+    if (cached) return cached;
     const [account] = await db.select().from(accounts).where(eq(accounts.id, id));
+    if (account) cacheAcct(account);
     return account || undefined;
   }
 
   async getAccountByUsername(username: string): Promise<Account | undefined> {
+    const cached = cg(_accUsr, username);
+    if (cached) return cached;
     const [account] = await db.select().from(accounts).where(eq(accounts.username, username));
+    if (account) cacheAcct(account);
     return account || undefined;
   }
 
@@ -202,6 +239,7 @@ export class DatabaseStorage implements IStorage {
       .set({ gold })
       .where(eq(accounts.id, id))
       .returning();
+    if (account) cacheAcct(account);
     return account || undefined;
   }
 
@@ -211,6 +249,7 @@ export class DatabaseStorage implements IStorage {
       .set({ stats })
       .where(eq(accounts.id, id))
       .returning();
+    if (account) cacheAcct(account);
     return account || undefined;
   }
 
@@ -220,6 +259,7 @@ export class DatabaseStorage implements IStorage {
       .set({ equipped })
       .where(eq(accounts.id, id))
       .returning();
+    if (account) cacheAcct(account);
     return account || undefined;
   }
 
@@ -229,6 +269,7 @@ export class DatabaseStorage implements IStorage {
       .set({ rank })
       .where(eq(accounts.id, id))
       .returning();
+    if (account) cacheAcct(account);
     return account || undefined;
   }
 
@@ -238,6 +279,7 @@ export class DatabaseStorage implements IStorage {
       .set({ wins })
       .where(eq(accounts.id, id))
       .returning();
+    if (account) cacheAcct(account);
     return account || undefined;
   }
 
@@ -247,6 +289,7 @@ export class DatabaseStorage implements IStorage {
       .set({ losses })
       .where(eq(accounts.id, id))
       .returning();
+    if (account) cacheAcct(account);
     return account || undefined;
   }
 
@@ -256,6 +299,7 @@ export class DatabaseStorage implements IStorage {
       .set(data)
       .where(eq(accounts.id, id))
       .returning();
+    if (account) cacheAcct(account);
     return account || undefined;
   }
 
@@ -280,6 +324,7 @@ export class DatabaseStorage implements IStorage {
       .set(cappedData)
       .where(eq(accounts.id, id))
       .returning();
+    if (account) cacheAcct(account);
     return account || undefined;
   }
 
@@ -299,7 +344,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getInventoryByAccount(accountId: string): Promise<InventoryItem[]> {
-    return db.select().from(inventoryItems).where(eq(inventoryItems.accountId, accountId));
+    const cached = cg(_inv, accountId);
+    if (cached) return cached;
+    const items = await db.select().from(inventoryItems).where(eq(inventoryItems.accountId, accountId));
+    cs(_inv, accountId, items, INV_TTL);
+    return items;
   }
 
   async getInventoryItem(id: string): Promise<InventoryItem | undefined> {
@@ -313,6 +362,7 @@ export class DatabaseStorage implements IStorage {
       .set({ stats })
       .where(eq(inventoryItems.id, id))
       .returning();
+    if (item) _inv.delete(item.accountId);
     return item || undefined;
   }
 
@@ -321,11 +371,18 @@ export class DatabaseStorage implements IStorage {
       .insert(inventoryItems)
       .values([insertItem as any])
       .returning();
+    _inv.delete(insertItem.accountId); // invalidate so next read is fresh
     return item;
   }
 
   async removeFromInventory(id: string): Promise<void> {
+    // Fetch accountId first so we can invalidate the right cache entry
+    const [item] = await db
+      .select({ accountId: inventoryItems.accountId })
+      .from(inventoryItems)
+      .where(eq(inventoryItems.id, id));
     await db.delete(inventoryItems).where(eq(inventoryItems.id, id));
+    if (item) _inv.delete(item.accountId);
   }
 
   async getAllAccounts(): Promise<Account[]> {
@@ -333,6 +390,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteAccount(id: string): Promise<void> {
+    evictAcct(id);
     await db.delete(accounts).where(eq(accounts.id, id));
   }
 
