@@ -130,6 +130,8 @@ export default function Inventory() {
   const [activeTab, setActiveTab] = useState<"all" | "weapon" | "armor" | "accessory" | "resource">("all");
   const [hoveredItem, setHoveredItem] = useState<{ item: Item; invItem?: InventoryItem; pos: { x: number; y: number }; slot?: string } | null>(null);
   const [selectedItem, setSelectedItem] = useState<{ item: Item; invItem: InventoryItem } | null>(null);
+  const [enchantDialog, setEnchantDialog] = useState<InventoryItem | null>(null);
+  const [isEnchanting, setIsEnchanting] = useState(false);
 
   const { data: carryCapacity } = useQuery<{ currentWeight: number; maxCapacity: number; remaining: number; isFull: boolean; petsCarryBonus: number }>({
     queryKey: ["/api/accounts", account?.id, "carry-capacity"],
@@ -320,6 +322,29 @@ export default function Inventory() {
       toast({ title: "Boost Failed", description: "Could not boost stat.", variant: "destructive" });
     } finally {
       setIsBoosting(false);
+    }
+  };
+
+  const handleEnchant = async () => {
+    if (!enchantDialog || !account) return;
+    setIsEnchanting(true);
+    try {
+      const res = await apiRequest("POST", `/api/accounts/${account.id}/inventory/${enchantDialog.id}/enchant`);
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Enchant Failed", description: data.error || "Could not enchant item.", variant: "destructive" });
+        return;
+      }
+      await refreshInventory();
+      const accountRes = await apiRequest("GET", `/api/accounts/${account.id}`);
+      setAccount(await accountRes.json());
+      const updatedInv = inventory.find(i => i.id === enchantDialog.id);
+      if (updatedInv) setEnchantDialog(updatedInv);
+      toast({ title: "Enchantment Applied!", description: `+${data.enchantment.bonus} ${data.enchantment.stat} added!`, duration: 5000 });
+    } catch {
+      toast({ title: "Enchant Failed", description: "Could not enchant item.", variant: "destructive" });
+    } finally {
+      setIsEnchanting(false);
     }
   };
 
@@ -654,6 +679,22 @@ export default function Inventory() {
                   >
                     ⭐ Boost
                   </button>
+                  <button
+                    onClick={() => {
+                      const baseItem = getItemById(selectedItem.invItem.itemId);
+                      if (baseItem && (baseItem.type === "weapon" || baseItem.type === "armor" || baseItem.type === "accessory")) {
+                        setEnchantDialog(selectedItem.invItem);
+                      }
+                    }}
+                    style={{
+                      padding: "4px 12px", fontSize: "0.7rem", fontFamily: "var(--font-serif)",
+                      background: "linear-gradient(180deg, hsl(271 50% 30%) 0%, hsl(271 40% 20%) 100%)",
+                      border: "1px solid hsl(271 50% 40% / 0.6)", borderRadius: 3,
+                      color: "hsl(271 80% 85%)", cursor: "pointer",
+                    }}
+                  >
+                    ✦ Enchant
+                  </button>
                   {canSell && (
                     <button
                       onClick={() => setSellDialog({ inventoryItem: selectedItem.invItem, item: selectedItem.item })}
@@ -768,6 +809,76 @@ export default function Inventory() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => { setBoostDialog(null); setBoostScaling(1); }}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!enchantDialog} onOpenChange={() => setEnchantDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-serif" style={{ color: "hsl(271 80% 75%)" }}>✦ Enchant Item</DialogTitle>
+            <DialogDescription>Spend Soul Shards to add a random stat bonus to this item. Max 10 enchantment levels.</DialogDescription>
+          </DialogHeader>
+          {enchantDialog && (() => {
+            const enchantments = (enchantDialog.enchantments as any[]) || [];
+            const totalLevels = enchantments.reduce((sum: number, e: any) => sum + (e.level || 1), 0);
+            const cost = 50 + totalLevels * 25;
+            const canAfford = (account?.soulShards || 0) >= cost;
+            const isFull = totalLevels >= 10;
+            const baseItem = getItemById(enchantDialog.itemId);
+            return (
+              <div className="space-y-4 py-2">
+                <div className="flex items-center justify-between p-3 rounded-md" style={{ background: "hsl(271 30% 12%)", border: "1px solid hsl(271 40% 25%)" }}>
+                  <span className="text-sm font-medium">Soul Shards</span>
+                  <span className="font-mono font-bold" style={{ color: "hsl(271 80% 70%)" }}>✦ {account?.soulShards || 0}</span>
+                </div>
+                <div className="flex items-center justify-between p-3 rounded-md bg-secondary/20">
+                  <span className="text-sm">Enchantment Levels</span>
+                  <span className="font-mono">{totalLevels} / 10</span>
+                </div>
+                {enchantments.length > 0 && (
+                  <div className="space-y-1">
+                    <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-2">Current Enchantments</div>
+                    {enchantments.map((e: any, i: number) => (
+                      <div key={i} className="flex justify-between text-sm px-2 py-1 rounded" style={{ background: "hsl(271 20% 14%)" }}>
+                        <span style={{ color: "hsl(271 60% 75%)" }}>✦ {e.stat}</span>
+                        <span className="font-mono font-bold" style={{ color: "hsl(45 90% 65%)" }}>+{e.bonus}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {isFull ? (
+                  <div className="text-center p-3 rounded-md" style={{ background: "hsl(45 30% 12%)", color: "hsl(45 80% 60%)" }}>
+                    ★ Item fully enchanted!
+                  </div>
+                ) : (
+                  <div className="text-center text-sm text-muted-foreground">
+                    Next enchantment costs <span className="font-bold" style={{ color: "hsl(271 80% 70%)" }}>✦ {cost}</span> soul shards
+                    <br />
+                    <span className="text-xs opacity-60">Adds +5 to +15 to a random stat</span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEnchantDialog(null)}>Close</Button>
+            {enchantDialog && (() => {
+              const enchantments = (enchantDialog.enchantments as any[]) || [];
+              const totalLevels = enchantments.reduce((sum: number, e: any) => sum + (e.level || 1), 0);
+              const cost = 50 + totalLevels * 25;
+              const canAfford = (account?.soulShards || 0) >= cost;
+              const isFull = totalLevels >= 10;
+              return (
+                <Button
+                  disabled={isEnchanting || !canAfford || isFull}
+                  onClick={handleEnchant}
+                  style={{ background: "hsl(271 50% 35%)", color: "hsl(271 80% 90%)" }}
+                >
+                  {isEnchanting ? "Enchanting..." : isFull ? "Fully Enchanted" : !canAfford ? `Need ${cost} Shards` : `✦ Enchant (${cost} shards)`}
+                </Button>
+              );
+            })()}
           </DialogFooter>
         </DialogContent>
       </Dialog>

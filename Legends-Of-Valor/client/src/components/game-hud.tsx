@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useGame } from "@/lib/game-context";
 import { SettingsPanel } from "@/components/settings-panel";
+import { DailyLoginModal } from "@/components/daily-login-modal";
 import { useToast } from "@/hooks/use-toast";
 
 const RANK_LEVELS: Record<string, number> = {
@@ -156,6 +157,8 @@ export function GameHUD() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [combatCooldown, setCombatCooldown] = useState(0);
+  const [activeQuests, setActiveQuests] = useState<{ id: string; status: string; quest?: { title: string } }[]>([]);
+  const [questTrackerOpen, setQuestTrackerOpen] = useState(false);
 
   const isVisible = location !== "/" && location !== "/admin" && !!account;
   const accountId = account?.id;
@@ -216,7 +219,24 @@ export function GameHUD() {
 
   useEffect(() => {
     setMenuOpen(false);
+    setQuestTrackerOpen(false);
   }, [location]);
+
+  useEffect(() => {
+    if (!isVisible || !accountId || accountRole !== "player") return;
+    const fetchQuests = async () => {
+      try {
+        const res = await fetch(`/api/accounts/${accountId}/quests`);
+        if (res.ok) {
+          const data = await res.json();
+          setActiveQuests(data.filter((q: any) => q.status === "pending" || q.status === "in_progress"));
+        }
+      } catch {}
+    };
+    fetchQuests();
+    const id = setInterval(fetchQuests, 60000);
+    return () => clearInterval(id);
+  }, [isVisible, accountId, accountRole]);
 
   useEffect(() => {
     if (!account?.lastCombatTime) { setCombatCooldown(0); return; }
@@ -361,10 +381,19 @@ export function GameHUD() {
         </button>
         <button
           className={`hud-icon-btn ${location === '/quests' ? 'hud-icon-active' : ''}`}
-          onClick={() => navigateTo("/quests")}
-          title="Quests"
+          onClick={() => { setQuestTrackerOpen(o => !o); setMenuOpen(false); }}
+          title={activeQuests.length > 0 ? `Quests (${activeQuests.length} active)` : "Quests"}
+          style={{ position: "relative" }}
         >
           <span className="hud-icon-sprite">📜</span>
+          {activeQuests.length > 0 && (
+            <span style={{
+              position: "absolute", top: 2, right: 2, background: "hsl(45 90% 55%)",
+              borderRadius: "50%", width: 10, height: 10, fontSize: "0.45rem",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#000", fontWeight: 700,
+            }}>{activeQuests.length}</span>
+          )}
         </button>
         <button
           className={`hud-icon-btn ${menuOpen ? 'hud-icon-active' : ''}`}
@@ -438,6 +467,9 @@ export function GameHUD() {
             </button>
             <button className="hud-menu-item" onClick={() => navigateTo("/black-market")}>
               <span>💀</span><span>Black Mkt</span>
+            </button>
+            <button className="hud-menu-item" onClick={() => navigateTo("/combat-log")}>
+              <span>📋</span><span>Battle Log</span>
             </button>
             {account.role === "admin" && (
               <button className="hud-menu-item" onClick={() => navigateTo("/admin")}>
@@ -525,9 +557,60 @@ export function GameHUD() {
         />
       )}
 
+      {questTrackerOpen && (
+        <div style={{
+          position: "fixed", left: 56, top: "50%", transform: "translateY(-50%)",
+          background: "hsl(240 15% 10%)", border: "1px solid hsl(45 40% 30% / 0.7)",
+          borderRadius: 8, padding: "12px 14px", minWidth: 220, maxWidth: 280, zIndex: 200,
+          boxShadow: "0 4px 20px rgba(0,0,0,0.6)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <div style={{ fontFamily: "var(--font-serif)", fontSize: "0.85rem", color: "hsl(45 80% 65%)", fontWeight: 700 }}>
+              📜 Active Quests
+            </div>
+            <button
+              onClick={() => setQuestTrackerOpen(false)}
+              style={{ background: "none", border: "none", color: "hsl(240 20% 50%)", cursor: "pointer", fontSize: "0.8rem", padding: 0 }}
+            >✕</button>
+          </div>
+          {activeQuests.length === 0 ? (
+            <div style={{ fontSize: "0.7rem", color: "hsl(240 20% 45%)", textAlign: "center", padding: "8px 0" }}>
+              No active quests
+              <br />
+              <button
+                onClick={() => { navigateTo("/quests"); setQuestTrackerOpen(false); }}
+                style={{ marginTop: 6, padding: "3px 10px", background: "hsl(240 20% 18%)", border: "1px solid hsl(240 20% 28%)", borderRadius: 4, color: "hsl(45 60% 65%)", cursor: "pointer", fontFamily: "var(--font-serif)", fontSize: "0.65rem" }}
+              >Browse Quests</button>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {activeQuests.slice(0, 5).map(q => (
+                <div key={q.id} style={{
+                  padding: "6px 8px", background: "hsl(240 10% 14%)", borderRadius: 5,
+                  border: "1px solid hsl(240 15% 22%)",
+                }}>
+                  <div style={{ fontSize: "0.7rem", color: "hsl(240 20% 80%)", fontFamily: "var(--font-serif)", lineHeight: 1.3 }}>
+                    {q.quest?.title || "Quest"}
+                  </div>
+                  <div style={{ fontSize: "0.6rem", color: q.status === "in_progress" ? "hsl(142 60% 55%)" : "hsl(45 70% 55%)", marginTop: 2, textTransform: "uppercase" }}>
+                    {q.status === "in_progress" ? "In Progress" : "Pending"}
+                  </div>
+                </div>
+              ))}
+              <button
+                onClick={() => { navigateTo("/quests"); setQuestTrackerOpen(false); }}
+                style={{ padding: "4px 0", background: "none", border: "1px solid hsl(45 40% 30% / 0.5)", borderRadius: 4, color: "hsl(45 60% 55%)", cursor: "pointer", fontFamily: "var(--font-serif)", fontSize: "0.65rem" }}
+              >View All Quests →</button>
+            </div>
+          )}
+        </div>
+      )}
+
       {settingsOpen && (
         <SettingsPanel onClose={() => setSettingsOpen(false)} />
       )}
+
+      <DailyLoginModal />
     </div>
   );
 }

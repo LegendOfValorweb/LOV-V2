@@ -22,7 +22,7 @@ import {
 } from "./server-achievements";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage } from "@shared/schema";
+import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, type CombatLogEntry, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage } from "@shared/schema";
 import { ZONE_NPCS, getZoneNPC, calculateNPCStats, calculateNPCRewards } from "@shared/zone-npcs";
 import { z } from "zod";
 import type { Account, Event, Challenge, PlayerRace, PlayerGender } from "@shared/schema";
@@ -4251,7 +4251,21 @@ export async function registerRoutes(
         playerName: account.username,
         ...result,
       });
-      
+
+      // Append to combat log (keep last 20)
+      const combatEntry: CombatLogEntry = {
+        timestamp: new Date().toISOString(),
+        opponentName: result.npcName,
+        floor,
+        level,
+        result: won ? "win" : "loss",
+        goldChange: won ? (rewards.gold || 0) : 0,
+        shardsGained: won ? (rewards.soulShards || 0) : 0,
+      };
+      const currentCombatLog = (account.combatLog as CombatLogEntry[]) || [];
+      const newCombatLog = [...currentCombatLog, combatEntry].slice(-20);
+      await db.update(accounts).set({ combatLog: newCombatLog }).where(eq(accounts.id, account.id));
+
       res.json(result);
     } catch (error) {
       console.error("NPC battle error:", error);
@@ -4259,6 +4273,100 @@ export async function registerRoutes(
     }
   });
   
+  // Daily login reward
+  app.post("/api/accounts/:id/daily-login", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.id);
+      if (!account || account.role !== "player") return res.status(404).json({ error: "Not found" });
+
+      const today = new Date().toISOString().slice(0, 10);
+      if ((account as any).lastLoginDate === today) {
+        return res.json({ alreadyClaimed: true, streak: (account as any).loginStreak || 0 });
+      }
+
+      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const currentStreak = (account as any).loginStreak || 0;
+      const newStreak = (account as any).lastLoginDate === yesterday ? currentStreak + 1 : 1;
+      const dayIndex = (newStreak - 1) % 7;
+
+      type DailyReward = { gold?: number; rubies?: number; soulShards?: number; trainingPoints?: number };
+      const DAILY_REWARDS: DailyReward[] = [
+        { gold: 500 },
+        { gold: 1000, rubies: 5 },
+        { gold: 2000, soulShards: 1 },
+        { rubies: 10, trainingPoints: 50 },
+        { gold: 5000, soulShards: 2 },
+        { rubies: 15, trainingPoints: 100 },
+        { gold: 10000, rubies: 20, soulShards: 5, trainingPoints: 200 },
+      ];
+      const reward = DAILY_REWARDS[dayIndex];
+
+      await db.update(accounts).set({
+        loginStreak: newStreak,
+        lastLoginDate: today,
+        gold: account.gold + (reward.gold || 0),
+        rubies: account.rubies + (reward.rubies || 0),
+        soulShards: account.soulShards + (reward.soulShards || 0),
+        trainingPoints: account.trainingPoints + (reward.trainingPoints || 0),
+      } as any).where(eq(accounts.id, account.id));
+
+      res.json({ streak: newStreak, rewards: reward, alreadyClaimed: false });
+    } catch (error) {
+      console.error("Daily login error:", error);
+      res.status(500).json({ error: "Failed to claim daily login reward" });
+    }
+  });
+
+  // Get combat log
+  app.get("/api/accounts/:id/combat-log", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.id);
+      if (!account) return res.status(404).json({ error: "Not found" });
+      res.json((account as any).combatLog || []);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch combat log" });
+    }
+  });
+
+  // Enchant inventory item
+  app.post("/api/accounts/:id/inventory/:itemId/enchant", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.id);
+      if (!account || account.role !== "player") return res.status(404).json({ error: "Not found" });
+
+      const { inventoryItems: invTable } = await import("@shared/schema");
+      const [invItem] = await db.select().from(invTable).where(
+        and(eq(invTable.id, req.params.itemId), eq(invTable.accountId, account.id))
+      );
+      if (!invItem) return res.status(404).json({ error: "Item not found" });
+
+      const enchantments = (invItem.enchantments as any[]) || [];
+      const totalLevels = enchantments.reduce((sum: number, e: any) => sum + (e.level || 1), 0);
+
+      if (totalLevels >= 10) {
+        return res.status(400).json({ error: "Item is fully enchanted (max 10 levels total)" });
+      }
+
+      const ENCHANT_COST = 50 + totalLevels * 25;
+      if (account.soulShards < ENCHANT_COST) {
+        return res.status(400).json({ error: `Need ${ENCHANT_COST} soul shards to enchant`, needed: ENCHANT_COST });
+      }
+
+      const ENCHANT_STATS = ["Str", "Def", "Spd", "Int", "Luck", "Pot"];
+      const stat = ENCHANT_STATS[Math.floor(Math.random() * ENCHANT_STATS.length)];
+      const bonus = 5 + Math.floor(Math.random() * 11);
+
+      const newEnchantments = [...enchantments, { stat, bonus, level: 1 }];
+      await db.update(invTable).set({ enchantments: newEnchantments }).where(eq(invTable.id, invItem.id));
+      await db.update(accounts).set({ soulShards: account.soulShards - ENCHANT_COST }).where(eq(accounts.id, account.id));
+
+      res.json({ enchantment: { stat, bonus, level: 1 }, totalLevels: totalLevels + 1, cost: ENCHANT_COST, shardsRemaining: account.soulShards - ENCHANT_COST });
+    } catch (error) {
+      console.error("Enchant error:", error);
+      res.status(500).json({ error: "Failed to enchant item" });
+    }
+  });
+
   // Get current NPC for player
   app.get("/api/accounts/:accountId/current-npc", async (req, res) => {
     try {

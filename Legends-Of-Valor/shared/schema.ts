@@ -271,6 +271,16 @@ export const equippedSchema = z.object({
 
 export type Equipped = z.infer<typeof equippedSchema>;
 
+export type CombatLogEntry = {
+  timestamp: string;
+  opponentName: string;
+  floor: number;
+  level: number;
+  result: 'win' | 'loss';
+  goldChange: number;
+  shardsGained: number;
+};
+
 export const accounts = pgTable("accounts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
@@ -376,6 +386,9 @@ export const accounts = pgTable("accounts", {
   aquaticShards: integer("aquatic_shards").notNull().default(0),
   titanShards: integer("titan_shards").notNull().default(0),
   unlockedRecipes: text("unlocked_recipes").array().default(sql`ARRAY[]::text[]`),
+  loginStreak: integer("login_streak").notNull().default(0),
+  lastLoginDate: text("last_login_date"),
+  combatLog: jsonb("combat_log").notNull().default([]).$type<CombatLogEntry[]>(),
 });
 
 export const recipes = pgTable("recipes", {
@@ -562,6 +575,7 @@ export const inventoryItems = pgTable("inventory_items", {
   purchasedAt: timestamp("purchased_at").notNull().defaultNow(),
   sockets: integer("sockets").notNull().default(0),
   gems: jsonb("gems").notNull().default([]).$type<{id: string; stats: Partial<Stats>}[]>(),
+  enchantments: jsonb("enchantments").notNull().default([]).$type<{stat: string; bonus: number; level: number}[]>(),
 });
 
 export const leaderboardEntries = pgTable("leaderboard_entries", {

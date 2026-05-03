@@ -410,6 +410,13 @@ export default function NpcBattle() {
             </Card>
           </div>
 
+          <div className="flex justify-end mb-2">
+            <Button variant="ghost" size="sm" onClick={() => navigate("/combat-log")} className="text-xs gap-1 opacity-70 hover:opacity-100">
+              <ArrowLeftRight className="w-3 h-3" />
+              Combat Log
+            </Button>
+          </div>
+
           <Card className="mb-6">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">

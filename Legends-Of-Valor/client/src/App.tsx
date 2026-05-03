@@ -44,6 +44,7 @@ import ResearchLab from "@/pages/research-lab";
 import EnchantedForest from "@/pages/enchanted-forest";
 import HonourHall from "@/pages/honour-hall";
 import CoopMode from "@/pages/coop";
+import CombatLog from "@/pages/combat-log";
 import NotFound from "@/pages/not-found";
 import { MobileLandscapePrompt } from "@/components/mobile-landscape-prompt";
 import { AppLoadingWrapper } from "@/components/app-loading-wrapper";
@@ -88,6 +89,7 @@ function Router() {
       <Route path="/enchanted-forest" component={EnchantedForest} />
       <Route path="/honour-hall" component={HonourHall} />
       <Route path="/coop" component={CoopMode} />
+      <Route path="/combat-log" component={CombatLog} />
       <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>
