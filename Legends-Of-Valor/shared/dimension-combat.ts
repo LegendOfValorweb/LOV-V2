@@ -5,6 +5,7 @@
 
 import type { DimensionRule } from "./dimensions-data";
 import type { ShadowCombatant, BattleEvent } from "./shadow-echo-combat";
+import { calcDamage, type CoreStats } from "./power-calc";
 
 export type EncounterResult = {
   winner: "player" | "enemy";
@@ -347,30 +348,28 @@ function resolveEnemyAction(
 }
 
 // ─── Damage helpers ───────────────────────────────────────────────────────────
+// All damage formulas delegate to calcDamage from power-calc (unified formula).
 
 function calcDmg(atk: any, def: any, _skill?: any): number {
-  const effAtk = (atk.Str ?? 10) + (atk.Int ? Math.round(atk.Int * 0.3) : 0);
-  const effDef = def.Def ?? 10;
-  const base   = effAtk * 2.5 + 30;
-  const mult   = 100 / (100 + effDef);
-  return Math.max(1, Math.round(base * mult));
+  return calcDamage(atk as CoreStats, def as CoreStats);
 }
 
 function calcDmgWithCrit(atk: any, def: any): { dmg: number; crit: boolean } {
-  const base = calcDmg(atk, def);
   const critChance = Math.min(0.40, 0.05 + (atk.Luck ?? 10) / 400);
   const crit = Math.random() < critChance;
-  return { dmg: crit ? Math.round(base * 1.75) : base, crit };
+  const critMult = crit ? 1.75 : 1.0;
+  return { dmg: calcDamage(atk as CoreStats, def as CoreStats, { critMult }), crit };
 }
 
 function calcSkillDmgWithCrit(atk: any, def: any, spellPower: number, baseValue: number): { dmg: number; crit: boolean } {
+  // Skill damage: Int-dominant scaling with a custom base value
   const intScale  = (atk.Int ?? 10) * 2;
   const strScale  = (atk.Str ?? 10) * 1.5;
-  const scaleStat = atk.Int > atk.Str ? intScale : strScale;
+  const scaleStat = (atk.Int ?? 10) > (atk.Str ?? 10) ? intScale : strScale;
   const effDef    = def.Def ?? 10;
   const base      = scaleStat + (baseValue * spellPower);
-  const mult      = 100 / (100 + effDef);
-  const raw       = Math.max(1, Math.round(base * mult));
+  const defReduction = 100 / (100 + effDef);
+  const raw       = Math.max(1, Math.round(base * defReduction));
   const critChance = Math.min(0.40, 0.05 + (atk.Luck ?? 10) / 400);
   const crit = Math.random() < critChance;
   return { dmg: crit ? Math.round(raw * 1.75) : raw, crit };

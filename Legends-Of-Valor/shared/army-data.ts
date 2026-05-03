@@ -4,6 +4,8 @@
 // counter system. Your hero leads the army — their equipped items/stats buff it.
 // Soldiers train over time (no hard cap). Can't train more until current batch done.
 // ──────────────────────────────────────────────────────────────────────────────
+import { calcArmyHeroBonuses, getMaxTrainingBatch } from "./power-calc";
+export { getMaxTrainingBatch };
 
 export type SoldierType = "infantry" | "archer" | "cavalry" | "siege" | "elite_guard";
 
@@ -208,10 +210,12 @@ export type RaidResult = {
 export function resolveRaid(
   attackerTroops: TroopSnapshot[],
   defenderTroops: TroopSnapshot[],
-  attackerStats: { Str: number; Int: number; Luck: number },
+  attackerStats: { Str: number; Int: number; Luck: number; Def?: number },
   defenderStats: { Str: number; Def: number },
   defenderGold: number,
   defenderBaseDefLevel: number,
+  attackerRank?: string,
+  defenderRank?: string,
 ): RaidResult {
   const events: RaidEvent[] = [];
   const atkLosses: Record<string, number> = {};
@@ -224,13 +228,24 @@ export function resolveRaid(
   for (const t of attackerTroops) atkLosses[t.type] = 0;
   for (const t of defenderTroops) defLosses[t.type] = 0;
 
-  // Hero bonus: attacker's Str adds ATK%, Int adds hit rate%
-  const heroAtkBonus = 1 + (attackerStats.Str ?? 10) / 300;
-  const heroLuckBonus = 1 + (attackerStats.Luck ?? 10) / 500;
+  // Hero bonuses: derived from hero stats + rank via unified power-calc formulas
+  const heroBonus = calcArmyHeroBonuses(
+    { Str: attackerStats.Str ?? 10, Def: attackerStats.Def ?? 10, Int: attackerStats.Int ?? 10, Luck: attackerStats.Luck ?? 10 },
+    attackerRank,
+  );
+  const heroAtkBonus  = heroBonus.atkMult  * heroBonus.rankMult;
+  const heroLuckBonus = heroBonus.hitMult;
+  const heroSiegeMult = heroBonus.siegeMult;
+
+  // Defender hero bonus improves towers
+  const defHeroBonus = calcArmyHeroBonuses(
+    { Str: defenderStats.Str ?? 10, Def: defenderStats.Def ?? 10, Int: 10, Luck: 10 },
+    defenderRank,
+  );
 
   // Defense tower effective troops (based on defenses room level)
   const defTowerTroops = defenderBaseDefLevel * 8;
-  const defTowerAtk = defenderBaseDefLevel * 15 + (defenderStats.Def ?? 10) * 0.5;
+  const defTowerAtk = (defenderBaseDefLevel * 15 + (defenderStats.Def ?? 10) * 0.5) * defHeroBonus.defMult;
 
   // 3 combat waves
   const WAVES = 3;
@@ -255,7 +270,9 @@ export function resolveRaid(
         const defStats = getSoldierStats(getSoldierDef(defType), defSnapshot.level);
 
         const mult = getCounterMultiplier(atkType, defType, false);
-        const effAtk = atkStats.atk * mult * heroAtkBonus * heroLuckBonus;
+        // Siege bonus only applies when the siege unit is attacking structures; in field battles use heroSiegeMult for siege type
+        const typeBonus = atkType === "siege" ? heroSiegeMult : 1.0;
+        const effAtk = atkStats.atk * mult * heroAtkBonus * heroLuckBonus * typeBonus;
         const damageToDefUnit = Math.max(1, effAtk - defStats.def * 0.5);
         const unitsKilled = Math.min(defCount, Math.floor((atkCount * damageToDefUnit) / (defStats.hp * (wave === 1 ? 1.2 : 1))));
 
@@ -315,7 +332,8 @@ export function resolveRaid(
   const goldLooted = Math.round(defenderGold * lootPct);
 
   const siegeSurvivors = atkCurrent["siege"] ?? 0;
-  const baseDamageDealt = attackerWon ? Math.min(100, siegeSurvivors * 2) : 0;
+  // Siege base damage boosted by hero Int (siegeMult from calcArmyHeroBonuses)
+  const baseDamageDealt = attackerWon ? Math.min(100, Math.floor(siegeSurvivors * 2 * heroSiegeMult)) : 0;
 
   const survivors: Record<SoldierType, number> = {
     infantry: atkCurrent["infantry"] ?? 0,

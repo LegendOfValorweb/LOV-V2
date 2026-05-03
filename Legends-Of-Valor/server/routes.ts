@@ -21,6 +21,7 @@ import {
   SERVER_ACHIEVEMENT_DEFS,
 } from "./server-achievements";
 import { storage, evictAccountCache } from "./storage";
+import { applyRankStatBonus, scaleGoldReward, getMaxTrainingBatch } from "@shared/power-calc";
 import { db } from "./db";
 import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, type CombatLogEntry, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, shardEvents, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage, worldBosses, worldBossDamage, inventoryItems, playerSkills, casinoHistory, skillTreeNodes, playerModifiers, prestigeHistory, playerSnapshots, dimensionPortals, dimensionRuns, armies, armyRaids, armyTrainingQueue, playerQuests, worldEvents } from "@shared/schema";
 import { ZONE_NPCS, getZoneNPC, calculateNPCStats, calculateNPCRewards } from "@shared/zone-npcs";
@@ -530,7 +531,8 @@ export async function registerRoutes(
       Object.assign(stats, boosted);
     }
 
-    return stats;
+    // Apply rank stat bonus — final step, affects ALL combat modes that use these stats
+    return applyRankStatBonus(stats, (account as any).rank);
   }
 
   // Helper: resolve equipped inventory items by UUID (new) or itemId (legacy fallback).
@@ -625,7 +627,8 @@ export async function registerRoutes(
       }
     } catch { /* non-critical — guild lookup failure must not break combat */ }
 
-    return total;
+    // Apply rank stat bonus — final step in stat pipeline, consistent with computeCombatStats
+    return applyRankStatBonus(total, account.rank as string);
   };
 
   // Helper: Calculate player strength (used for challenges and guild battles)
@@ -4414,9 +4417,9 @@ export async function registerRoutes(
       
       if (won) {
         // Calculate rewards based on global level
-        // Gold = level × 50, TP = level × 10, Soul Shards = level × 2, Pet Exp = level × 100
+        // Gold scales with rank (higher ranks earn more per floor) + level × 50 base
         rewards = {
-          gold: globalLevel * 50,
+          gold: scaleGoldReward(globalLevel * 50, account.rank),
           trainingPoints: globalLevel * 10,
           soulShards: globalLevel * 2,
           petExp: globalLevel * 100,
@@ -19989,6 +19992,10 @@ export async function registerRoutes(
       if (barracksLevel < 1) return res.status(400).json({ error: "Build a Barracks in your base first (Base → Room Upgrades → Barracks)" });
       if (barracksLevel < def.unlockBarracksLevel) return res.status(400).json({ error: `Requires Barracks level ${def.unlockBarracksLevel}` });
 
+      // Enforce training batch cap — prevents instant army creation regardless of gold
+      const maxBatch = getMaxTrainingBatch(barracksLevel);
+      if (count > maxBatch) return res.status(400).json({ error: `Barracks Level ${barracksLevel} can only train up to ${maxBatch} soldiers per batch. Upgrade your Barracks for larger batches.` });
+
       const totalCost = def.goldCost * count;
       if ((account.gold ?? 0) < totalCost) return res.status(400).json({ error: `Not enough gold (need ${totalCost.toLocaleString()})` });
 
@@ -20133,7 +20140,10 @@ export async function registerRoutes(
       const defStats = defender.stats as any ?? { Str: 10, Def: 10 };
       const defDefenseLevel = (defender.baseRoomLevels as any)?.defenses ?? 1;
 
-      const result = resolveRaid(atkTroops, defTroops, atkStats, defStats, defender.gold ?? 0, defDefenseLevel);
+      const result = resolveRaid(
+        atkTroops, defTroops, atkStats, defStats, defender.gold ?? 0, defDefenseLevel,
+        attacker.rank ?? "Novice", defender.rank ?? "Novice",
+      );
 
       // Save raid record
       const [raid] = await db.insert(armyRaids).values({

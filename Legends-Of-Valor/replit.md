@@ -4,12 +4,46 @@
 
 Legends of Valor is a text-based fantasy RPG with trading, combat, guild systems, and extensive progression mechanics. Players choose from 14 races with unique bonuses, progress through 15 ranks from Novice to Mythical Legend, explore 12 zones, climb a 50-floor Mystic Tower, and work toward endgame content with billion-scale power.
 
+## Unified Power Calculation System — `shared/power-calc.ts`
+
+**Single source of truth for all combat formulas, rank bonuses, and scaling.** All combat systems import from here instead of duplicating formulas.
+
+### Key exports
+| Export | Purpose |
+|--------|---------|
+| `RANK_STAT_BONUS_PCT` | Rank → stat multiplier (Novice: 0%, Mythical Legend: 96%) — applied last in stat pipeline |
+| `RANK_POWER_SCORE` | Numeric rank weight (1–150) for matchmaking + NPC scaling |
+| `RANK_REWARD_SCALING` | Gold reward multiplier per rank (1.0× → 6.0×) |
+| `COMBAT_MODE_MODIFIERS` | Per-mode ATK/DEF adjustments (PvP, boss, dungeon, etc.) |
+| `applyRankStatBonus(stats, rank)` | Final step in `computeCombatStats` and `getPlayerTotalStats` |
+| `calcDamage(atk, def, mods, isSpell?)` | Unified formula used by shadow-echo + dimension combat |
+| `calcMaxHP(stats, rank, race)` | Canonical HP formula matching combat-engine.ts |
+| `calcPlayerPower(stats, rank, level)` | Single numeric player power score |
+| `calcArmyHeroBonuses(heroStats, rank)` | Hero stat → army ATK/DEF/siege multipliers |
+| `scaleGoldReward(base, rank)` | Rank-scaled reward used in tower win payouts |
+| `getMaxTrainingBatch(barracksLevel)` | Max soldiers per recruit batch (server-enforced) |
+| `MAX_TRAINING_BATCH_BY_BARRACKS_LEVEL` | Lv1→50, Lv2→200, Lv3→500, Lv4→1000, Lv5→2500 |
+
+### Where rank stat bonuses are applied
+- `computeCombatStats()` in routes.ts — affects tower, PvP, guild dungeon, zone dungeon
+- `getPlayerTotalStats()` in routes.ts — affects challenge system, leaderboards, strength calc
+- Both use `applyRankStatBonus()` as the **final** step, after all equipment/pet/guild/trait bonuses
+
+### Damage formula (unified)
+```
+effAtk     = Str + Int×0.3  (physical) | Int + Str×0.2  (spell)
+rawDamage  = (effAtk + flatBonus) × 2.5 + 30
+defReduct  = 100 / (100 + effDef × (1 − pierce))
+finalDmg   = rawDamage × defReduct × critMult × elemMult × skillMult × modeMult
+```
+Used by: shadow-echo-combat.ts, dimension-combat.ts. Legacy absorption model in combat-engine.ts is intentionally preserved.
+
 ## Army System (Barracks) — Audited & Balanced
 
-The army system uses a **Whiteout Survival-style training queue** with no hard troop cap.
+The army system uses a **Whiteout Survival-style training queue** with batch size caps enforced server-side.
 
 ### Key Design Points
-- **No army cap** — players can train unlimited soldiers (limited only by gold and upkeep costs)
+- **Batch cap enforced** — max soldiers per training order depends on Barracks level (Lv1=50, Lv2=200, Lv3=500, Lv4=1000, Lv5=2500); prevents instant army creation
 - **Requires Base Tier 3+ (Keep)** — server-enforced; players must upgrade their base before commanding armies
 - **Time-gated training** — gold is spent immediately; soldiers graduate after a training duration
   - Infantry: 5s/unit | Archers: 8s/unit | Cavalry: 20s/unit | Siege: 90s/unit | Elite Guard: 450s/unit
@@ -19,9 +53,7 @@ The army system uses a **Whiteout Survival-style training queue** with no hard t
   - Archers: 3,000g / 750g/hr | Cavalry: 8,000g / 2,000g/hr
   - Siege: 30,000g / 8,000g/hr | Elite Guard: 100,000g / 30,000g/hr
 - **Per-attacker raid cooldown** — 2-hour cooldown after each raid (tracked via `armyLastRaidAt` column)
-- **Hero leads the army** — the player's equipped gear boosts their Str/Luck stats, which multiply army ATK in raids
-  - `heroAtkBonus = 1 + Str/300` | `heroLuckBonus = 1 + Luck/500`
-  - The Barracks UI shows these bonuses in real-time
+- **Hero leads the army** — uses `calcArmyHeroBonuses()` from power-calc (Str→atkMult, Def→defMult, Int→siegeMult, Luck→hitMult, rank→rankMult). Rank is now passed into every raid.
 - **Training queue UI** — dedicated "⏳ Training" tab shows in-progress batches with live progress bars and countdowns (auto-refreshes every 5s)
 
 ### DB Schema

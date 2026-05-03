@@ -3,6 +3,7 @@
 // and an AI clone built from a stored snapshot of a real player's build.
 // No round-trip required — POST once, get the full battle log back.
 // ──────────────────────────────────────────────────────────────────────────────
+import { calcDamage } from "./power-calc";
 
 export type StrategyProfile = "aggressive" | "defensive" | "mage" | "balanced" | "berserker";
 
@@ -204,6 +205,7 @@ function selectAction(c: ShadowCombatant, opp: ShadowCombatant): string {
 }
 
 // ─── Damage calculation ───────────────────────────────────────────────────────
+// Uses calcDamage from power-calc — the unified formula for all combat modes.
 
 function calcBaseDamage(atk: ShadowCombatant, def: ShadowCombatant, skill?: ShadowSkill): {
   damage: number; isCrit: boolean;
@@ -211,34 +213,38 @@ function calcBaseDamage(atk: ShadowCombatant, def: ShadowCombatant, skill?: Shad
   const strBoost  = getStatusValue(atk, "str_boost");
   const defBoost  = getStatusValue(def, "def_boost");
   const effStr    = (atk.stats.Str + strBoost) || 1;
-  const effInt    = (atk.stats.Int)             || 1;
-  const effDef    = (def.stats.Def + defBoost)  || 1;
-
+  const effInt    = atk.stats.Int              || 1;
+  const effDef    = (def.stats.Def + defBoost) || 1;
   const shieldAbs = getStatusValue(def, "shield");
 
-  let base = 0;
+  // Roll crit before damage so critMult can be passed into calcDamage
+  const critChance = clamp(0.05 + atk.stats.Luck / 400, 0.05, 0.40);
+  const isCrit     = Math.random() < critChance;
+  const critMult   = isCrit ? 1.75 : 1.0;
+
+  const atkStats = { Str: effStr, Int: effInt, Def: 0,      Spd: 0, Luck: atk.stats.Luck };
+  const defStats = { Str: 0,      Int: 0,      Def: effDef, Spd: 0, Luck: 0 };
+
+  let dmg: number;
   if (skill) {
     const dmgEff = skill.effects.find(e => e.type === "damage");
     if (dmgEff) {
+      // Skill uses a scaled base formula — apply defence reduction manually
       const scaleStat = skill.spellCategory === "damage" && effInt > effStr * 1.2 ? effInt : effStr;
-      base = (scaleStat * 2) + (dmgEff.value * skill.spellPower);
+      const base = (scaleStat * 2) + (dmgEff.value * skill.spellPower);
+      const defReduction = 100 / (100 + effDef);
+      dmg = Math.max(1, Math.round(base * defReduction * critMult));
     } else {
-      base = effStr * 2.5 + 30;
+      // No damage effect in this skill — fall back to standard attack
+      dmg = calcDamage(atkStats, defStats, { critMult });
     }
   } else {
-    base = effStr * 2.5 + 30;
+    dmg = calcDamage(atkStats, defStats, { critMult });
   }
 
-  const defMult = 100 / (100 + effDef);
-  let dmg = base * defMult;
-
-  const critChance = clamp(0.05 + atk.stats.Luck / 400, 0.05, 0.40);
-  const isCrit = Math.random() < critChance;
-  if (isCrit) dmg *= 1.75;
-
+  // Absorb shield first
   dmg -= shieldAbs;
   if (shieldAbs > 0) {
-    // drain shield
     def.status = def.status.map(e =>
       e.type === "shield" ? { ...e, value: Math.max(0, e.value - Math.floor(shieldAbs)) } : e
     ).filter(e => !(e.type === "shield" && e.value <= 0));
