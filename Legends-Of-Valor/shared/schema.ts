@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, bigint, timestamp, jsonb, boolean, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, bigint, timestamp, jsonb, boolean, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -481,7 +481,7 @@ export const guildQuests = pgTable("guild_quests", {
   targetAmount: integer("target_amount").notNull(),
   currentAmount: integer("current_amount").notNull().default(0),
   rewardUnityCoins: integer("reward_unity_coins").notNull().default(0),
-  rewardGold: integer("reward_gold").notNull().default(0),
+  rewardGold: bigint("reward_gold", { mode: "number" }).notNull().default(0),
   rewardGuildExp: integer("reward_guild_exp").notNull().default(0),
   status: text("status").notNull().default("active").$type<"active" | "completed" | "expired">(),
   expiresAt: timestamp("expires_at"),
@@ -576,7 +576,10 @@ export const inventoryItems = pgTable("inventory_items", {
   sockets: integer("sockets").notNull().default(0),
   gems: jsonb("gems").notNull().default([]).$type<{id: string; stats: Partial<Stats>}[]>(),
   enchantments: jsonb("enchantments").notNull().default([]).$type<{stat: string; bonus: number; level: number}[]>(),
-});
+}, (t) => [
+  index("inv_items_account_id_idx").on(t.accountId),
+  index("inv_items_item_id_idx").on(t.itemId),
+]);
 
 export const leaderboardEntries = pgTable("leaderboard_entries", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -663,7 +666,10 @@ export const eventRegistrations = pgTable("event_registrations", {
   accountId: varchar("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
   registeredAt: timestamp("registered_at").notNull().defaultNow(),
   isAutoRegistered: boolean("is_auto_registered").notNull().default(false),
-});
+}, (t) => [
+  index("event_reg_event_id_idx").on(t.eventId),
+  index("event_reg_account_id_idx").on(t.accountId),
+]);
 
 export const eventsRelations = relations(events, ({ many, one }) => ({
   registrations: many(eventRegistrations),
@@ -742,8 +748,10 @@ export const pets = pgTable("pets", {
   tempElementExpires: timestamp("temp_element_expires"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   mercenaryUntil: timestamp("mercenary_until"),
-  mercenaryRewardGold: integer("mercenary_reward_gold").default(0),
-});
+  mercenaryRewardGold: bigint("mercenary_reward_gold", { mode: "number" }).default(0),
+}, (t) => [
+  index("pets_account_id_idx").on(t.accountId),
+]);
 
 export const petsRelations = relations(pets, ({ one }) => ({
   account: one(accounts, {
@@ -973,7 +981,11 @@ export const challenges = pgTable("challenges", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   acceptedAt: timestamp("accepted_at"),
   completedAt: timestamp("completed_at"),
-});
+}, (t) => [
+  index("challenges_challenger_id_idx").on(t.challengerId),
+  index("challenges_challenged_id_idx").on(t.challengedId),
+  index("challenges_status_idx").on(t.status),
+]);
 
 export const challengesRelations = relations(challenges, ({ one }) => ({
   challenger: one(accounts, {
@@ -1237,7 +1249,9 @@ export const guildMembers = pgTable("guild_members", {
   accountId: varchar("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }).unique(),
   role: text("role").notNull().$type<GuildRole>().default("member"),
   joinedAt: timestamp("joined_at").notNull().defaultNow(),
-});
+}, (t) => [
+  index("guild_members_guild_id_idx").on(t.guildId),
+]);
 
 export const guildVaultLogs = pgTable("guild_vault_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1496,12 +1510,12 @@ export const auctions = pgTable("auctions", {
   type: text("type").notNull().$type<AuctionType>().default("gold"),
   itemType: text("item_type").notNull().$type<AuctionItemType>().default("item"),
   itemId: text("item_id").notNull(), // refId for inventory item or skill ID
-  startingPrice: integer("starting_price").notNull(),
-  minIncrement: integer("min_increment").notNull().default(1), // percentage (1-5%)
-  currentBid: integer("current_bid").notNull().default(0),
+  startingPrice: bigint("starting_price", { mode: "number" }).notNull(),
+  minIncrement: bigint("min_increment", { mode: "number" }).notNull().default(1), // percentage (1-5%)
+  currentBid: bigint("current_bid", { mode: "number" }).notNull().default(0),
   highestBidderId: varchar("highest_bidder_id").references(() => accounts.id),
   status: text("status").notNull().$type<AuctionStatus>().default("active"), // active, completed, cancelled
-  taxPaid: integer("tax_paid").notNull().default(0),
+  taxPaid: bigint("tax_paid", { mode: "number" }).notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   endAt: timestamp("end_at").notNull(),
 });
@@ -1510,9 +1524,9 @@ export const auctionBids = pgTable("auction_bids", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   auctionId: varchar("auction_id").notNull().references(() => auctions.id, { onDelete: "cascade" }),
   bidderId: varchar("bidder_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
-  amount: integer("amount").notNull(),
+  amount: bigint("amount", { mode: "number" }).notNull(),
   isAutoBid: boolean("is_auto_bid").notNull().default(false),
-  maxAutoBid: integer("max_auto_bid"),
+  maxAutoBid: bigint("max_auto_bid", { mode: "number" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

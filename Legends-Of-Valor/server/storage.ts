@@ -190,6 +190,8 @@ function evictAcct(id: string): void {
   if (e) _accUsr.delete(e.v.username);
   _accId.delete(id);
 }
+// Exported so routes.ts can evict after direct db.update calls (bypassing storage methods)
+export function evictAccountCache(id: string): void { evictAcct(id); }
 // ─────────────────────────────────────────────────────────────────────────────
 
 export class DatabaseStorage implements IStorage {

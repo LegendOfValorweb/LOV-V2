@@ -1,4 +1,5 @@
 import { Switch, Route } from "wouter";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -98,25 +99,29 @@ function Router() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <GameProvider>
-          <AudioProvider>
-            <MobileLandscapePrompt />
-            <GameViewport>
-              <AppLoadingWrapper>
-                <Toaster />
-                <AudioPlayer />
-                <GameHUD />
-                <FloatingAIButton />
-                <WeatherOverlay />
-                <Router />
-              </AppLoadingWrapper>
-            </GameViewport>
-          </AudioProvider>
-        </GameProvider>
-      </TooltipProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <GameProvider>
+            <AudioProvider>
+              <MobileLandscapePrompt />
+              <GameViewport>
+                <ErrorBoundary>
+                  <AppLoadingWrapper>
+                    <Toaster />
+                    <AudioPlayer />
+                    <GameHUD />
+                    <FloatingAIButton />
+                    <WeatherOverlay />
+                    <Router />
+                  </AppLoadingWrapper>
+                </ErrorBoundary>
+              </GameViewport>
+            </AudioProvider>
+          </GameProvider>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

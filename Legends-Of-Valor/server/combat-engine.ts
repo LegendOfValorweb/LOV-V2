@@ -319,6 +319,8 @@ export function applyDoT(
 
   const sameType = existing.filter(d => d.type === dotType && d.remainingTurns > 0);
   if (sameType.length > 0) {
+    // Transfer credit to the stronger caster when upgrading the DoT
+    if (damagePerTurn > sameType[0].damagePerTurn) sameType[0].appliedBy = appliedBy;
     sameType[0].remainingTurns = Math.max(sameType[0].remainingTurns, turns);
     sameType[0].damagePerTurn = Math.max(sameType[0].damagePerTurn, damagePerTurn);
     effects.push(`${dotType} refreshed (${damagePerTurn} dmg/turn for ${turns} turns).`);
@@ -469,7 +471,8 @@ export function calculateCCSuccess(casterInt: number, targetInt: number, targetL
   const safeCI = safeNumber(casterInt, 10);
   const safeTI = safeNumber(targetInt, 10);
   const safeTL = safeNumber(targetLuck, 10);
-  const successChance = safeCI / (safeTI + safeTL);
+  const denominator = safeTI + safeTL;
+  const successChance = denominator > 0 ? safeCI / denominator : 1;
   return Math.random() < Math.min(successChance, 0.85);
 }
 
@@ -805,7 +808,8 @@ export function processAction(
           effects.push(`${defender.name} fully evaded the attack!`);
           damage = 0;
         } else {
-          const dodgePartialReduction = Math.max(0, defenderSpd - attackerSpd * 0.5) / (attackerSpd * 0.5);
+          const halfAtk = attackerSpd * 0.5;
+          const dodgePartialReduction = halfAtk > 0 ? Math.max(0, defenderSpd - halfAtk) / halfAtk : 0;
           const partialMitigationPct = Math.min(dodgePartialReduction * 0.25, 0.25);
           const effectiveDef = safeNumber(defenderStats.Def, 0) * (1 + partialMitigationPct);
           damage = applyDiminishingReturns(effectiveDef, Math.floor(rawDamage));
@@ -984,13 +988,10 @@ export function processAction(
 
       if (spellCategory === "aoe" && spell?.targetCount && spell.targetCount > 1) {
         const primaryDamage = damage;
-        let aoeBonusDamage = 0;
-        for (let i = 1; i < spell.targetCount; i++) {
-          aoeBonusDamage += calculateAoEFalloff(primaryDamage, i);
-        }
-        // Apply AoE bonus damage to the single defender (simulates splash)
-        damage = primaryDamage + Math.floor(aoeBonusDamage * 0.5);
-        effects.push(`AoE spell hits ${spell.targetCount} targets! Splash bonus: +${Math.floor(aoeBonusDamage * 0.5).toLocaleString()}`);
+        // In 1v1 combat there are no additional targets to splash onto, so
+        // AoE spells deal the same damage as single-target — no free bonus.
+        damage = primaryDamage;
+        effects.push(`AoE spell (${spell.targetCount}-target) hits the single target!`);
 
         if (ccTracker && spell?.ccType && spell?.ccDuration) {
           const ccResult = applyCC(

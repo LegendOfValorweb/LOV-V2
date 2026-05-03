@@ -20,7 +20,7 @@ import {
   getAchievementDisplayName,
   SERVER_ACHIEVEMENT_DEFS,
 } from "./server-achievements";
-import { storage } from "./storage";
+import { storage, evictAccountCache } from "./storage";
 import { db } from "./db";
 import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, type CombatLogEntry, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, shardEvents, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage, worldBosses, worldBossDamage, inventoryItems, playerSkills } from "@shared/schema";
 import { ZONE_NPCS, getZoneNPC, calculateNPCStats, calculateNPCRewards } from "@shared/zone-npcs";
@@ -1204,7 +1204,7 @@ export async function registerRoutes(
 
   app.patch("/api/accounts/:id/gold", async (req, res) => {
     try {
-      const { gold } = z.object({ gold: z.number().max(Number.MAX_SAFE_INTEGER) }).parse(req.body);
+      const { gold } = z.object({ gold: z.number().min(0).max(Number.MAX_SAFE_INTEGER) }).parse(req.body);
       const account = await storage.updateAccountGold(req.params.id, gold);
       if (!account) {
         return res.status(404).json({ error: "Account not found" });
@@ -1287,8 +1287,7 @@ export async function registerRoutes(
         stats: playerStatsSchema.optional(),
         equipped: equippedSchema.optional(),
         rank: z.enum(playerRanks).optional(),
-        wins: safeNumber.optional(),
-        losses: safeNumber.optional(),
+        // wins and losses are server-authoritative — never accept from client
       });
       
       const body = updateSchema.parse(req.body);
@@ -1841,6 +1840,11 @@ export async function registerRoutes(
   // Admin: Fix oversized resource values for an account
   app.post("/api/admin/accounts/:id/cap-resources", async (req, res) => {
     try {
+      const { adminId } = req.body;
+      const admin = adminId ? await storage.getAccount(adminId) : null;
+      if (!admin || admin.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
       await storage.capAccountResources(req.params.id);
       const account = await storage.getAccount(req.params.id);
       if (!account) {
@@ -1934,6 +1938,11 @@ export async function registerRoutes(
 
   app.delete("/api/accounts/:id", async (req, res) => {
     try {
+      const { adminId } = req.body;
+      const admin = adminId ? await storage.getAccount(adminId) : null;
+      if (!admin || admin.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
       const { id } = req.params;
       const account = await storage.getAccount(id);
       if (!account) {
@@ -2065,10 +2074,16 @@ export async function registerRoutes(
 
   app.post("/api/admin/give-item", async (req, res) => {
     try {
-      const { playerUsername, itemId } = z.object({
+      const { adminId, playerUsername, itemId } = z.object({
+        adminId: z.string(),
         playerUsername: z.string(),
         itemId: z.string(),
       }).parse(req.body);
+
+      const admin = await storage.getAccount(adminId);
+      if (!admin || admin.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
 
       const player = await storage.getAccountByUsername(playerUsername);
       if (!player) {
@@ -11350,15 +11365,20 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Account not found" });
       }
       
-      const updates: Record<string, number> = {};
-      if (resources.gold) updates.gold = (account.gold || 0) + resources.gold;
-      if (resources.rubies) updates.rubies = (account.rubies || 0) + resources.rubies;
-      if (resources.soulShards) updates.soulShards = (account.soulShards || 0) + resources.soulShards;
-      if (resources.trainingPoints) updates.trainingPoints = (account.trainingPoints || 0) + resources.trainingPoints;
-      if (resources.beakCoins) updates.beakCoins = (account.beakCoins || 0) + resources.beakCoins;
-      if (resources.valorTokens) updates.valorTokens = (account.valorTokens || 0) + resources.valorTokens;
+      // Atomic increments via SQL expressions — avoids read-modify-write race conditions
+      const sets: Record<string, unknown> = {};
+      if (resources.gold)           sets.gold           = sql`${accounts.gold}           + ${resources.gold}`;
+      if (resources.rubies)         sets.rubies         = sql`${accounts.rubies}         + ${resources.rubies}`;
+      if (resources.soulShards)     sets.soulShards     = sql`${accounts.soulShards}     + ${resources.soulShards}`;
+      if (resources.trainingPoints) sets.trainingPoints = sql`${accounts.trainingPoints} + ${resources.trainingPoints}`;
+      if (resources.beakCoins)      sets.beakCoins      = sql`${accounts.beakCoins}      + ${resources.beakCoins}`;
+      if (resources.valorTokens)    sets.valorTokens    = sql`${accounts.valorTokens}    + ${resources.valorTokens}`;
       
-      await storage.updateAccount(accountId, updates);
+      if (Object.keys(sets).length > 0) {
+        await db.update(accounts).set(sets as any).where(eq(accounts.id, accountId));
+        // Evict cache so next read reflects the new values
+        evictAccountCache(accountId);
+      }
       
       await storage.createActivityFeed({
         type: "admin_grant",

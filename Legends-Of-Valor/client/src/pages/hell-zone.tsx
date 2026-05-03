@@ -136,6 +136,7 @@ export default function HellZone() {
     queryKey: ["hell-zone-state"],
     queryFn: async () => {
       const res = await fetch("/api/hell-zone/state");
+      if (!res.ok) throw new Error(`Hell zone state: ${res.status}`);
       return res.json();
     },
     refetchInterval: 3000,
@@ -198,6 +199,7 @@ export default function HellZone() {
     queryKey: ["battle-royale-status"],
     queryFn: async () => {
       const res = await fetch("/api/battle-royale/status");
+      if (!res.ok) throw new Error(`BR status: ${res.status}`);
       return res.json();
     },
     refetchInterval: 8000,
@@ -207,6 +209,7 @@ export default function HellZone() {
     queryKey: ["battle-royale-my-status", account?.id],
     queryFn: async () => {
       const res = await fetch(`/api/battle-royale/my-status?accountId=${account?.id}`);
+      if (!res.ok) throw new Error(`BR my-status: ${res.status}`);
       return res.json();
     },
     enabled: !!account?.id,
