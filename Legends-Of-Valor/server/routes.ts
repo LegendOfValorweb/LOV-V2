@@ -22,7 +22,7 @@ import {
 } from "./server-achievements";
 import { storage, evictAccountCache } from "./storage";
 import { db } from "./db";
-import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, type CombatLogEntry, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, shardEvents, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage, worldBosses, worldBossDamage, inventoryItems, playerSkills, casinoHistory, skillTreeNodes, playerModifiers } from "@shared/schema";
+import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, type CombatLogEntry, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, shardEvents, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage, worldBosses, worldBossDamage, inventoryItems, playerSkills, casinoHistory, skillTreeNodes, playerModifiers, prestigeHistory } from "@shared/schema";
 import { ZONE_NPCS, getZoneNPC, calculateNPCStats, calculateNPCRewards } from "@shared/zone-npcs";
 import { z } from "zod";
 import type { Account, Event, Challenge, PlayerRace, PlayerGender } from "@shared/schema";
@@ -500,6 +500,20 @@ export async function registerRoutes(
         .filter(Boolean) as any[];
       const boosted = applySkillTreePassives(nodeDefs, stats);
       Object.assign(stats, boosted);
+    }
+
+    // Apply prestige stat multiplier
+    const prestigeLvl = (account as any).prestigeLevel ?? 0;
+    const permBonus = (account as any).permanentStatBonus ?? 0;
+    const totalPrestigeMult = (1 + prestigeLvl * 0) || 1; // computed via helper below
+    if (prestigeLvl > 0 || permBonus > 0) {
+      const { getPrestigeStatMult } = await import("@shared/prestige-data");
+      const mult = getPrestigeStatMult(prestigeLvl) * (1 + permBonus / 100);
+      stats.Str  = Math.round(stats.Str  * mult);
+      stats.Def  = Math.round(stats.Def  * mult);
+      stats.Spd  = Math.round(stats.Spd  * mult);
+      stats.Int  = Math.round(stats.Int  * mult);
+      stats.Luck = Math.round(stats.Luck * mult);
     }
 
     return stats;
@@ -18933,6 +18947,159 @@ export async function registerRoutes(
     } catch (e) {
       if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
       res.status(500).json({ error: "Failed to unlock node" });
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════
+  // PRESTIGE / META-PROGRESSION
+  // ══════════════════════════════════════════════════════════════════════
+
+  // GET prestige info (requirements, current bonuses, what resets)
+  app.get("/api/accounts/:accountId/prestige-info", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.accountId);
+      if (!account) return res.status(404).json({ error: "Not found" });
+      const { getCumulativePrestigeBonus, getPrestigeGoldKeepPct, PRESTIGE_PERKS, MAX_PRESTIGE_LEVEL } = await import("@shared/prestige-data");
+      const lvl = (account as any).prestigeLevel ?? 0;
+      const canPrestige = account.rank === "Mythical Legend" && lvl < MAX_PRESTIGE_LEVEL;
+      const bonuses = getCumulativePrestigeBonus(lvl);
+      const goldKeepPct = getPrestigeGoldKeepPct(lvl + 1);
+      const goldToKeep = Math.floor((account.gold ?? 0) * goldKeepPct);
+      const nextPerk = lvl < MAX_PRESTIGE_LEVEL ? PRESTIGE_PERKS[lvl] : null;
+      res.json({ prestigeLevel: lvl, canPrestige, bonuses, goldKeepPct: goldKeepPct * 100, goldToKeep, nextPerk });
+    } catch {
+      res.status(500).json({ error: "Failed to load prestige info" });
+    }
+  });
+
+  // GET prestige history
+  app.get("/api/accounts/:accountId/prestige-history", async (req, res) => {
+    try {
+      const rows = await db.select().from(prestigeHistory)
+        .where(eq(prestigeHistory.accountId, req.params.accountId))
+        .orderBy(desc(prestigeHistory.prestigedAt));
+      res.json(rows);
+    } catch {
+      res.status(500).json({ error: "Failed to load prestige history" });
+    }
+  });
+
+  // POST perform prestige reset
+  app.post("/api/accounts/:accountId/prestige", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+      const { MAX_PRESTIGE_LEVEL, PRESTIGE_PERKS, getPrestigeGoldKeepPct } = await import("@shared/prestige-data");
+
+      const currentLvl = (account as any).prestigeLevel ?? 0;
+      if (account.rank !== "Mythical Legend") {
+        return res.status(400).json({ error: "You must be Mythical Legend rank to prestige" });
+      }
+      if (currentLvl >= MAX_PRESTIGE_LEVEL) {
+        return res.status(400).json({ error: "Already at maximum prestige level" });
+      }
+
+      const newLvl = currentLvl + 1;
+      const perk = PRESTIGE_PERKS[currentLvl];
+      const goldKeepPct = getPrestigeGoldKeepPct(newLvl);
+      const goldToKeep = Math.floor((account.gold ?? 0) * goldKeepPct);
+
+      // Log history
+      await db.insert(prestigeHistory).values({
+        accountId: req.params.accountId,
+        prestigeLevel: newLvl,
+        previousRank: account.rank,
+        goldKept: goldToKeep,
+      });
+
+      // Reset + apply new level
+      await storage.updateAccount(req.params.accountId, {
+        rank: "Novice" as any,
+        gold: goldToKeep,
+        trainingPoints: 0,
+        storyAct: 1,
+        storyProgress: {} as any,
+        npcFloor: 1,
+        npcLevel: 1,
+        prestigeLevel: newLvl,
+        prestigeTokens: ((account as any).prestigeTokens ?? 0) + perk.tokens,
+      } as any);
+
+      evictAccountCache(req.params.accountId);
+      res.json({
+        success: true,
+        newPrestigeLevel: newLvl,
+        newTitle: perk.title,
+        tokensAwarded: perk.tokens,
+        goldKept: goldToKeep,
+        unlockedContent: perk.unlockedContent,
+      });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to prestige" });
+    }
+  });
+
+  // GET prestige shop items
+  app.get("/api/prestige-shop", async (req, res) => {
+    try {
+      const { PRESTIGE_SHOP } = await import("@shared/prestige-data");
+      res.json(PRESTIGE_SHOP);
+    } catch {
+      res.status(500).json({ error: "Failed to load prestige shop" });
+    }
+  });
+
+  // POST buy prestige shop item
+  app.post("/api/accounts/:accountId/prestige-shop/buy", async (req, res) => {
+    try {
+      const { itemId } = z.object({ itemId: z.string() }).parse(req.body);
+      const { PRESTIGE_SHOP } = await import("@shared/prestige-data");
+      const item = PRESTIGE_SHOP.find(i => i.id === itemId);
+      if (!item) return res.status(404).json({ error: "Item not found" });
+
+      const account = await storage.getAccount(req.params.accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const prestigeLvl = (account as any).prestigeLevel ?? 0;
+      if (prestigeLvl < item.minPrestige) {
+        return res.status(400).json({ error: `Requires Prestige ${item.minPrestige}` });
+      }
+      const tokens = (account as any).prestigeTokens ?? 0;
+      if (tokens < item.tokenCost) {
+        return res.status(400).json({ error: `Need ${item.tokenCost} Prestige Tokens (you have ${tokens})` });
+      }
+
+      // Deduct tokens
+      const updates: Record<string, any> = { prestigeTokens: tokens - item.tokenCost };
+      let description = "";
+
+      const r = item.reward;
+      if (r.soulShards)    { updates.soulShards    = (account.soulShards ?? 0)    + r.soulShards;    description = `+${r.soulShards} Soul Shards`; }
+      if (r.gold)          { updates.gold          = (account.gold ?? 0)          + r.gold;          description = `+${r.gold.toLocaleString()} gold`; }
+      if (r.trainingPoints){ updates.trainingPoints= (account.trainingPoints ?? 0)+ r.trainingPoints; description = `+${r.trainingPoints} TP`; }
+      if (r.rubies)        { updates.rubies        = (account.rubies ?? 0)        + r.rubies;        description = `+${r.rubies} rubies`; }
+      if (r.permanentStatBonus) {
+        const current = (account as any).permanentStatBonus ?? 0;
+        const maxBonus = 15; // capped at 5×3%
+        if (current >= maxBonus) return res.status(400).json({ error: "Eternal Blessing is fully stacked (max 5×)" });
+        updates.permanentStatBonus = current + r.permanentStatBonus;
+        description = `Permanently +${r.permanentStatBonus}% all stats`;
+      }
+      if (r.skillRarity) {
+        const { ALL_SKILLS } = await import("@shared/skills-data");
+        const pool = ALL_SKILLS.filter(s => s.rarity === r.skillRarity && !s.isAdminExclusive && !s.isValorExclusive);
+        if (!pool.length) return res.status(500).json({ error: "No skills of that rarity available" });
+        const chosen = pool[Math.floor(Math.random() * pool.length)];
+        await db.insert(playerSkills).values({ accountId: req.params.accountId, skillId: chosen.id, source: "prestige" } as any);
+        description = `Received skill: ${chosen.name} (${chosen.rarity})`;
+      }
+
+      await storage.updateAccount(req.params.accountId, updates as any);
+      evictAccountCache(req.params.accountId);
+      res.json({ success: true, itemName: item.name, description });
+    } catch (e) {
+      if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
+      res.status(500).json({ error: "Failed to buy item" });
     }
   });
 

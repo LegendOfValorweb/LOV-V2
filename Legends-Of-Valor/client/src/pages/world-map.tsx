@@ -142,6 +142,17 @@ const zones: Zone[] = [
     route: "/skill-workshop",
   },
   {
+    id: "hall-of-legends",
+    name: "Hall of Legends",
+    description: "For those who have conquered every challenge: reset your progress for permanent bonuses, unlock exclusive content, and ascend beyond Mythical Legend itself.",
+    landmark: "castle",
+    difficulty: "hell",
+    pvpEnabled: false,
+    activities: ["Prestige", "Prestige Shop", "Legend History"],
+    coordinates: { x: 50, y: 15 },
+    route: "/prestige",
+  },
+  {
     id: "pet-training",
     name: "Pet Training Grounds",
     description: "Train and evolve your pets to become powerful battle companions.",

@@ -389,6 +389,18 @@ export const accounts = pgTable("accounts", {
   loginStreak: integer("login_streak").notNull().default(0),
   lastLoginDate: text("last_login_date"),
   combatLog: jsonb("combat_log").notNull().default([]).$type<CombatLogEntry[]>(),
+  prestigeLevel: integer("prestige_level").notNull().default(0),
+  prestigeTokens: integer("prestige_tokens").notNull().default(0),
+  permanentStatBonus: integer("permanent_stat_bonus").notNull().default(0),
+});
+
+export const prestigeHistory = pgTable("prestige_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  accountId: varchar("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
+  prestigeLevel: integer("prestige_level").notNull(),
+  previousRank: text("previous_rank").notNull(),
+  goldKept: bigint("gold_kept", { mode: "number" }).notNull().default(0),
+  prestigedAt: timestamp("prestiged_at").notNull().defaultNow(),
 });
 
 export const recipes = pgTable("recipes", {

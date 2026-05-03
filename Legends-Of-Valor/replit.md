@@ -296,8 +296,56 @@ All 4 combat entry points (Tower, monster fight, NPC fight, dungeon) now call `a
 - World Map: "Skill Workshop" zone added at (35, 72)
 - Skills page → Skill Tree tab: "⚗️ Workshop" button + description card
 
+## PHASE 15: Prestige / Meta-Progression System (May 2026)
+
+### New DB tables & columns
+- `prestige_history` table — logs each prestige event (level, previous rank, gold kept, timestamp)
+- `accounts.prestigeLevel` integer (0–10)
+- `accounts.prestigeTokens` integer
+- `accounts.permanentStatBonus` integer (additive % from shop Eternal Blessing)
+
+### Prestige — `/prestige` (Hall of Legends on World Map)
+Three-tab page for meta-progression beyond Mythical Legend rank:
+
+**How it works:**
+- Reach Mythical Legend (rank 15) → prestige once per full rank cycle
+- Rank resets to Novice; gold kept = 5% × new prestige level (capped at 50%)
+- Training Points, Story Act, and Tower floor reset
+- Everything else (pets, skills, skill upgrades/mods, guild, base, skins) persists forever
+
+**10 Prestige Tiers — cumulative permanent bonuses:**
+| P | Title | Stat Mult | Gold | XP | TP | Crit | Lifesteal | Tokens |
+|---|-------|-----------|------|----|----|------|-----------|--------|
+| 1 | Reborn         | +10% | +15% | —   | —   | —   | —   | 1 |
+| 2 | Twice-Forged   | +20% | +30% | +20%| —   | —   | —   | 1 |
+| 3 | Thrice-Risen   | +30% | +40% | +40%| —   | +5% | —   | 2 |
+| 4 | Veteran Soul   | +40% | +50% | +60%| +25%| +5% | —   | 1 |
+| 5 | Ascendant Soul | +55% | +60% | +60%| +50%| +5% | +2% | 2 |
+| 6 | Ancient        | +65% | +70% | +85%|+100%| +10%| +2% | 2 |
+| 7 | Eternal        | +75% | +80% | +85%|+100%| +15%| +4% | 2 |
+| 8 | Undying        | +85% | +95% |+110%|+150%| +15%| +6% | 2 |
+| 9 | Myth-Walker    | +95% |+105% |+160%|+150%| +20%| +8% | 3 |
+| 10| Legend Reborn  |+100% |+115% |+160%|+200%| +25%|+10% | 5 |
+
+**Prestige Shop (Prestige Tokens):**
+- Soul Infusion (1T) → 1,000 Soul Shards
+- Gold Surge (1T) → 500K gold
+- TP Surge (1T) → 200 Training Points
+- Legendary Tome (3T) → random Legendary skill
+- Ruby Cache (2T) → 5,000 Rubies
+- Eternal Blessing (4T, P5+) → permanent +3% all stats (stackable ×5)
+- Mythic Scroll (8T, P7+) → random Mythic skill
+- Legend's Brand (5T, P10) → exclusive cosmetic title
+
+**Combat integration:**
+`computeCombatStats` now applies `getPrestigeStatMult(prestigeLevel) × (1 + permanentStatBonus/100)` to all 5 base stats (Str, Def, Spd, Int, Luck) before returning. Prestige 10 alone doubles all stats.
+
+### Navigation
+- World Map: "Hall of Legends" zone (hell-tier, top-center at 50, 15)
+
 ## Recent Changes
 
+- May 2026: Prestige system (10 tiers, permanent bonuses, shop, combat integration)
 - May 2026: Modular ability workshop (upgrade / modifiers / fusion), combat modifier integration
 - May 2026: Casino system (3 games + history), Skill Tree (210 nodes × 14 races), passive combat integration
 - January 2026: Complete V2 implementation
