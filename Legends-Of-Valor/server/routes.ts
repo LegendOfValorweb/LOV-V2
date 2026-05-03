@@ -96,12 +96,10 @@ import {
   questAssignments,
 } from "@shared/schema";
 
-// V2: Max 28 players per server (2 per race x 14 races)
-const MAX_PLAYERS = 999999; // Unlimited
-// V2: Max 2 players per race
-const MAX_PLAYERS_PER_RACE = 20;
-const SESSION_TIMEOUT = 5 * 60 * 1000; // 5 minutes of inactivity
-const SLEEP_TIMEOUT = 10 * 60 * 1000; // 10 minutes of inactivity to sleep the app
+const MAX_PLAYERS = 999999; // Unlimited server capacity
+const MAX_PLAYERS_PER_RACE = 20; // Max 20 players per race
+const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes of inactivity
+const SLEEP_TIMEOUT = 60 * 60 * 1000; // 60 minutes of inactivity to sleep the app
 
 const RANK_REQUIREMENTS = [
   { rank: "Novice",          index: 0,  winsRequired: 0,      floorRequired: 1  },
@@ -3368,12 +3366,18 @@ export async function registerRoutes(
       }
 
       const tierConfig = petTierConfig[pet.tier as keyof typeof petTierConfig];
-      if (tierConfig.maxExp === null || pet.exp < tierConfig.maxExp) {
-        return res.status(400).json({ error: `Pet needs ${tierConfig.maxExp} EXP to evolve` });
+      if (tierConfig.maxExp === null) {
+        return res.status(400).json({ error: "This pet tier cannot be evolved" });
+      }
+      if (pet.exp < tierConfig.maxExp) {
+        return res.status(400).json({ error: `Pet needs ${tierConfig.maxExp} EXP to evolve (current: ${pet.exp})` });
       }
 
-      if (tierConfig.evolutionCost === null || account.gold < tierConfig.evolutionCost) {
-        return res.status(400).json({ error: `Need ${tierConfig.evolutionCost} gold to evolve` });
+      if (tierConfig.evolutionCost === null) {
+        return res.status(400).json({ error: "This pet tier has no evolution cost — it cannot evolve further" });
+      }
+      if (account.gold < tierConfig.evolutionCost) {
+        return res.status(400).json({ error: `Need ${tierConfig.evolutionCost.toLocaleString()} gold to evolve (you have ${account.gold.toLocaleString()})` });
       }
 
       const nextTier = petTiers[currentTierIndex + 1];
@@ -4134,11 +4138,11 @@ export async function registerRoutes(
         // Advance to next level (sequential progression - no skipping)
         if (level >= 100) {
           // Beat the floor boss, advance to next floor
-          if (floor < 100) {
+          if (floor < 50) {
             newFloor = floor + 1;
             newLevel = 1;
           }
-          // If floor 100, stay at max
+          // If floor 50, stay at max
         } else {
           newLevel = level + 1;
         }
@@ -5685,11 +5689,12 @@ export async function registerRoutes(
       for (const m of onlineMembers) {
         const account = allAccounts.find(a => a.id === m.accountId);
         if (account) {
-          combinedMemberStats.Str += account.stats.Str;
-          combinedMemberStats.Def += account.stats.Def || 0;
-          combinedMemberStats.Spd += account.stats.Spd;
-          combinedMemberStats.Int += account.stats.Int;
-          combinedMemberStats.Luck += account.stats.Luck;
+          const s = (account.stats as any) || {};
+          combinedMemberStats.Str += s.Str ?? 10;
+          combinedMemberStats.Def += s.Def ?? 10;
+          combinedMemberStats.Spd += s.Spd ?? 10;
+          combinedMemberStats.Int += s.Int ?? 10;
+          combinedMemberStats.Luck += s.Luck ?? 10;
         }
       }
 
@@ -5807,10 +5812,11 @@ export async function registerRoutes(
       for (const member of onlineMembers) {
         const account = allAccounts.find(a => a.id === member.accountId);
         if (account) {
-          combinedStats.Str += account.stats.Str;
-          combinedStats.Spd += account.stats.Spd;
-          combinedStats.Int += account.stats.Int;
-          combinedStats.Luck += account.stats.Luck;
+          const s = (account.stats as any) || {};
+          combinedStats.Str += s.Str ?? 10;
+          combinedStats.Spd += s.Spd ?? 10;
+          combinedStats.Int += s.Int ?? 10;
+          combinedStats.Luck += s.Luck ?? 10;
 
           if (account.equippedPetId) {
             const pet = allPets.find(p => p.id === account.equippedPetId);
@@ -6351,6 +6357,17 @@ export async function registerRoutes(
             : `Guild battle ended in a tie ${newChallengerScore}-${newChallengedScore}!`,
           metadata: { battleId: battle.id, winnerId: winningGuildId },
         });
+
+        // Auto rank-up check for all participants after guild battle
+        if (winningGuildId) {
+          const winningMembers = winningGuildId === battle.challengerGuildId ? challengerMembers : challengedMembers;
+          for (const member of winningMembers) {
+            const memberAccount = await storage.getAccount(member.accountId);
+            if (memberAccount) {
+              await checkAndAutoRankUp(member.accountId, memberAccount.wins || 0, memberAccount.npcFloor || 1);
+            }
+          }
+        }
 
         res.json(updated);
       } else {

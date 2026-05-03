@@ -66,7 +66,7 @@ const zones: Zone[] = [
   {
     id: "mystic-tower",
     name: "Mystic Tower",
-    description: "A towering spire filled with increasingly powerful enemies. 100 floors await.",
+    description: "A towering spire filled with increasingly powerful enemies. 50 floors, 100 levels each await.",
     landmark: "tower",
     difficulty: "hard",
     pvpEnabled: false,
