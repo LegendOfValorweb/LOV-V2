@@ -261,7 +261,7 @@ export default function Shop() {
                 <div style={{ marginBottom: 6 }}>
                   <div style={{ fontSize: "0.6rem", color: "hsl(45 10% 50%)", fontFamily: "var(--font-serif)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Type</div>
                   <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                    {(["all", "weapon", "armor", "accessory"] as const).map(type => (
+                    {(["all", "weapon", "armor", "accessory", "shield"] as const).map(type => (
                       <button
                         key={type}
                         onClick={() => setSelectedType(type)}
@@ -272,7 +272,7 @@ export default function Shop() {
                           borderRadius: 3, color: selectedType === type ? "hsl(45 80% 60%)" : "hsl(45 10% 55%)", cursor: "pointer",
                         }}
                       >
-                        {type === "all" ? "All" : type === "weapon" ? "⚔" : type === "armor" ? "🛡" : "💎"} {type === "all" ? "" : type.charAt(0).toUpperCase() + type.slice(1)}
+                        {type === "all" ? "All" : type === "weapon" ? "⚔" : type === "armor" ? "🥋" : type === "shield" ? "🛡" : "💎"} {type === "all" ? "" : type === "accessory" ? "Amulet" : type.charAt(0).toUpperCase() + type.slice(1)}
                       </button>
                     ))}
                   </div>

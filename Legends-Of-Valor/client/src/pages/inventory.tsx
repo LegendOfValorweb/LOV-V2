@@ -120,14 +120,14 @@ export default function Inventory() {
   const [, navigate] = useLocation();
   const { account, inventory, logout, setAccount, refreshInventory } = useGame();
   const { toast } = useToast();
-  const [equipDialog, setEquipDialog] = useState<{ slot: string; type: "weapon" | "armor" | "accessory" } | null>(null);
+  const [equipDialog, setEquipDialog] = useState<{ slot: string; type: "weapon" | "armor" | "accessory" | "shield" } | null>(null);
   const [boostDialog, setBoostDialog] = useState<InventoryItem | null>(null);
   const [isBoosting, setIsBoosting] = useState(false);
   const [boostScaling, setBoostScaling] = useState(1);
   const [sellDialog, setSellDialog] = useState<{ inventoryItem: InventoryItem; item: Item } | null>(null);
   const [isSelling, setIsSelling] = useState(false);
   const [isTrainingStat, setIsTrainingStat] = useState(false);
-  const [activeTab, setActiveTab] = useState<"all" | "weapon" | "armor" | "accessory" | "resource">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "weapon" | "armor" | "accessory" | "shield" | "resource">("all");
   const [hoveredItem, setHoveredItem] = useState<{ item: Item; invItem?: InventoryItem; pos: { x: number; y: number }; slot?: string } | null>(null);
   const [selectedItem, setSelectedItem] = useState<{ item: Item; invItem: InventoryItem } | null>(null);
   const [enchantDialog, setEnchantDialog] = useState<InventoryItem | null>(null);
@@ -194,9 +194,9 @@ export default function Inventory() {
   }, [inventoryItems, activeTab]);
 
   const equippedItems = useMemo(() => {
-    if (!account) return { weapon: null, armor: null, accessory1: null, accessory2: null };
+    if (!account) return { weapon: null, armor: null, accessory1: null, accessory2: null, shield: null };
     const usedIds = new Set<string>();
-    const findInvItem = (equippedId: string | null) => {
+    const findInvItem = (equippedId: string | null | undefined) => {
       if (!equippedId) return null;
       const inv = inventory.find(i => i.id === equippedId && !usedIds.has(i.id));
       if (!inv) return null;
@@ -210,6 +210,7 @@ export default function Inventory() {
       armor: findInvItem(account.equipped?.armor),
       accessory1: findInvItem(account.equipped?.accessory1),
       accessory2: findInvItem(account.equipped?.accessory2),
+      shield: findInvItem((account.equipped as any)?.shield),
     };
   }, [account, inventory]);
 
@@ -295,9 +296,13 @@ export default function Inventory() {
 
   const handleQuickEquip = async (invItem: typeof inventoryItems[0]) => {
     if (!account) return;
-    let slot = invItem.type === "weapon" ? "weapon" : invItem.type === "armor" ? "armor" : "accessory1";
-    if (invItem.type === "accessory" && account.equipped?.accessory1) {
-      slot = "accessory2";
+    let slot: string;
+    if (invItem.type === "weapon") slot = "weapon";
+    else if (invItem.type === "armor") slot = "armor";
+    else if (invItem.type === "shield") slot = "shield";
+    else {
+      slot = "accessory1";
+      if (account.equipped?.accessory1) slot = "accessory2";
     }
     await handleEquip({ inventoryId: invItem.inventoryId, id: invItem.id }, slot);
   };
@@ -431,7 +436,7 @@ export default function Inventory() {
 
               <div className="rpg-paperdoll">
                 <div style={{ display: "flex", alignItems: "center", gap: 12, width: "100%" }}>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
                     <div
                       className={cn("rpg-equip-slot", equippedItems.weapon && "rpg-slot-filled rpg-inv-slot-rarity-" + equippedItems.weapon.item.tier)}
                       onClick={() => equippedItems.weapon ? handleUnequip("weapon") : setEquipDialog({ slot: "weapon", type: "weapon" })}
@@ -439,18 +444,28 @@ export default function Inventory() {
                       onMouseLeave={handleItemLeave}
                       title={equippedItems.weapon ? equippedItems.weapon.item.name : "Weapon Slot"}
                     >
-                      <span className="rpg-slot-icon">{equippedItems.weapon ? "⚔" : "⚔"}</span>
+                      <span className="rpg-slot-icon">⚔</span>
                       <span className="rpg-slot-label">Weapon</span>
+                    </div>
+                    <div
+                      className={cn("rpg-equip-slot", equippedItems.shield && "rpg-slot-filled rpg-inv-slot-rarity-" + equippedItems.shield.item.tier)}
+                      onClick={() => equippedItems.shield ? handleUnequip("shield") : setEquipDialog({ slot: "shield", type: "shield" })}
+                      onMouseEnter={(e) => equippedItems.shield && handleItemHover(e, equippedItems.shield.item, equippedItems.shield.invItem, "shield")}
+                      onMouseLeave={handleItemLeave}
+                      title={equippedItems.shield ? equippedItems.shield.item.name : "Shield Slot"}
+                    >
+                      <span className="rpg-slot-icon">🛡</span>
+                      <span className="rpg-slot-label">Shield</span>
                     </div>
                     <div
                       className={cn("rpg-equip-slot", equippedItems.accessory1 && "rpg-slot-filled rpg-inv-slot-rarity-" + equippedItems.accessory1.item.tier)}
                       onClick={() => equippedItems.accessory1 ? handleUnequip("accessory1") : setEquipDialog({ slot: "accessory1", type: "accessory" })}
                       onMouseEnter={(e) => equippedItems.accessory1 && handleItemHover(e, equippedItems.accessory1.item, equippedItems.accessory1.invItem, "accessory1")}
                       onMouseLeave={handleItemLeave}
-                      title={equippedItems.accessory1 ? equippedItems.accessory1.item.name : "Accessory 1"}
+                      title={equippedItems.accessory1 ? equippedItems.accessory1.item.name : "Amulet 1"}
                     >
-                      <span className="rpg-slot-icon">{equippedItems.accessory1 ? "💎" : "💎"}</span>
-                      <span className="rpg-slot-label">Ring 1</span>
+                      <span className="rpg-slot-icon">💎</span>
+                      <span className="rpg-slot-label">Amulet 1</span>
                     </div>
                   </div>
 
@@ -464,7 +479,7 @@ export default function Inventory() {
                     </div>
                   </div>
 
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
                     <div
                       className={cn("rpg-equip-slot", equippedItems.armor && "rpg-slot-filled rpg-inv-slot-rarity-" + equippedItems.armor.item.tier)}
                       onClick={() => equippedItems.armor ? handleUnequip("armor") : setEquipDialog({ slot: "armor", type: "armor" })}
@@ -472,7 +487,7 @@ export default function Inventory() {
                       onMouseLeave={handleItemLeave}
                       title={equippedItems.armor ? equippedItems.armor.item.name : "Armor Slot"}
                     >
-                      <span className="rpg-slot-icon">{equippedItems.armor ? "🛡" : "🛡"}</span>
+                      <span className="rpg-slot-icon">🥋</span>
                       <span className="rpg-slot-label">Armor</span>
                     </div>
                     <div
@@ -480,10 +495,10 @@ export default function Inventory() {
                       onClick={() => equippedItems.accessory2 ? handleUnequip("accessory2") : setEquipDialog({ slot: "accessory2", type: "accessory" })}
                       onMouseEnter={(e) => equippedItems.accessory2 && handleItemHover(e, equippedItems.accessory2.item, equippedItems.accessory2.invItem, "accessory2")}
                       onMouseLeave={handleItemLeave}
-                      title={equippedItems.accessory2 ? equippedItems.accessory2.item.name : "Accessory 2"}
+                      title={equippedItems.accessory2 ? equippedItems.accessory2.item.name : "Amulet 2"}
                     >
-                      <span className="rpg-slot-icon">{equippedItems.accessory2 ? "💎" : "💎"}</span>
-                      <span className="rpg-slot-label">Ring 2</span>
+                      <span className="rpg-slot-icon">💎</span>
+                      <span className="rpg-slot-label">Amulet 2</span>
                     </div>
                   </div>
                 </div>
@@ -562,13 +577,18 @@ export default function Inventory() {
               </div>
 
               <div className="rpg-inv-tab-bar">
-                {(["all", "weapon", "armor", "accessory", "resource"] as const).map(tab => (
+                {(["all", "weapon", "armor", "accessory", "shield", "resource"] as const).map(tab => (
                   <div
                     key={tab}
                     className={cn("rpg-inv-tab", activeTab === tab && "rpg-inv-tab-active")}
                     onClick={() => setActiveTab(tab)}
                   >
-                    {tab === "all" ? "All" : tab === "weapon" ? "⚔ Wpn" : tab === "armor" ? "🛡 Arm" : tab === "accessory" ? "💎 Acc" : `🌿 Res${resourceInventoryItems.length > 0 ? ` (${resourceInventoryItems.reduce((s, r) => s + r.count, 0)})` : ""}`}
+                    {tab === "all" ? "All"
+                      : tab === "weapon" ? "⚔ Wpn"
+                      : tab === "armor" ? "🥋 Arm"
+                      : tab === "accessory" ? "💎 Amulet"
+                      : tab === "shield" ? "🛡 Shield"
+                      : `🌿 Res${resourceInventoryItems.length > 0 ? ` (${resourceInventoryItems.reduce((s, r) => s + r.count, 0)})` : ""}`}
                   </div>
                 ))}
               </div>
@@ -728,8 +748,10 @@ export default function Inventory() {
       <Dialog open={!!equipDialog} onOpenChange={() => setEquipDialog(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="font-serif">Equip {equipDialog?.type}</DialogTitle>
-            <DialogDescription>Select an item from your inventory to equip.</DialogDescription>
+            <DialogTitle className="font-serif">
+              Equip {equipDialog?.type === "accessory" ? "Amulet" : equipDialog?.type === "shield" ? "Shield" : equipDialog?.type}
+            </DialogTitle>
+            <DialogDescription>Select an item from your inventory to equip in this slot.</DialogDescription>
           </DialogHeader>
           <div className="space-y-2 max-h-64 overflow-y-auto">
             {(() => {

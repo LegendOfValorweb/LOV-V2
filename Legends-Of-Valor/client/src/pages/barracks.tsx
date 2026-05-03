@@ -67,7 +67,114 @@ function TrainingTimer({ completesAt }: { completesAt: string }) {
   );
 }
 
-type Tab = "army" | "train" | "queue" | "raid" | "reports";
+const TROOP_SKINS: Record<string, Array<{ id: string; name: string; icon: string; color: string; border: string; bg: string }>> = {
+  infantry: [
+    { id: "default",  name: "Iron Guard",      icon: "🗡️", color: "from-slate-700 to-gray-800",     border: "border-slate-600",  bg: "#475569" },
+    { id: "golden",   name: "Golden Legion",   icon: "⚔️", color: "from-yellow-700 to-amber-800",   border: "border-yellow-600", bg: "#ca8a04" },
+    { id: "shadow",   name: "Shadow Corps",    icon: "🌑", color: "from-gray-900 to-black",          border: "border-gray-700",   bg: "#111827" },
+    { id: "flame",    name: "Flame Warriors",  icon: "🔥", color: "from-red-800 to-rose-900",        border: "border-red-700",    bg: "#991b1b" },
+    { id: "frost",    name: "Frost Vanguard",  icon: "❄️", color: "from-blue-700 to-cyan-800",       border: "border-blue-600",   bg: "#1d4ed8" },
+  ],
+  archer: [
+    { id: "default",  name: "Forest Rangers",  icon: "🏹", color: "from-green-900 to-emerald-950",  border: "border-green-700",  bg: "#166534" },
+    { id: "golden",   name: "Sun Archers",     icon: "☀️", color: "from-yellow-700 to-orange-800",  border: "border-yellow-600", bg: "#b45309" },
+    { id: "shadow",   name: "Phantom Bows",    icon: "🌑", color: "from-purple-900 to-black",        border: "border-purple-800", bg: "#581c87" },
+    { id: "flame",    name: "Ember Volley",    icon: "💥", color: "from-orange-700 to-red-800",      border: "border-orange-600", bg: "#c2410c" },
+    { id: "storm",    name: "Storm Marksmen",  icon: "⚡", color: "from-sky-700 to-blue-800",        border: "border-sky-600",    bg: "#0369a1" },
+  ],
+  cavalry: [
+    { id: "default",  name: "War Riders",      icon: "🐴", color: "from-amber-900 to-yellow-950",   border: "border-amber-700",  bg: "#92400e" },
+    { id: "golden",   name: "Royal Lancers",   icon: "🦅", color: "from-yellow-600 to-amber-700",   border: "border-yellow-500", bg: "#ca8a04" },
+    { id: "shadow",   name: "Wraith Cavalry",  icon: "👻", color: "from-indigo-900 to-black",        border: "border-indigo-800", bg: "#312e81" },
+    { id: "flame",    name: "Hellfire Riders", icon: "🔥", color: "from-red-700 to-rose-800",        border: "border-red-600",    bg: "#b91c1c" },
+    { id: "frost",    name: "Glacial Charge",  icon: "❄️", color: "from-cyan-700 to-blue-800",       border: "border-cyan-600",   bg: "#0e7490" },
+  ],
+  siege: [
+    { id: "default",  name: "Iron Catapults",  icon: "💣", color: "from-red-900 to-rose-950",        border: "border-red-700",    bg: "#7f1d1d" },
+    { id: "golden",   name: "Divine Cannons",  icon: "⚙️", color: "from-yellow-700 to-orange-800",  border: "border-yellow-600", bg: "#92400e" },
+    { id: "shadow",   name: "Void Launchers",  icon: "🌀", color: "from-purple-800 to-black",        border: "border-purple-700", bg: "#4c1d95" },
+    { id: "storm",    name: "Storm Mortars",   icon: "⛈️", color: "from-sky-800 to-blue-900",        border: "border-sky-700",    bg: "#075985" },
+  ],
+  elite_guard: [
+    { id: "default",  name: "Violet Guard",    icon: "⚔️", color: "from-violet-900 to-purple-950",  border: "border-violet-700", bg: "#4c1d95" },
+    { id: "golden",   name: "Mythic Chosen",   icon: "👑", color: "from-yellow-600 to-amber-700",   border: "border-yellow-500", bg: "#92400e" },
+    { id: "shadow",   name: "Void Champions",  icon: "🌑", color: "from-gray-900 to-black",          border: "border-gray-800",   bg: "#111827" },
+    { id: "flame",    name: "Inferno Elite",   icon: "🔥", color: "from-red-700 to-orange-800",      border: "border-red-600",    bg: "#b91c1c" },
+    { id: "celestial",name: "Celestial Guard", icon: "✨", color: "from-sky-600 to-indigo-700",      border: "border-sky-500",    bg: "#0284c7" },
+  ],
+};
+
+const SKIN_STORAGE_KEY = "barracks_troop_skins_v1";
+
+function loadSkins(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(SKIN_STORAGE_KEY) || "{}"); }
+  catch { return {}; }
+}
+
+function saveSkins(skins: Record<string, string>) {
+  localStorage.setItem(SKIN_STORAGE_KEY, JSON.stringify(skins));
+}
+
+function TroopSkinsPanel() {
+  const [skins, setSkins] = useState<Record<string, string>>(loadSkins);
+
+  const applySkin = (troopId: string, skinId: string) => {
+    const updated = { ...skins, [troopId]: skinId };
+    setSkins(updated);
+    saveSkins(updated);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-indigo-950/40 border border-indigo-800 rounded-xl p-4 text-sm text-indigo-300">
+        <p className="font-bold text-indigo-200 mb-1">🎨 Troop Skins — Cosmetic Only</p>
+        <p className="text-xs text-indigo-400">Choose a visual theme for each troop type. Skins are purely cosmetic and saved locally on this device.</p>
+      </div>
+      {Object.entries(TROOP_SKINS).map(([troopId, skinOptions]) => {
+        const currentSkin = skins[troopId] || "default";
+        const def = SOLDIER_DEFS.find(d => d.id === troopId as SoldierType);
+        if (!def) return null;
+        const activeSkin = skinOptions.find(s => s.id === currentSkin) || skinOptions[0];
+        return (
+          <div key={troopId} className={`rounded-xl border ${activeSkin.border} overflow-hidden transition-all duration-300`}>
+            <div className={`px-4 py-3 bg-gradient-to-r ${activeSkin.color} flex items-center justify-between`}>
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">{activeSkin.icon}</span>
+                <div>
+                  <div className="font-bold text-white">{def.name}</div>
+                  <div className="text-gray-300 text-xs">Current skin: <span className="text-white font-semibold">{activeSkin.name}</span></div>
+                </div>
+              </div>
+              <div className="w-6 h-6 rounded-full border-2 border-white/30" style={{ background: activeSkin.bg }} />
+            </div>
+            <div className="px-4 py-3 bg-black/20 border-t border-white/5">
+              <p className="text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wide">Choose skin:</p>
+              <div className="flex flex-wrap gap-2">
+                {skinOptions.map(skin => (
+                  <button
+                    key={skin.id}
+                    onClick={() => applySkin(troopId, skin.id)}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all border ${
+                      currentSkin === skin.id
+                        ? `bg-gradient-to-r ${skin.color} ${skin.border} text-white shadow-lg scale-105`
+                        : "bg-gray-800 border-gray-600 text-gray-400 hover:bg-gray-700 hover:text-white"
+                    }`}
+                  >
+                    <span>{skin.icon}</span>
+                    <span>{skin.name}</span>
+                    {currentSkin === skin.id && <span className="text-xs">✓</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+type Tab = "army" | "train" | "queue" | "raid" | "reports" | "skins";
 
 export default function Barracks() {
   const qc = useQueryClient();
@@ -251,6 +358,7 @@ export default function Barracks() {
             ["train","📈 Level Up"],
             ["raid","⚔️ Raid"],
             ["reports","📋 Reports"],
+            ["skins","🎨 Skins"],
           ] as [Tab,string][]).map(([t, label]) => (
             <button key={t} onClick={() => setTab(t)}
               className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-all whitespace-nowrap relative ${tab===t ? "bg-indigo-700 text-white shadow" : "text-gray-400 hover:text-gray-200"}`}>
@@ -541,6 +649,9 @@ export default function Barracks() {
             ))}
           </div>
         )}
+
+        {/* ── TROOP SKINS TAB ──────────────────────────────────────────────── */}
+        {tab === "skins" && <TroopSkinsPanel />}
 
         {/* ── BATTLE REPORTS TAB ───────────────────────────────────────────── */}
         {tab === "reports" && (

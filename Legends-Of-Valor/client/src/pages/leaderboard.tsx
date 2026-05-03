@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useGame } from "@/lib/game-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { 
   ShoppingBag, 
@@ -15,7 +14,6 @@ import {
   Target,
   Trophy,
   TrendingUp,
-  TrendingDown,
   Crown,
   Clock,
   RefreshCw,
@@ -23,7 +21,10 @@ import {
   Users,
   Sparkles,
   ArrowLeftRight,
-  Map
+  Map,
+  Flame,
+  Heart,
+  Shield
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -49,11 +50,14 @@ type LeaderboardResponse = {
 };
 
 const leaderboardTypes = [
-  { id: "pvp", label: "PvP Elo", icon: Swords, color: "text-red-500" },
-  { id: "guild", label: "Guild XP", icon: Users, color: "text-emerald-500" },
-  { id: "tower", label: "Highest Floor", icon: Target, color: "text-purple-500" },
-  { id: "gathering", label: "Gathering", icon: TrendingUp, color: "text-green-500" },
-  { id: "seasonal", label: "Seasonal", icon: Calendar, color: "text-blue-400" },
+  { id: "pvp",        label: "PvP Elo",      icon: Swords,    color: "text-red-500",     valueLabel: "Elo" },
+  { id: "guild",      label: "Guild XP",     icon: Users,     color: "text-emerald-500", valueLabel: "XP" },
+  { id: "tower",      label: "Tower Floor",  icon: Target,    color: "text-purple-500",  valueLabel: "Floor" },
+  { id: "gathering",  label: "Gathering",    icon: TrendingUp,color: "text-green-500",   valueLabel: "Items" },
+  { id: "seasonal",   label: "Seasonal",     icon: Calendar,  color: "text-blue-400",    valueLabel: "Score" },
+  { id: "pet-wins",   label: "Pet Wins",     icon: Heart,     color: "text-pink-400",    valueLabel: "Wins" },
+  { id: "base-raids", label: "Raid Wins",    icon: Shield,    color: "text-orange-400",  valueLabel: "Raids" },
+  { id: "hell-zone",  label: "Hell Zone",    icon: Flame,     color: "text-red-600",     valueLabel: "Score" },
 ];
 
 const rankColors: Record<string, string> = {
@@ -67,26 +71,62 @@ const rankColors: Record<string, string> = {
   Elite: "text-pink-400",
 };
 
+async function fetchLeaderboardData(activeTab: string): Promise<LeaderboardResponse> {
+  if (activeTab === "pet-wins") {
+    const res = await fetch("/api/leaderboard/pet-wins");
+    const data = await res.json();
+    const entries = (data.leaderboard || []).map((e: any, i: number) => ({
+      accountId: e.accountId, username: e.username,
+      value: e.petWins ?? e.wins ?? 0, rank: i + 1,
+    }));
+    return { type: "pet-wins", data: entries, refreshedAt: new Date().toISOString(), nextRefresh: new Date(Date.now() + 30 * 60000).toISOString() };
+  }
+  if (activeTab === "base-raids") {
+    const res = await fetch("/api/leaderboard/base-raids");
+    const data = await res.json();
+    const entries = (data.leaderboard || []).map((e: any, i: number) => ({
+      accountId: e.accountId, username: e.username,
+      value: e.raidWins ?? e.wins ?? 0, rank: i + 1,
+    }));
+    return { type: "base-raids", data: entries, refreshedAt: new Date().toISOString(), nextRefresh: new Date(Date.now() + 30 * 60000).toISOString() };
+  }
+  if (activeTab === "hell-zone") {
+    const res = await fetch("/api/hell-zone/leaderboard");
+    const data = await res.json();
+    const entries = (data.leaderboard || []).map((e: any, i: number) => ({
+      accountId: e.accountId, username: e.username,
+      value: e.score ?? e.kills ?? 0, rank: i + 1,
+    }));
+    return { type: "hell-zone", data: entries, refreshedAt: new Date().toISOString(), nextRefresh: new Date(Date.now() + 30 * 60000).toISOString() };
+  }
+  const res = await fetch(`/api/leaderboards/${activeTab}`);
+  return res.json();
+}
+
 export default function Leaderboard() {
   const [, navigate] = useLocation();
   const { account, logout } = useGame();
   const [activeTab, setActiveTab] = useState("pvp");
 
   const { data: leaderboard, isLoading, refetch } = useQuery<LeaderboardResponse>({
-    queryKey: [`/api/leaderboard/${activeTab}`],
+    queryKey: [`leaderboard-${activeTab}`],
+    queryFn: () => fetchLeaderboardData(activeTab),
     enabled: !!account,
-    refetchInterval: 30 * 60 * 1000, // Auto-refresh every 30 minutes
+    refetchInterval: 30 * 60 * 1000,
   });
 
-  if (!account) {
-    navigate("/");
-    return null;
-  }
+  useEffect(() => {
+    if (!account) navigate("/");
+  }, [account]);
+
+  if (!account) return null;
 
   const truncateName = (name: string | undefined): string => {
     if (!name) return "";
-    return name.length > 12 ? `${name.substring(0, 12)}...` : name;
+    return name.length > 14 ? `${name.substring(0, 14)}...` : name;
   };
+
+  const activeType = leaderboardTypes.find(t => t.id === activeTab);
 
   const renderLeaderboardEntry = (entry: LeaderboardEntry, type: string, key: string) => {
     const isGuildLeaderboard = type === "guild";
@@ -95,29 +135,28 @@ export default function Leaderboard() {
     
     const rankBadge = entry.rank <= 3 ? (
       <Badge variant={entry.rank === 1 ? "default" : "secondary"} className={
-        entry.rank === 1 ? "bg-yellow-500 text-black" : 
-        entry.rank === 2 ? "bg-gray-300 text-black" : 
-        "bg-amber-700 text-white"
+        entry.rank === 1 ? "bg-yellow-500 text-black min-w-[2rem] justify-center" : 
+        entry.rank === 2 ? "bg-gray-300 text-black min-w-[2rem] justify-center" : 
+        "bg-amber-700 text-white min-w-[2rem] justify-center"
       }>
         #{entry.rank}
       </Badge>
     ) : (
-      <span className="text-muted-foreground w-8 text-center">#{entry.rank}</span>
+      <span className="text-muted-foreground w-8 text-center text-sm">#{entry.rank}</span>
     );
 
     return (
       <div
         key={key}
         className={`flex items-center justify-between p-3 rounded-lg transition-colors ${
-          isCurrentPlayer ? "bg-primary/10 border border-primary/30" : "bg-card/50 hover-elevate"
+          isCurrentPlayer ? "bg-primary/10 border border-primary/30" : "bg-card/50 hover:bg-card/80"
         }`}
-        data-testid={`leaderboard-entry-${key}`}
       >
         <div className="flex items-center gap-3">
           {rankBadge}
-          {isGuildLeaderboard && <Castle className="h-4 w-4 text-emerald-500" />}
+          {isGuildLeaderboard && <Castle className="h-4 w-4 text-emerald-500 flex-shrink-0" />}
           <div className="flex flex-col">
-            <span className={`font-medium ${isCurrentPlayer ? "text-primary" : ""}`}>
+            <span className={`font-medium text-sm ${isCurrentPlayer ? "text-primary" : ""}`}>
               {displayName}
               {isCurrentPlayer && <span className="ml-2 text-xs text-muted-foreground">(You)</span>}
             </span>
@@ -128,11 +167,11 @@ export default function Leaderboard() {
         </div>
         <div className="flex items-center gap-2">
           {type === "tower" ? (
-            <Badge variant="outline" className="font-mono">
+            <Badge variant="outline" className="font-mono text-xs">
               Floor {entry.value}
             </Badge>
           ) : (
-            <span className="font-mono font-bold">{entry.value.toLocaleString()}</span>
+            <span className="font-mono font-bold text-sm">{typeof entry.value === "number" ? entry.value.toLocaleString() : entry.value}</span>
           )}
         </div>
       </div>
@@ -142,175 +181,110 @@ export default function Leaderboard() {
   return (
     <div className="game-page-scroll bg-background">
       <header className="border-b border-border/40 bg-card/30 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <h1 className="font-cinzel text-2xl font-bold text-foreground flex items-center gap-2">
-                <Trophy className="h-6 w-6 text-yellow-500" />
-                Leaderboards
-              </h1>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate("/world-map")}
-                data-testid="link-world-map"
-              >
-                <Map className="h-4 w-4 mr-1" />
-                World Map
+        <div className="container mx-auto px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="font-cinzel text-xl font-bold text-foreground flex items-center gap-2">
+              <Trophy className="h-5 w-5 text-yellow-500" />
+              Leaderboards
+            </h1>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button variant="outline" size="sm" onClick={() => navigate("/world-map")}>
+                <Map className="h-3.5 w-3.5 mr-1" /> Map
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate("/shop")}
-                data-testid="link-shop"
-              >
-                <ShoppingBag className="h-4 w-4 mr-1" />
-                Shop
+              <Button variant="ghost" size="sm" onClick={() => navigate("/shop")}>
+                <ShoppingBag className="h-3.5 w-3.5 mr-1" /> Shop
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate("/inventory")}
-                data-testid="link-inventory"
-              >
-                <Package className="h-4 w-4 mr-1" />
-                Inventory
+              <Button variant="ghost" size="sm" onClick={() => navigate("/inventory")}>
+                <Package className="h-3.5 w-3.5 mr-1" /> Inventory
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate("/events")}
-                data-testid="link-events"
-              >
-                <Calendar className="h-4 w-4 mr-1" />
-                Events
+              <Button variant="ghost" size="sm" onClick={() => navigate("/challenges")}>
+                <Swords className="h-3.5 w-3.5 mr-1" /> PvP
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate("/challenges")}
-                data-testid="link-challenges"
-              >
-                <Swords className="h-4 w-4 mr-1" />
-                Challenges
+              <Button variant="ghost" size="sm" onClick={() => navigate("/guild")}>
+                <Users className="h-3.5 w-3.5 mr-1" /> Guild
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate("/npc-battle")}
-                data-testid="link-npc-battle"
-              >
-                <Target className="h-4 w-4 mr-1" />
-                NPC Tower
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate("/guild")}
-                data-testid="link-guild"
-              >
-                <Users className="h-4 w-4 mr-1" />
-                Guild
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate("/skills")}
-                className="toggle-elevate"
-                data-testid="link-skills"
-              >
-                <Sparkles className="h-4 w-4 mr-1" />
-                Skills
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate("/trading")}
-                className="toggle-elevate"
-                data-testid="link-trading"
-              >
-                <ArrowLeftRight className="h-4 w-4 mr-1" />
-                Trade
+              <Button variant="ghost" size="sm" onClick={logout}>
+                <LogOut className="h-3.5 w-3.5 mr-1" /> Logout
               </Button>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-6">
         <Card className="max-w-3xl mx-auto">
-          <CardHeader>
+          <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-lg">
                 <Trophy className="h-5 w-5 text-yellow-500" />
                 Hall of Champions
               </CardTitle>
               {leaderboard && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Clock className="h-4 w-4" />
-                  Updated {formatDistanceToNow(new Date(leaderboard.refreshedAt), { addSuffix: true })}
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Clock className="h-3.5 w-3.5" />
+                  {formatDistanceToNow(new Date(leaderboard.refreshedAt), { addSuffix: true })}
                 </div>
               )}
             </div>
           </CardHeader>
           <CardContent>
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-5 mb-6">
-                {leaderboardTypes.map((type) => (
-                  <TabsTrigger 
-                    key={type.id} 
-                    value={type.id}
-                    className="flex items-center gap-1"
-                    data-testid={`tab-${type.id}`}
-                  >
-                    <type.icon className={`h-4 w-4 ${type.color}`} />
-                    <span className="hidden sm:inline">{type.label}</span>
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-
+            {/* Tab bar — scrollable on mobile */}
+            <div className="flex gap-1 overflow-x-auto pb-2 mb-4 scrollbar-hide">
               {leaderboardTypes.map((type) => (
-                <TabsContent key={type.id} value={type.id}>
-                  {isLoading ? (
-                    <div className="space-y-2">
-                      {[...Array(10)].map((_, i) => (
-                        <div key={i} className="h-14 bg-muted/50 rounded-lg animate-pulse" />
-                      ))}
-                    </div>
-                  ) : leaderboard?.data?.length ? (
-                    <div className="space-y-2">
-                      {leaderboard.data.map((entry) => {
-                        const entryKey = (type.id === "guild") 
-                          ? entry.guildId || `guild-${entry.rank}` 
-                          : entry.accountId || `player-${entry.rank}`;
-                        return renderLeaderboardEntry(entry, type.id, entryKey);
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-center py-12 text-muted-foreground">
-                      No data available yet
-                    </div>
-                  )}
-                </TabsContent>
-              ))}
-            </Tabs>
-
-            {leaderboard && (
-              <div className="mt-6 pt-4 border-t border-border/40 flex items-center justify-between text-sm text-muted-foreground">
-                <span>Next refresh: {formatDistanceToNow(new Date(leaderboard.nextRefresh), { addSuffix: true })}</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => refetch()}
-                  data-testid="button-refresh"
+                <button
+                  key={type.id}
+                  onClick={() => setActiveTab(type.id)}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
+                    activeTab === type.id
+                      ? "bg-primary text-primary-foreground shadow"
+                      : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                  }`}
                 >
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  Refresh
-                </Button>
+                  <type.icon className={`h-3.5 w-3.5 ${activeTab === type.id ? "" : type.color}`} />
+                  {type.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Value label */}
+            {activeType && (
+              <div className="flex items-center justify-between mb-2 px-1">
+                <span className="text-xs text-muted-foreground font-medium">Player / Guild</span>
+                <span className="text-xs text-muted-foreground font-medium">{activeType.valueLabel}</span>
               </div>
             )}
+
+            {/* Entries */}
+            {isLoading ? (
+              <div className="space-y-2">
+                {[...Array(10)].map((_, i) => (
+                  <div key={i} className="h-12 bg-muted/50 rounded-lg animate-pulse" />
+                ))}
+              </div>
+            ) : leaderboard?.data?.length ? (
+              <div className="space-y-1.5">
+                {leaderboard.data.map((entry) => {
+                  const entryKey = (activeTab === "guild") 
+                    ? entry.guildId || `guild-${entry.rank}` 
+                    : entry.accountId || `player-${entry.rank}`;
+                  return renderLeaderboardEntry(entry, activeTab, entryKey);
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-muted-foreground text-sm">
+                No data available yet. Be the first to climb!
+              </div>
+            )}
+
+            <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between text-xs text-muted-foreground">
+              <span>
+                {leaderboard ? `Next refresh: ${formatDistanceToNow(new Date(leaderboard.nextRefresh), { addSuffix: true })}` : "—"}
+              </span>
+              <Button variant="ghost" size="sm" onClick={() => refetch()} className="h-7 text-xs">
+                <RefreshCw className="h-3 w-3 mr-1" />
+                Refresh
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </main>

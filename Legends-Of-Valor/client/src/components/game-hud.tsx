@@ -12,6 +12,24 @@ const RANK_LEVELS: Record<string, number> = {
   "Legend": 13, "Mythic": 14, "Mythical Legend": 15,
 };
 
+const RANK_COLORS: Record<string, { badge: string; name: string }> = {
+  "Novice":          { badge: "hsl(0 0% 55%)",    name: "hsl(0 0% 65%)" },
+  "Apprentice":      { badge: "hsl(142 60% 42%)",  name: "hsl(142 50% 55%)" },
+  "Initiate":        { badge: "hsl(210 70% 52%)",  name: "hsl(210 60% 65%)" },
+  "Journeyman":      { badge: "hsl(196 70% 48%)",  name: "hsl(196 60% 62%)" },
+  "Adept":           { badge: "hsl(271 60% 52%)",  name: "hsl(271 50% 68%)" },
+  "Expert":          { badge: "hsl(28 80% 52%)",   name: "hsl(28 70% 65%)" },
+  "Master":          { badge: "hsl(0 70% 52%)",    name: "hsl(0 60% 65%)" },
+  "Grandmaster":     { badge: "hsl(45 90% 52%)",   name: "hsl(45 80% 62%)" },
+  "Champion":        { badge: "hsl(51 100% 55%)",  name: "hsl(51 90% 68%)" },
+  "Overlord":        { badge: "hsl(350 80% 52%)",  name: "hsl(350 70% 65%)" },
+  "Sovereign":       { badge: "hsl(185 80% 50%)",  name: "hsl(185 70% 63%)" },
+  "Ascendant":       { badge: "hsl(0 0% 90%)",     name: "hsl(0 0% 95%)" },
+  "Legend":          { badge: "hsl(45 100% 58%)",  name: "hsl(45 100% 72%)" },
+  "Mythic":          { badge: "hsl(300 80% 55%)",  name: "hsl(300 70% 68%)" },
+  "Mythical Legend": { badge: "hsl(51 100% 62%)",  name: "hsl(51 100% 78%)" },
+};
+
 const ZONE_NAMES: Record<string, string> = {
   "/world-map": "World Map",
   "/shop": "General Shop",
@@ -518,8 +536,22 @@ export function GameHUD() {
               )}
             </div>
             <div className="hud-player-rank">
-              <span className="hud-rank-badge">Lv.{rankLevel}</span>
-              <span className="hud-rank-name">{account.rank}</span>
+              <span
+                className="hud-rank-badge"
+                style={{
+                  background: `${RANK_COLORS[account.rank]?.badge || "hsl(271 50% 40%)"}22`,
+                  borderColor: `${RANK_COLORS[account.rank]?.badge || "hsl(271 40% 50%)"}55`,
+                  color: RANK_COLORS[account.rank]?.badge || "hsl(45 10% 95%)",
+                }}
+              >
+                Lv.{rankLevel}
+              </span>
+              <span
+                className="hud-rank-name"
+                style={{ color: RANK_COLORS[account.rank]?.name || "hsl(45 10% 70%)" }}
+              >
+                {account.rank}
+              </span>
             </div>
             <div className="hud-bar-container" title={`Energy: ${energy}/${maxEnergy}`}>
               <div className="hud-bar hud-bar-energy">

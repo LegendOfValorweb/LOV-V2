@@ -543,7 +543,7 @@ export async function registerRoutes(
   ): Array<{ id: string; itemId: string; stats?: unknown }> {
     const usedIds = new Set<string>();
     const result: Array<{ id: string; itemId: string; stats?: unknown }> = [];
-    for (const slot of ["weapon", "armor", "accessory1", "accessory2"]) {
+    for (const slot of ["weapon", "armor", "accessory1", "accessory2", "shield"]) {
       const equippedId = equipped[slot];
       if (!equippedId) continue;
       let item = inventory.find(i => i.id === equippedId && !usedIds.has(i.id));
@@ -1388,7 +1388,7 @@ export async function registerRoutes(
         }
         const normalized: Record<string, string | null> = {};
         const assignedUUIDs = new Set<string>();
-        const equippedSlotKeys: Array<keyof typeof body.equipped> = ["weapon", "armor", "accessory1", "accessory2"];
+        const equippedSlotKeys: Array<string> = ["weapon", "armor", "accessory1", "accessory2", "shield"];
         for (const slot of equippedSlotKeys) {
           const value: string | null = body.equipped[slot];
           if (!value) {
@@ -3370,7 +3370,7 @@ export async function registerRoutes(
             
             const { inventoryItems } = await import("@shared/schema");
             const loserEquipped = loser.equipped as any;
-            for (const slot of ["weapon", "armor", "accessory1", "accessory2"] as const) {
+            for (const slot of ["weapon", "armor", "accessory1", "accessory2", "shield"] as const) {
               const invId = loserEquipped?.[slot];
               if (invId) {
                 await db.update(inventoryItems).set({
@@ -4491,7 +4491,7 @@ export async function registerRoutes(
 
         const { inventoryItems: invTable } = await import("@shared/schema");
         const acctEquipped = account.equipped as any;
-        for (const slot of ["weapon", "armor", "accessory1", "accessory2"] as const) {
+        for (const slot of ["weapon", "armor", "accessory1", "accessory2", "shield"] as const) {
           const invId = acctEquipped?.[slot];
           if (invId) {
             await db.update(invTable).set({

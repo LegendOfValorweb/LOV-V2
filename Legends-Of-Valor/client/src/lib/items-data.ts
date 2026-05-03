@@ -24,21 +24,24 @@ export { calculateCarryCapacity };
 
 // ─── TIER 1 – Normal (Novice / Floor 1–2, targets ~400 per main stat) ─────────
 const tier1Items: Omit<Item, "id" | "tier">[] = [
-  { name: "Arcane Staff",       type: "weapon",    stats: { Int: 350 },                  special: "Mana Regen",       price: 300 },
-  { name: "Thunder Hammer",     type: "weapon",    stats: { Str: 280, Luck: 80 },        special: "Stun 5%",          price: 280 },
-  { name: "Shadow Cloak",       type: "armor",     stats: { Spd: 260, Luck: 80 },                                     price: 300 },
-  { name: "Mystic Robes",       type: "armor",     stats: { Int: 320 },                                               price: 300 },
-  { name: "Guardian Plate",     type: "armor",     stats: { Str: 350 },                                               price: 320 },
-  { name: "Frost Dagger",       type: "weapon",    stats: { Spd: 320 },                  special: "Freeze 1t",        price: 330 },
-  { name: "Ember Wand",         type: "weapon",    stats: { Int: 310 },                  special: "Burn 2t",          price: 340 },
-  { name: "Lucky Ring",         type: "accessory", stats: { Luck: 380 },                                              price: 345 },
-  { name: "Flame Cloak",        type: "armor",     stats: { Str: 330 },                  special: "Fire Resist",      price: 350 },
-  { name: "Swift Helm",         type: "armor",     stats: { Spd: 280, Int: 100 },                                     price: 355 },
-  { name: "Thunder Bow",        type: "weapon",    stats: { Spd: 360 },                  special: "Stun 5%",          price: 360 },
-  { name: "Arcane Amulet",      type: "accessory", stats: { Int: 340 },                  special: "Mana Regen",       price: 365 },
-  { name: "Shadow Saber",       type: "weapon",    stats: { Str: 380 },                  special: "Critical +5%",     price: 370 },
-  { name: "Frost Robes",        type: "armor",     stats: { Int: 340 },                  special: "Freeze",           price: 365 },
-  { name: "Lucky Pendant",      type: "accessory", stats: { Luck: 400, Str: 120 },                                    price: 370 },
+  { name: "Arcane Staff",         type: "weapon",    stats: { Int: 350 },                  special: "Mana Regen",       price: 300 },
+  { name: "Thunder Hammer",       type: "weapon",    stats: { Str: 280, Luck: 80 },        special: "Stun 5%",          price: 280 },
+  { name: "Shadow Cloak",         type: "armor",     stats: { Spd: 260, Luck: 80 },                                     price: 300 },
+  { name: "Mystic Robes",         type: "armor",     stats: { Int: 320 },                                               price: 300 },
+  { name: "Guardian Plate",       type: "armor",     stats: { Str: 350 },                                               price: 320 },
+  { name: "Frost Dagger",         type: "weapon",    stats: { Spd: 320 },                  special: "Freeze 1t",        price: 330 },
+  { name: "Ember Wand",           type: "weapon",    stats: { Int: 310 },                  special: "Burn 2t",          price: 340 },
+  { name: "Lucky Ring",           type: "accessory", stats: { Luck: 380 },                                              price: 345 },
+  { name: "Flame Cloak",          type: "armor",     stats: { Str: 330 },                  special: "Fire Resist",      price: 350 },
+  { name: "Swift Helm",           type: "armor",     stats: { Spd: 280, Int: 100 },                                     price: 355 },
+  { name: "Thunder Bow",          type: "weapon",    stats: { Spd: 360 },                  special: "Stun 5%",          price: 360 },
+  { name: "Arcane Amulet",        type: "accessory", stats: { Int: 340 },                  special: "Mana Regen",       price: 365 },
+  { name: "Shadow Saber",         type: "weapon",    stats: { Str: 380 },                  special: "Critical +5%",     price: 370 },
+  { name: "Frost Robes",          type: "armor",     stats: { Int: 340 },                  special: "Freeze",           price: 365 },
+  { name: "Lucky Pendant",        type: "accessory", stats: { Luck: 400, Str: 120 },                                    price: 370 },
+  { name: "Iron Buckler",         type: "shield",    stats: { Def: 350, Str: 80 },         special: "Block 5%",         price: 310 },
+  { name: "Soul Spark Tome",      type: "weapon",    stats: { Int: 330, Luck: 90 },        special: "Arcane Burst",     price: 325 },
+  { name: "Warrior Necklace",     type: "accessory", stats: { Str: 370, Luck: 80 },                                     price: 350 },
 ];
 
 // ─── TIER 2 – Super Rare (Novice / Floor 1–2, ~700 per main stat) ─────────────
@@ -58,6 +61,9 @@ const tier2Items: Omit<Item, "id" | "tier">[] = [
   { name: "Shadow Blade",           type: "weapon",    stats: { Str: 850 },                           special: "Life Steal 5%",       price: 480 },
   { name: "SR Arcane Mantle",       type: "armor",     stats: { Int: 850 },                           special: "Magic Shield",        price: 480 },
   { name: "Ring of Valor",          type: "accessory", stats: { Luck: 900, Int: 400 },                                               price: 490 },
+  { name: "Steel Kite Shield",      type: "shield",    stats: { Def: 760, Str: 200 },                 special: "Block 8%",            price: 440 },
+  { name: "SR Crystal Tome",        type: "weapon",    stats: { Int: 800, Luck: 300 },                special: "Mana Surge",          price: 475 },
+  { name: "SR Courage Amulet",      type: "accessory", stats: { Str: 800, Luck: 280 },                                               price: 465 },
 ];
 
 // ─── TIER 3 – X-Tier (Novice / Floor 2–3, ~1500 per main stat) ───────────────
@@ -76,6 +82,9 @@ const tier3Items: Omit<Item, "id" | "tier">[] = [
   { name: "Lightning Hammer",        type: "weapon",    stats: { Str: 2100 },               special: "Poison 3t",        price: 1150 },
   { name: "Mystic Staff",            type: "weapon",    stats: { Int: 2200 },               special: "Life Steal 8%",    price: 1150 },
   { name: "Ring of Omniscience",     type: "accessory", stats: { Luck: 2100 },                                           price: 1150 },
+  { name: "Mithril Round Shield",    type: "shield",    stats: { Def: 1700, Luck: 500 },    special: "Block 10%",        price: 1080 },
+  { name: "X-Tier Void Tome",        type: "weapon",    stats: { Int: 2150, Luck: 700 },    special: "Void Burst",       price: 1140 },
+  { name: "X-Tier Fortune Band",     type: "accessory", stats: { Luck: 2200, Int: 750 },                                 price: 1160 },
 ];
 
 // ─── TIER 4 – UMR (Novice / Floor 3, ~4000 per main stat) ────────────────────
@@ -92,6 +101,9 @@ const tier4Items: Omit<Item, "id" | "tier">[] = [
   { name: "Mystic Grand Staff",         type: "weapon",    stats: { Int: 5200 },               special: "Stun 10%",         price: 11000 },
   { name: "Ring of Eternal Omniscience",type: "accessory", stats: { Luck: 5200 },                                           price: 11000 },
   { name: "Pendant of Absolute Luck",   type: "accessory", stats: { Luck: 5200, Str: 2200 },                                price: 11200 },
+  { name: "Dragon Bone Shield",         type: "shield",    stats: { Def: 4600, Str: 1500 },    special: "Block 12%",        price: 10400 },
+  { name: "UMR Arcane Nova",            type: "weapon",    stats: { Int: 5100, Luck: 1700 },   special: "Nova Strike",      price: 11000 },
+  { name: "UMR Amulet of Power",        type: "accessory", stats: { Str: 4900, Luck: 1800 },                                price: 11100 },
 ];
 
 // ─── TIER 5 – SSUMR (Apprentice / Floor 3–4, ~10000 per main stat) ───────────
@@ -102,6 +114,9 @@ const tier5Items: Omit<Item, "id" | "tier">[] = [
   { name: "SSUMR Spirit Robe",     type: "armor",     stats: { Int: 9500, Spd: 4000 },                                  price: 5200 },
   { name: "SSUMR Titan Plate",     type: "armor",     stats: { Str: 10000, Pot: 4000 },                                 price: 5300 },
   { name: "SSUMR Fortune Ring",    type: "accessory", stats: { Luck: 12000, Int: 4000 },                                price: 5800 },
+  { name: "SSUMR Void Barrier",    type: "shield",    stats: { Def: 11000, Str: 3500 },   special: "Block 12%",        price: 5400 },
+  { name: "SSUMR Mind Breaker",    type: "weapon",    stats: { Int: 10500, Luck: 3200 },  special: "Silence 2t",       price: 5300 },
+  { name: "SSUMR Power Amulet",    type: "accessory", stats: { Luck: 12500, Str: 4000 },                                price: 5900 },
 ];
 
 // ─── TIER 6 – Divine (Apprentice / Floor 4, ~18000 per main stat) ────────────
@@ -112,6 +127,9 @@ const tier6Items: Omit<Item, "id" | "tier">[] = [
   { name: "Divine Veil Robe",       type: "armor",     stats: { Int: 18000, Spd: 7000 },                                price: 14000 },
   { name: "Divine Star Amulet",     type: "accessory", stats: { Luck: 22000, Int: 8000 },                               price: 16000 },
   { name: "Divine Storm Bow",       type: "weapon",    stats: { Spd: 20000, Luck: 6000 },  special: "Stun 10%",         price: 15500 },
+  { name: "Divine Bulwark",         type: "shield",    stats: { Def: 20000, Str: 6500 },   special: "Holy Ward",        price: 14500 },
+  { name: "Divine Shadow Orb",      type: "weapon",    stats: { Int: 21000, Luck: 7000 },  special: "Dark Nova",        price: 15800 },
+  { name: "Divine Essence Ring",    type: "accessory", stats: { Luck: 23000, Int: 7500 },  special: "Essence Surge",    price: 16500 },
 ];
 
 // ─── Initiate (Initiate / Floor 4–5, ~35000 per main stat) ───────────────────
@@ -123,6 +141,9 @@ const initiateItems: Omit<Item, "id" | "tier">[] = [
   { name: "Initiate Mage Robe",        type: "armor",     stats: { Int: 35000, Spd: 14000 },                               price: 33000 },
   { name: "Initiate Luck Stone",       type: "accessory", stats: { Luck: 45000, Str: 15000 },                              price: 38000 },
   { name: "Initiate Focus Charm",      type: "accessory", stats: { Int: 42000, Luck: 14000 },                              price: 37000 },
+  { name: "Initiate Tower Shield",     type: "shield",    stats: { Def: 38000, Str: 12000 },    special: "Block 13%",       price: 34000 },
+  { name: "Initiate Void Spellbook",   type: "weapon",    stats: { Int: 39000, Luck: 13000 },   special: "Void Barrage",    price: 36000 },
+  { name: "Initiate Amulet",          type: "accessory", stats: { Luck: 46000, Spd: 14000 },                              price: 38500 },
 ];
 
 // ─── Journeyman (Journeyman / Floor 5–6, ~100000 per main stat) ──────────────
@@ -134,6 +155,9 @@ const journeymanItems: Omit<Item, "id" | "tier">[] = [
   { name: "Journeyman Sage Robe",      type: "armor",     stats: { Int: 100000, Spd: 38000 },                               price: 110000 },
   { name: "Journeyman Power Ring",     type: "accessory", stats: { Luck: 125000, Str: 40000 },                              price: 130000 },
   { name: "Journeyman Mana Crystal",   type: "accessory", stats: { Int: 120000, Luck: 38000 },                              price: 128000 },
+  { name: "Journeyman War Shield",     type: "shield",    stats: { Def: 112000, Str: 35000 },   special: "Block 14%",       price: 118000 },
+  { name: "Journeyman Arcane Tome",    type: "weapon",    stats: { Int: 113000, Luck: 36000 },  special: "Arcane Surge",    price: 122000 },
+  { name: "Journeyman Fortune Bead",   type: "accessory", stats: { Luck: 128000, Spd: 39000 },                              price: 132000 },
 ];
 
 // ─── Adept (Adept / Floor 6–7, ~300000 per main stat) ────────────────────────
@@ -145,6 +169,9 @@ const adeptItems: Omit<Item, "id" | "tier">[] = [
   { name: "Adept Arcana Robe",         type: "armor",     stats: { Int: 310000, Spd: 110000 },                              price: 320000 },
   { name: "Adept Destiny Ring",        type: "accessory", stats: { Luck: 400000, Str: 120000 },                             price: 390000 },
   { name: "Adept Wisdom Pendant",      type: "accessory", stats: { Int: 380000, Luck: 115000 },                             price: 380000 },
+  { name: "Adept Fortress Shield",     type: "shield",    stats: { Def: 345000, Str: 105000 },  special: "Block 15%",       price: 340000 },
+  { name: "Adept Chaos Wand",          type: "weapon",    stats: { Int: 350000, Luck: 105000 }, special: "Chaos Bolt",      price: 360000 },
+  { name: "Adept Omni Ring",           type: "accessory", stats: { Luck: 415000, Int: 125000 },                             price: 400000 },
 ];
 
 // ─── Expert (Expert / Floor 7–8, ~1000000 per main stat) ─────────────────────
@@ -156,6 +183,9 @@ const expertItems: Omit<Item, "id" | "tier">[] = [
   { name: "Expert Archmage Robe",      type: "armor",     stats: { Int: 1000000, Spd: 380000 },                               price: 1100000 },
   { name: "Expert Chaos Ring",         type: "accessory", stats: { Luck: 1300000, Str: 420000 },                              price: 1350000 },
   { name: "Expert Sage Talisman",      type: "accessory", stats: { Int: 1250000, Luck: 400000 },                              price: 1300000 },
+  { name: "Expert Titan Bulwark",      type: "shield",    stats: { Def: 1100000, Str: 360000 },   special: "Block 16%",       price: 1150000 },
+  { name: "Expert Archmage Codex",     type: "weapon",    stats: { Int: 1150000, Luck: 360000 },  special: "Dragon Bane",     price: 1250000 },
+  { name: "Expert Omega Talisman",     type: "accessory", stats: { Luck: 1360000, Str: 440000 },                              price: 1400000 },
 ];
 
 // ─── Master (Master / Floor 8–9, ~4000000 per main stat) ─────────────────────
@@ -167,6 +197,9 @@ const masterItems: Omit<Item, "id" | "tier">[] = [
   { name: "Master Void Robe",          type: "armor",     stats: { Int: 4200000, Spd: 1500000 },                               price: 4600000 },
   { name: "Master Eternity Ring",      type: "accessory", stats: { Luck: 5500000, Str: 1700000 },                              price: 5800000 },
   { name: "Master Genesis Orb",        type: "accessory", stats: { Int: 5200000, Luck: 1600000 },                              price: 5600000 },
+  { name: "Master Soul Barrier",       type: "shield",    stats: { Def: 4400000, Str: 1400000 },   special: "Block 17%",       price: 4800000 },
+  { name: "Master Abyss Grimoire",     type: "weapon",    stats: { Int: 4600000, Luck: 1450000 },  special: "Abyss Nova",      price: 5100000 },
+  { name: "Master Celestial Charm",    type: "accessory", stats: { Luck: 5600000, Int: 1650000 },                              price: 5900000 },
 ];
 
 // ─── Grandmaster (Grandmaster / Floor 9–10, ~15000000 per main stat) ──────────
@@ -178,6 +211,9 @@ const grandmasterItems: Omit<Item, "id" | "tier">[] = [
   { name: "Grandmaster Phantom Robe",  type: "armor",     stats: { Int: 15000000, Spd: 5800000 },                                price: 18000000 },
   { name: "Grandmaster Omega Ring",    type: "accessory", stats: { Luck: 21000000, Str: 6500000 },                               price: 23000000 },
   { name: "Grandmaster Arcane Stone",  type: "accessory", stats: { Int: 20000000, Luck: 6000000 },                               price: 22000000 },
+  { name: "Grandmaster Void Shield",   type: "shield",    stats: { Def: 17000000, Str: 5500000 },   special: "Block 18%",        price: 19500000 },
+  { name: "Grandmaster Celestial Tome",type: "weapon",    stats: { Int: 17500000, Luck: 5600000 },  special: "Celestial Smite",  price: 20500000 },
+  { name: "Grandmaster Eternal Pendant",type:"accessory", stats: { Luck: 21500000, Str: 6700000 },                               price: 23500000 },
 ];
 
 // ─── Champion (Champion / Floor 10–11, ~70000000 per main stat) ───────────────
@@ -189,6 +225,9 @@ const championItems: Omit<Item, "id" | "tier">[] = [
   { name: "Champion Aether Robe",      type: "armor",     stats: { Int: 68000000, Spd: 25000000 },                                price: 82000000 },
   { name: "Champion Legend Ring",      type: "accessory", stats: { Luck: 95000000, Str: 29000000 },                               price: 105000000 },
   { name: "Champion Eternity Gem",     type: "accessory", stats: { Int: 90000000, Luck: 27000000 },                               price: 100000000 },
+  { name: "Champion Genesis Bastion",  type: "shield",    stats: { Def: 72000000, Str: 23000000 },   special: "Block 19%",        price: 88000000 },
+  { name: "Champion World Tome",       type: "weapon",    stats: { Int: 76000000, Luck: 24500000 },  special: "World Shatter",    price: 92000000 },
+  { name: "Champion Omega Amulet",     type: "accessory", stats: { Luck: 97000000, Str: 30000000 },                               price: 108000000 },
 ];
 
 // ─── Overlord (Overlord / Floor 11–12, ~280000000 per main stat) ──────────────
@@ -200,6 +239,9 @@ const overlordItems: Omit<Item, "id" | "tier">[] = [
   { name: "Overlord Void Mantle",      type: "armor",     stats: { Int: 270000000, Spd: 100000000 },                               price: 340000000 },
   { name: "Overlord Omega Ring",       type: "accessory", stats: { Luck: 380000000, Str: 115000000 },                              price: 450000000 },
   { name: "Overlord Arcane Heart",     type: "accessory", stats: { Int: 360000000, Luck: 110000000 },                              price: 430000000 },
+  { name: "Overlord Eternal Aegis",    type: "shield",    stats: { Def: 285000000, Str: 92000000 },   special: "Block 20%",        price: 360000000 },
+  { name: "Overlord Abyss Codex",      type: "weapon",    stats: { Int: 308000000, Luck: 98000000 },  special: "Chaos Rift",       price: 390000000 },
+  { name: "Overlord Soul Ring",        type: "accessory", stats: { Luck: 392000000, Int: 118000000 },                              price: 460000000 },
 ];
 
 // ─── Sovereign (Sovereign / Floor 12–13, ~1200000000 per main stat) ───────────
@@ -211,6 +253,9 @@ const sovereignItems: Omit<Item, "id" | "tier">[] = [
   { name: "Sovereign Eclipse Robe",    type: "armor",     stats: { Int: 1150000000, Spd: 440000000 },                               price: 1450000000 },
   { name: "Sovereign Cosmos Ring",     type: "accessory", stats: { Luck: 1650000000, Str: 490000000 },                              price: 1950000000 },
   { name: "Sovereign Void Crystal",    type: "accessory", stats: { Int: 1550000000, Luck: 470000000 },                              price: 1850000000 },
+  { name: "Sovereign Cosmos Guard",    type: "shield",    stats: { Def: 1200000000, Str: 400000000 },   special: "Block 20%",        price: 1500000000 },
+  { name: "Sovereign Infinity Tome",   type: "weapon",    stats: { Int: 1350000000, Luck: 435000000 },  special: "Genesis Ray",      price: 1650000000 },
+  { name: "Sovereign Fate Amulet",     type: "accessory", stats: { Luck: 1700000000, Int: 510000000 },                              price: 2000000000 },
 ];
 
 // ─── Ascendant (Ascendant / Floor 13–14, ~5000000000 per main stat) ───────────
@@ -222,6 +267,9 @@ const ascendantItems: Omit<Item, "id" | "tier">[] = [
   { name: "Ascendant Infinity Robe",   type: "armor",     stats: { Int: 5000000000, Spd: 1900000000 },                               price: 6200000000 },
   { name: "Ascendant Eternity Ring",   type: "accessory", stats: { Luck: 7200000000, Str: 2100000000 },                              price: 8500000000 },
   { name: "Ascendant Genesis Jewel",   type: "accessory", stats: { Int: 6800000000, Luck: 2000000000 },                              price: 8100000000 },
+  { name: "Ascendant Nova Rampart",    type: "shield",    stats: { Def: 5200000000, Str: 1700000000 },   special: "Block 20%",        price: 6500000000 },
+  { name: "Ascendant Infinity Codex",  type: "weapon",    stats: { Int: 5600000000, Luck: 1850000000 },  special: "Nebula Burst",     price: 7200000000 },
+  { name: "Ascendant Star Necklace",   type: "accessory", stats: { Luck: 7500000000, Str: 2200000000 },                              price: 8800000000 },
 ];
 
 // ─── Legend (Legend / Floor 14–15, ~20000000000 per main stat) ────────────────
@@ -233,6 +281,9 @@ const legendItems: Omit<Item, "id" | "tier">[] = [
   { name: "Legendary Arcane Robe",     type: "armor",     stats: { Int: 20000000000, Spd: 7500000000 },                               price: 25000000000 },
   { name: "Legendary Fate Ring",       type: "accessory", stats: { Luck: 28000000000, Str: 8500000000 },                              price: 34000000000 },
   { name: "Legendary Genesis Gem",     type: "accessory", stats: { Int: 26000000000, Luck: 8000000000 },                              price: 32000000000 },
+  { name: "Legendary Titan Wall",      type: "shield",    stats: { Def: 21000000000, Str: 7000000000 },   special: "Block 20%",        price: 26000000000 },
+  { name: "Legendary Void Grimoire",   type: "weapon",    stats: { Int: 22500000000, Luck: 7200000000 },  special: "Time Warp",        price: 29000000000 },
+  { name: "Legendary Cosmos Amulet",   type: "accessory", stats: { Luck: 29000000000, Str: 8800000000 },                              price: 35000000000 },
 ];
 
 // ─── Elite (Elite / Floor 15–16, ~80000000000 per main stat) ──────────────────
@@ -244,6 +295,9 @@ const eliteItems: Omit<Item, "id" | "tier">[] = [
   { name: "Elite Void Shroud",         type: "armor",     stats: { Int: 82000000000, Spd: 30000000000 },                               price: 100000000000 },
   { name: "Elite Omega Ring",          type: "accessory", stats: { Luck: 115000000000, Str: 34000000000 }, special: "Omega Luck",       price: 135000000000 },
   { name: "Elite Genesis Core",        type: "accessory", stats: { Int: 108000000000, Luck: 32000000000 },                              price: 128000000000 },
+  { name: "Elite Immortal Bastion",    type: "shield",    stats: { Def: 85000000000, Str: 27000000000 },   special: "Block 20%",        price: 105000000000 },
+  { name: "Elite Oracle Codex",        type: "weapon",    stats: { Int: 92000000000, Luck: 29000000000 },  special: "Oracle Blast",     price: 112000000000 },
+  { name: "Elite Eternity Necklace",   type: "accessory", stats: { Luck: 120000000000, Int: 35000000000 },                              price: 140000000000 },
 ];
 
 // ─── Mythical Legend (Mythical Legend / Floor 17+, massive multi-stat) ────────
@@ -263,6 +317,9 @@ const mythicalLegendItems: Omit<Item, "id" | "tier">[] = [
   { name: "Mythical Fortress Plate",         type: "armor",     stats: { Str: 340000000000, Int: 270000000000, Luck: 230000000000 },                                   price: 2300000000000 },
   { name: "Mythical Oracle Amulet",          type: "accessory", stats: { Int: 340000000000, Luck: 240000000000 },                    special: "Genesis Collapse",     price: 2000000000000 },
   { name: "Mythical Titan's Last Stand",     type: "armor",     stats: { Str: 370000000000, Spd: 370000000000, Int: 270000000000 },                                   price: 2700000000000 },
+  { name: "Mythical Impenetrable Fortress",  type: "shield",    stats: { Def: 320000000000, Str: 180000000000 },                     special: "Myth Barrier",         price: 2800000000000 },
+  { name: "Mythical Void Grimoire",          type: "weapon",    stats: { Int: 400000000000, Luck: 200000000000 },                    special: "Void Collapse",        price: 2500000000000 },
+  { name: "Mythical Cosmos Amulet",          type: "accessory", stats: { Luck: 360000000000, Str: 210000000000 },                    special: "Cosmos Surge",         price: 2200000000000 },
 ];
 
 // ─── Forest Zone Weapons (multi-tier) ─────────────────────────────────────────

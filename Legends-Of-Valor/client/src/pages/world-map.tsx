@@ -8,7 +8,8 @@ import {
   Castle, Mountain, Skull, FlaskConical, Sword, Swords,
   Trees, Gem, Fish, Shield, Flame, Map, Home, Lock,
   Package, ShoppingBag, Users, LogOut, MessageCircle,
-  Crown, Coins, Heart, Target, Zap, Sparkles, Palette, Trophy
+  Crown, Coins, Heart, Target, Zap, Sparkles, Palette, Trophy,
+  Scroll, Dices, Hammer, BookOpen, Eye, Star, Globe
 } from "lucide-react";
 import { useGame } from "@/lib/game-context";
 import { LoadingScreen } from "@/components/loading-screen";
@@ -123,7 +124,7 @@ const zones: Zone[] = [
     id: "skill-sanctum",
     name: "Skill Sanctum",
     description: "Invest your training points to unlock powerful passive and active abilities along three race-specific branches.",
-    landmark: "tower",
+    landmark: "sanctum",
     difficulty: "starter",
     pvpEnabled: false,
     activities: ["Combat Tree", "Mastery Tree", "Ascension Tree"],
@@ -145,7 +146,7 @@ const zones: Zone[] = [
     id: "warfront",
     name: "War Front",
     description: "The staging ground for army operations. Raise soldiers, manage your war camp, and launch raids against rival player bases for massive gold rewards.",
-    landmark: "dungeon",
+    landmark: "warfront",
     difficulty: "hard",
     pvpEnabled: true,
     activities: ["Recruit Troops", "Train Army", "Raid Bases", "Battle Reports"],
@@ -156,7 +157,7 @@ const zones: Zone[] = [
     id: "quest-board",
     name: "Quest Board",
     description: "A grand notice board where procedurally generated quests appear daily — combat challenges, wealth goals, tower climbs, and rare legendary contracts scaled precisely to your rank.",
-    landmark: "dungeon",
+    landmark: "questboard",
     difficulty: "easy",
     pvpEnabled: false,
     activities: ["Available Quests", "Active Quests", "World Events", "Loot Preview"],
@@ -167,7 +168,7 @@ const zones: Zone[] = [
     id: "trait-shrine",
     name: "Trait Shrine",
     description: "An ancient shrine where the essence of genetics is made visible. Consult the Oracle to learn which permanent traits were woven into your bloodline at birth — and what they mean for your destiny.",
-    landmark: "dungeon",
+    landmark: "shrine",
     difficulty: "easy",
     pvpEnabled: false,
     activities: ["View Traits", "Trait Codex", "Bonus Summary"],
@@ -178,7 +179,7 @@ const zones: Zone[] = [
     id: "portal-nexus",
     name: "Portal Nexus",
     description: "A convergence point where dimensional rifts tear open. Brave adventurers enter alternate dimensions with different physics, enemies, and rewards — if they survive.",
-    landmark: "dungeon",
+    landmark: "portal",
     difficulty: "hard",
     pvpEnabled: false,
     activities: ["Dimension Portals", "Void", "Inferno Realm", "Temporal Rift", "Crystal Labyrinth"],
@@ -189,7 +190,7 @@ const zones: Zone[] = [
     id: "shadow-realm",
     name: "Shadow Realm",
     description: "Face AI-controlled doppelgangers of real players — each one built from their exact stats, gear, and combat style. Defeat echoes to earn gold and glory.",
-    landmark: "dungeon",
+    landmark: "shadowrealm",
     difficulty: "hard",
     pvpEnabled: false,
     activities: ["Echo Battles", "Build Scouting", "Echo Leaderboard"],
@@ -200,7 +201,7 @@ const zones: Zone[] = [
     id: "hall-of-legends",
     name: "Hall of Legends",
     description: "For those who have conquered every challenge: reset your progress for permanent bonuses, unlock exclusive content, and ascend beyond Mythical Legend itself.",
-    landmark: "castle",
+    landmark: "halloflegends",
     difficulty: "hell",
     pvpEnabled: false,
     activities: ["Prestige", "Prestige Shop", "Legend History"],
@@ -374,25 +375,34 @@ const GATHERABLE_ZONES = new Set([
 function LandmarkIcon({ landmark, className = "" }: { landmark: string; className?: string }) {
   const baseClass = `w-7 h-7 ${className}`;
   switch (landmark) {
-    case "castle": return <Castle className={baseClass} />;
-    case "city": return <ShoppingBag className={baseClass} />;
-    case "tower": return <Sword className={baseClass} />;
-    case "cave": return <Mountain className={baseClass} />;
-    case "ruins": return <Castle className={baseClass} />;
-    case "lab": return <FlaskConical className={baseClass} />;
-    case "arena": return <Shield className={baseClass} />;
-    case "shop": return <Sparkles className={baseClass} />;
-    case "mine": return <Gem className={baseClass} />;
-    case "forest": return <Trees className={baseClass} />;
-    case "colosseum": return <Sword className={baseClass} />;
-    case "banner": return <Trophy className={baseClass} />;
-    case "petarena": return <Swords className={baseClass} />;
-    case "lake": return <Fish className={baseClass} />;
-    case "guildhall": return <Users className={baseClass} />;
-    case "hellgate": return <Flame className={baseClass} />;
-    case "valorshop": return <Sparkles className={baseClass} />;
-    case "cosmetics": return <Palette className={baseClass} />;
-    default: return <Map className={baseClass} />;
+    case "castle":       return <Castle className={baseClass} />;
+    case "city":         return <ShoppingBag className={baseClass} />;
+    case "tower":        return <Zap className={baseClass} />;
+    case "cave":         return <Mountain className={baseClass} />;
+    case "ruins":        return <Scroll className={baseClass} />;
+    case "lab":          return <FlaskConical className={baseClass} />;
+    case "arena":        return <Heart className={baseClass} />;
+    case "shop":         return <Sparkles className={baseClass} />;
+    case "mine":         return <Gem className={baseClass} />;
+    case "forest":       return <Trees className={baseClass} />;
+    case "colosseum":    return <Swords className={baseClass} />;
+    case "banner":       return <Trophy className={baseClass} />;
+    case "petarena":     return <Target className={baseClass} />;
+    case "lake":         return <Fish className={baseClass} />;
+    case "guildhall":    return <Users className={baseClass} />;
+    case "hellgate":     return <Flame className={baseClass} />;
+    case "valorshop":    return <Coins className={baseClass} />;
+    case "cosmetics":    return <Palette className={baseClass} />;
+    case "casino":       return <Dices className={baseClass} />;
+    case "forge":        return <Hammer className={baseClass} />;
+    case "sanctum":      return <BookOpen className={baseClass} />;
+    case "warfront":     return <Shield className={baseClass} />;
+    case "questboard":   return <Star className={baseClass} />;
+    case "shrine":       return <Sparkles className={baseClass} />;
+    case "portal":       return <Globe className={baseClass} />;
+    case "shadowrealm":  return <Eye className={baseClass} />;
+    case "halloflegends":return <Crown className={baseClass} />;
+    default:             return <Map className={baseClass} />;
   }
 }
 

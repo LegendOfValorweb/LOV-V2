@@ -6,7 +6,7 @@ import { z } from "zod";
 export const itemTiers = ["normal", "super_rare", "x_tier", "umr", "ssumr", "divine", "initiate", "journeyman", "adept", "expert", "master", "grandmaster", "champion", "overlord", "sovereign", "ascendant", "legend", "elite", "mythical_legend"] as const;
 export type ItemTier = typeof itemTiers[number];
 
-export const itemTypes = ["weapon", "armor", "accessory"] as const;
+export const itemTypes = ["weapon", "armor", "accessory", "shield"] as const;
 export type ItemType = typeof itemTypes[number];
 
 export const statsSchema = z.object({
@@ -269,6 +269,7 @@ export const equippedSchema = z.object({
   armor: z.string().nullable(),
   accessory1: z.string().nullable(),
   accessory2: z.string().nullable(),
+  shield: z.string().nullable().optional(),
 });
 
 export type Equipped = z.infer<typeof equippedSchema>;

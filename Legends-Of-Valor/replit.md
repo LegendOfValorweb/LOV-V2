@@ -2,7 +2,19 @@
 
 ## Overview
 
-Legends of Valor is a text-based fantasy RPG with trading, combat, guild systems, and extensive progression mechanics. Players choose from 14 races with unique bonuses, progress through 15 ranks from Novice to Mythical Legend, explore 12 zones, climb a 50-floor Mystic Tower, and work toward endgame content with billion-scale power.
+Legends of Valor is a text-based fantasy RPG with trading, combat, guild systems, and extensive progression mechanics. Players choose from 14 races with unique bonuses, progress through 15 ranks from Novice to Mythical Legend, explore 30+ zones, climb a 50-floor Mystic Tower, and work toward endgame content with billion-scale power.
+
+## Recent Updates (May 2026)
+
+### New Features
+- **Shield equip slot** — 5th gear slot (weapon/armor/accessory1/accessory2/**shield**). Shield items added to all 19 tiers. Schema, server equip loops, inventory paperdoll, filter tabs, and shop filter all updated.
+- **~55 new items** — 1 shield + 1 extra spell-weapon + 1 extra amulet appended to each tier in `items-data.ts`. Existing item IDs preserved.
+- **Troop skins** — Barracks now has a "Skins" tab with 4-5 cosmetic variants per troop type (Infantry, Archers, Cavalry, Siege, Elite Guard). Stored in localStorage, purely cosmetic.
+- **8-tab Leaderboard** — Added Pet Wins, Raid Wins, and Hell Zone leaderboard tabs. Scrollable tab bar. Custom `fetchLeaderboardData` queryFn routes to correct endpoints and normalizes response shapes.
+- **Rank-colored HUD** — `RANK_COLORS` map added to `game-hud.tsx`. Rank badge and rank name get unique colors per rank (gray→green→blue→teal→purple→orange→red→gold→crimson→cyan→white→legend-gold→mythic-pink→myth-gold).
+- **Unique world-map icons** — All 30+ zone landmark icons are now distinct. 7 new imports from lucide-react: `Scroll, Dices, Hammer, BookOpen, Eye, Star, Globe`. New landmark types: warfront (Shield), questboard (Star), shrine (Sparkles), portal (Globe), shadowrealm (Eye), halloflegends (Crown), sanctum (BookOpen), forge (Hammer), casino (Dices).
+- **LeaderboardButton component** — Reusable mini leaderboard modal in `client/src/components/leaderboard-button.tsx`. Variants: gold/purple/red/blue/green. Can be dropped into any zone page.
+- **Inventory improvements** — Shield slot shown in paperdoll between Weapon and Amulet 1. "Accessory" relabeled "Amulet" throughout inventory and shop. Filter tabs now include Shield.
 
 ## Unified Power Calculation System — `shared/power-calc.ts`
 
