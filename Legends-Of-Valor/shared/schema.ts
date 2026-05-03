@@ -403,6 +403,35 @@ export const prestigeHistory = pgTable("prestige_history", {
   prestigedAt: timestamp("prestiged_at").notNull().defaultNow(),
 });
 
+export const dimensionPortals = pgTable("dimension_portals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  accountId: varchar("account_id").references(() => accounts.id, { onDelete: "cascade" }),
+  dimensionId: text("dimension_id").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
+  maxUses: integer("max_uses").notNull().default(1),
+  usesLeft: integer("uses_left").notNull().default(1),
+  source: text("source").notNull().default("random"),
+  isActive: boolean("is_active").notNull().default(true),
+});
+
+export const dimensionRuns = pgTable("dimension_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  accountId: varchar("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
+  portalId: varchar("portal_id").references(() => dimensionPortals.id),
+  dimensionId: text("dimension_id").notNull(),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+  status: text("status").notNull().default("active"),
+  currentEncounter: integer("current_encounter").notNull().default(0),
+  totalEncounters: integer("total_encounters").notNull().default(5),
+  encounterResults: jsonb("encounter_results").notNull().default([]).$type<any[]>(),
+  goldEarned: bigint("gold_earned", { mode: "number" }).notNull().default(0),
+  shardEarned: integer("shard_earned").notNull().default(0),
+  playerHpCarried: integer("player_hp_carried").notNull().default(0),
+  playerMaxHp: integer("player_max_hp").notNull().default(100),
+});
+
 export const playerSnapshots = pgTable("player_snapshots", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   accountId: varchar("account_id").notNull().unique().references(() => accounts.id, { onDelete: "cascade" }),

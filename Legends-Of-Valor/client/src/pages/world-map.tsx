@@ -142,6 +142,17 @@ const zones: Zone[] = [
     route: "/skill-workshop",
   },
   {
+    id: "portal-nexus",
+    name: "Portal Nexus",
+    description: "A convergence point where dimensional rifts tear open. Brave adventurers enter alternate dimensions with different physics, enemies, and rewards — if they survive.",
+    landmark: "dungeon",
+    difficulty: "hard",
+    pvpEnabled: false,
+    activities: ["Dimension Portals", "Void", "Inferno Realm", "Temporal Rift", "Crystal Labyrinth"],
+    coordinates: { x: 62, y: 52 },
+    route: "/dimensions",
+  },
+  {
     id: "shadow-realm",
     name: "Shadow Realm",
     description: "Face AI-controlled doppelgangers of real players — each one built from their exact stats, gear, and combat style. Defeat echoes to earn gold and glory.",

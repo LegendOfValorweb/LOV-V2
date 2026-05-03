@@ -386,8 +386,80 @@ Three-tab page for meta-progression beyond Mythical Legend rank:
 ### Navigation
 - World Map: "Shadow Realm" zone (hard, east side at 78, 35)
 
+## PHASE 17: Alternate Dimensions (May 2026)
+
+### New DB tables
+- `dimension_portals` — tracks open portals per player (24-hour expiry, 1 use each)
+- `dimension_runs` — tracks in-progress and completed dimension runs with per-encounter results (JSONB)
+
+### Alternate Dimensions — `/dimensions` (Portal Nexus on World Map)
+
+**Concept:** Dimensional portals open rare rifts to 7 alternate realms, each with unique physics-bending combat rules, 5-encounter gauntlets, and exclusive currencies.
+
+**Portal Access:**
+- `🔍 Scan` — 6% random chance to open a portal (free, cooldown-free)
+- `💫 Force Open` — spend 500 runes to guarantee a portal immediately
+- Portals expire in 24 hours, single-use
+- Portal dimension is random (weighted by player rank — higher ranks unlock harder dimensions)
+
+**The 7 Dimensions:**
+
+| Dimension | Min Rank | Rules | Currency |
+|---|---|---|---|
+| 🌑 The Void | Novice | Void Gravity (Spd ÷2, Def ×1.5, Str +30%), no Defend action | Void Crystal |
+| 🔥 Inferno Realm | Expert | Every hit applies burn, healing halved | Ember Shard |
+| ⏳ Temporal Rift | Master | Enemy gains +12% ATK per 3 rounds — end fights fast | Chrono Fragment |
+| 💎 Crystal Labyrinth | Grandmaster | Physical = 0 damage (skills only), mana costs ×2 | Crystal Essence |
+| 🪞 Shadow Mirror | Champion | Enemies mirror your own stats (80-120% of yours) | Mirror Shard |
+| ✨ Celestial Plane | Overlord | Regular attacks heal the enemy (+30%) — use skills | Stardust |
+| ☠️ Corruption Abyss | Ascendant | 35% chance every skill backfires onto yourself | Corruption Essence |
+
+**Run Structure:**
+- 5 encounters: encounters 1-3 (mobs) → encounter 4 (mini-boss) → encounter 5 (boss)
+- Each encounter is auto-resolved (same engine as Shadow Echoes, with dimension modifiers)
+- Player HP carries between encounters, recovering +20% max HP after each fight
+- Rewards accumulate mid-run (gold + soul shards / special currency)
+- `Flee` at any time after a won encounter to keep accumulated rewards
+
+**Dimension-Specific Rules (applied to combat engine):**
+- `void_gravity` — player Spd ×0.5, enemy Def ×1.5, player Str ×1.3
+- `no_defense_action` — Defend action disabled for both sides
+- `burn_on_hit` — every hit from either side applies 2-round burn DoT
+- `no_heal` — all healing effects halved
+- `time_pressure` — enemy ATK multiplier escalates +12% per 3 rounds elapsed
+- `magic_only` — physical attacks deal 0 damage (only skills can damage)
+- `double_mana` — all skill mana costs ×2
+- `mirror_enemy` — enemy stats built from player's own stats × template.statScale
+- `holy_inversion` — regular attacks restore 30% of dealt damage as enemy HP
+- `chaos_backfire` — 35% chance each skill activation hits the caster instead
+
+**Reward Scaling:**
+- Base: `rankIndex × 2,000 × lootBonus × bossMultiplier` gold per fight
+- Boss fight: ×5 bonus; Mini-boss: ×2 bonus
+- Soul shards: same formula scaled smaller
+- Special currency (per-dimension) used for future upgrades / crafting
+
+**API Routes:**
+- `GET /api/accounts/:id/portals` — list active portals (auto-expires old ones)
+- `POST /api/accounts/:id/portals/scan` — 6% chance portal generation
+- `POST /api/accounts/:id/portals/force` — guaranteed portal (500 runes)
+- `POST /api/portals/:portalId/enter` — create dimension run
+- `GET /api/dimension-runs/:runId` — run state
+- `POST /api/dimension-runs/:runId/next` — resolve next encounter (full auto-combat)
+- `POST /api/dimension-runs/:runId/flee` — exit, keep rewards so far
+
+**Frontend features:**
+- Portals tab: active portals with countdown timers + dimension rule previews + enter button
+- Dimension Library tab: all 7 dimensions with expandable lore, rules, and reward details
+- Active Run tab: encounter progress dots (mob/mini-boss/boss labeled), animated battle log (300ms/event), live HP tracking, flee button showing current earned gold
+- Run complete / fled / failed screen with full reward summary
+
+### Navigation
+- World Map: "Portal Nexus" zone (hard, center-right at 62, 52)
+
 ## Recent Changes
 
+- May 2026: Alternate Dimensions (7 realms, dimension-specific combat rules, portals, 5-encounter runs)
 - May 2026: Shadow Echoes system (AI player clones, strategy profiles, auto-combat simulator)
 - May 2026: Prestige system (10 tiers, permanent bonuses, shop, combat integration)
 - May 2026: Modular ability workshop (upgrade / modifiers / fusion), combat modifier integration

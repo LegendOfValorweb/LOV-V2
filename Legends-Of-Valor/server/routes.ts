@@ -22,7 +22,7 @@ import {
 } from "./server-achievements";
 import { storage, evictAccountCache } from "./storage";
 import { db } from "./db";
-import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, type CombatLogEntry, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, shardEvents, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage, worldBosses, worldBossDamage, inventoryItems, playerSkills, casinoHistory, skillTreeNodes, playerModifiers, prestigeHistory, playerSnapshots } from "@shared/schema";
+import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, type CombatLogEntry, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, shardEvents, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage, worldBosses, worldBossDamage, inventoryItems, playerSkills, casinoHistory, skillTreeNodes, playerModifiers, prestigeHistory, playerSnapshots, dimensionPortals, dimensionRuns } from "@shared/schema";
 import { ZONE_NPCS, getZoneNPC, calculateNPCStats, calculateNPCRewards } from "@shared/zone-npcs";
 import { z } from "zod";
 import type { Account, Event, Challenge, PlayerRace, PlayerGender } from "@shared/schema";
@@ -19373,6 +19373,248 @@ export async function registerRoutes(
     } catch (e) {
       if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
       res.status(500).json({ error: "Failed to fuse skills" });
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════
+  // ALTERNATE DIMENSIONS — Portals & Dimensional Runs
+  // ══════════════════════════════════════════════════════════════════════
+
+  // GET active portals for a player
+  app.get("/api/accounts/:accountId/portals", async (req, res) => {
+    try {
+      const now = new Date();
+      const rows = await db.select().from(dimensionPortals).where(
+        and(
+          eq(dimensionPortals.accountId, req.params.accountId),
+          eq(dimensionPortals.isActive, true),
+        )
+      );
+      // Filter expired + no uses left
+      const active = rows.filter(p => new Date(p.expiresAt) > now && p.usesLeft > 0);
+      // Deactivate truly expired ones
+      for (const p of rows.filter(r => new Date(r.expiresAt) <= now || r.usesLeft <= 0)) {
+        await db.update(dimensionPortals).set({ isActive: false }).where(eq(dimensionPortals.id, p.id));
+      }
+      res.json(active);
+    } catch { res.status(500).json({ error: "Failed to fetch portals" }); }
+  });
+
+  // POST scan for portal (6% random chance)
+  app.post("/api/accounts/:accountId/portals/scan", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.accountId);
+      if (!account) return res.status(404).json({ error: "Not found" });
+      if (Math.random() > 0.06) return res.json({ found: false });
+      const { rollRandomDimension } = await import("@shared/dimensions-data");
+      const dim = rollRandomDimension(account.rank);
+      const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const [portal] = await db.insert(dimensionPortals).values({
+        accountId: req.params.accountId, dimensionId: dim.id,
+        expiresAt: expires, source: "random",
+      }).returning();
+      res.json({ found: true, portal, dimensionName: dim.name });
+    } catch { res.status(500).json({ error: "Failed to scan" }); }
+  });
+
+  // POST force-open a portal (costs 500 runes)
+  app.post("/api/accounts/:accountId/portals/force", async (req, res) => {
+    try {
+      const account = await storage.getAccount(req.params.accountId);
+      if (!account) return res.status(404).json({ error: "Not found" });
+      const RUNE_COST = 500;
+      if ((account.runes ?? 0) < RUNE_COST) return res.status(400).json({ error: "Not enough runes (need 500)" });
+      const { rollRandomDimension } = await import("@shared/dimensions-data");
+      const dim = rollRandomDimension(account.rank);
+      const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await storage.updateAccount(req.params.accountId, { runes: (account.runes ?? 0) - RUNE_COST } as any);
+      evictAccountCache(req.params.accountId);
+      const [portal] = await db.insert(dimensionPortals).values({
+        accountId: req.params.accountId, dimensionId: dim.id,
+        expiresAt: expires, source: "forced",
+      }).returning();
+      res.json({ portal, dimensionName: dim.name });
+    } catch { res.status(500).json({ error: "Failed to force portal" }); }
+  });
+
+  // POST enter a portal — creates a run
+  app.post("/api/portals/:portalId/enter", async (req, res) => {
+    try {
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      const [portal] = await db.select().from(dimensionPortals).where(eq(dimensionPortals.id, req.params.portalId)).limit(1);
+      if (!portal) return res.status(404).json({ error: "Portal not found" });
+      if (portal.accountId !== accountId) return res.status(403).json({ error: "Not your portal" });
+      if (portal.usesLeft <= 0 || !portal.isActive) return res.status(400).json({ error: "Portal has no uses left" });
+
+      // Deduct use
+      await db.update(dimensionPortals).set({ usesLeft: portal.usesLeft - 1, isActive: portal.usesLeft - 1 > 0 })
+        .where(eq(dimensionPortals.id, portal.id));
+
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      const [run] = await db.insert(dimensionRuns).values({
+        accountId, portalId: portal.id, dimensionId: portal.dimensionId,
+        status: "active", currentEncounter: 0, totalEncounters: 5,
+        playerHpCarried: 0, playerMaxHp: 100,
+      }).returning();
+
+      res.json({ runId: run.id, dimensionId: run.dimensionId });
+    } catch (e) {
+      if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
+      res.status(500).json({ error: "Failed to enter portal" });
+    }
+  });
+
+  // GET dimension run state
+  app.get("/api/dimension-runs/:runId", async (req, res) => {
+    try {
+      const [run] = await db.select().from(dimensionRuns).where(eq(dimensionRuns.id, req.params.runId)).limit(1);
+      if (!run) return res.status(404).json({ error: "Run not found" });
+      res.json(run);
+    } catch { res.status(500).json({ error: "Failed to fetch run" }); }
+  });
+
+  // POST advance to next encounter
+  app.post("/api/dimension-runs/:runId/next", async (req, res) => {
+    try {
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      const [run] = await db.select().from(dimensionRuns).where(eq(dimensionRuns.id, req.params.runId)).limit(1);
+      if (!run) return res.status(404).json({ error: "Run not found" });
+      if (run.accountId !== accountId) return res.status(403).json({ error: "Not your run" });
+      if (run.status !== "active") return res.status(400).json({ error: "Run is not active" });
+
+      const { getDimension, buildEnemyCombatant } = await import("@shared/dimensions-data");
+      const { runDimensionEncounter } = await import("@shared/dimension-combat");
+      const { ALL_SKILLS } = await import("@shared/skills-data");
+      const { detectStrategyProfile, calcMaxHp } = await import("@shared/shadow-echo-combat");
+
+      const dim = getDimension(run.dimensionId);
+      if (!dim) return res.status(404).json({ error: "Dimension not found" });
+
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+
+      // Build player combatant
+      const eqSkills = await db.select().from(playerSkills)
+        .where(and(eq(playerSkills.accountId, accountId), eq(playerSkills.isEquipped, true)))
+        .limit(8);
+      const skillDefs = eqSkills.map(es => ALL_SKILLS.find((s: any) => s.id === es.skillId)).filter(Boolean) as any[];
+      const shadowSkills = skillDefs.map((s: any) => ({
+        id: s.id, name: s.name, spellCategory: s.spellCategory,
+        spellPower: s.spellPower ?? 1.0, cooldown: s.cooldown ?? 5,
+        manaCost: s.manaCost ?? 20, effects: s.effects ?? [],
+      }));
+
+      const pStats = (account.stats ?? { Str:10, Def:10, Spd:10, Int:10, Luck:10, Pot:0 }) as any;
+      const prestigeLvl = (account as any).prestigeLevel ?? 0;
+      if (prestigeLvl > 0) {
+        const { getPrestigeStatMult } = await import("@shared/prestige-data");
+        const mult = getPrestigeStatMult(prestigeLvl);
+        pStats.Str  = Math.round(pStats.Str  * mult);
+        pStats.Def  = Math.round(pStats.Def  * mult);
+        pStats.Spd  = Math.round(pStats.Spd  * mult);
+        pStats.Int  = Math.round(pStats.Int  * mult);
+        pStats.Luck = Math.round(pStats.Luck * mult);
+      }
+
+      const profile = detectStrategyProfile(shadowSkills, pStats);
+      const maxHp   = calcMaxHp(pStats, (account as any).race ?? "human", account.rank);
+
+      // HP carries between encounters (heal 20% between fights)
+      const prevResults = (run.encounterResults ?? []) as any[];
+      let carryHp = run.currentEncounter === 0 ? maxHp : Math.min(maxHp, (run.playerHpCarried ?? maxHp) + Math.round(maxHp * 0.20));
+
+      const playerCombatant = {
+        id: accountId, label: "challenger" as const, name: account.username,
+        hp: carryHp, maxHp, mana: 100, maxMana: 200,
+        stats: pStats, rank: account.rank,
+        race: (account as any).race ?? "human",
+        skills: shadowSkills, cooldowns: {}, status: [],
+        strategyProfile: profile,
+      };
+
+      // Pick enemy template for this encounter index
+      const encounterIdx = run.currentEncounter;
+      const template = dim.enemies[Math.min(encounterIdx, dim.enemies.length - 1)];
+      const rankIdx = [
+        "Novice","Apprentice","Initiate","Journeyman","Adept","Expert","Master",
+        "Grandmaster","Champion","Overlord","Sovereign","Ascendant","Legend","Mythic","Mythical Legend"
+      ].indexOf(account.rank);
+
+      const enemy = buildEnemyCombatant(template, account.rank, pStats, dim.rules);
+
+      // Run the fight
+      const result = runDimensionEncounter(playerCombatant, enemy, dim.rules, Math.max(0, rankIdx));
+
+      const newResults = [...prevResults, { ...result, enemyName: template.name, enemyIcon: template.icon }];
+      const newEncounter = encounterIdx + 1;
+      const newGold = (run.goldEarned ?? 0) + result.goldEarned;
+      const newShards = (run.shardEarned ?? 0) + result.shardEarned;
+
+      let newStatus = "active";
+      if (result.winner === "enemy") {
+        newStatus = "failed";
+      } else if (newEncounter >= run.totalEncounters) {
+        newStatus = "completed";
+      }
+
+      // Update run
+      await db.update(dimensionRuns).set({
+        currentEncounter: newEncounter,
+        encounterResults: newResults,
+        goldEarned: newGold,
+        shardEarned: newShards,
+        playerHpCarried: result.playerHpRemaining,
+        playerMaxHp: maxHp,
+        status: newStatus,
+        completedAt: newStatus !== "active" ? new Date() : null,
+      }).where(eq(dimensionRuns.id, run.id));
+
+      // Award rewards on completion
+      if (newStatus === "completed" || newStatus === "failed") {
+        if (newGold > 0 || newShards > 0) {
+          await storage.updateAccount(accountId, {
+            gold: (account.gold ?? 0) + newGold,
+            soulShards: ((account as any).soulShards ?? 0) + newShards,
+          } as any);
+          evictAccountCache(accountId);
+        }
+      }
+
+      res.json({ ...result, enemyName: template.name, status: newStatus, totalGold: newGold, totalShards: newShards, events: result.events });
+    } catch (e) {
+      if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
+      res.status(500).json({ error: "Failed to advance encounter" });
+    }
+  });
+
+  // POST flee a run (keep current rewards)
+  app.post("/api/dimension-runs/:runId/flee", async (req, res) => {
+    try {
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      const [run] = await db.select().from(dimensionRuns).where(eq(dimensionRuns.id, req.params.runId)).limit(1);
+      if (!run) return res.status(404).json({ error: "Run not found" });
+      if (run.accountId !== accountId) return res.status(403).json({ error: "Not your run" });
+
+      await db.update(dimensionRuns).set({ status: "fled", completedAt: new Date() })
+        .where(eq(dimensionRuns.id, run.id));
+
+      if ((run.goldEarned ?? 0) > 0 || (run.shardEarned ?? 0) > 0) {
+        const account = await storage.getAccount(accountId);
+        if (account) {
+          await storage.updateAccount(accountId, {
+            gold: (account.gold ?? 0) + (run.goldEarned ?? 0),
+            soulShards: ((account as any).soulShards ?? 0) + (run.shardEarned ?? 0),
+          } as any);
+          evictAccountCache(accountId);
+        }
+      }
+
+      res.json({ success: true, goldKept: run.goldEarned, shardsKept: run.shardEarned });
+    } catch (e) {
+      if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
+      res.status(500).json({ error: "Failed to flee" });
     }
   });
 
