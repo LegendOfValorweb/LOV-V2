@@ -28,6 +28,15 @@ export type SoldierDef = {
   unlockBarracksLevel: number; // barracks level required to recruit
 };
 
+// ─── Cost design philosophy ───────────────────────────────────────────────────
+// Barracks unlocks at Base Tier 3 (Keep), typically reached at Expert rank.
+// At Expert: ~500K–1.2M gold/hr income.
+// At Champion (first major army tier): ~10M–25M gold/hr.
+//
+// Upkeep is the main limiter for army size:
+//   Champion income 10M/hr → can sustain ~20,000 infantry (10M ÷ 500g/hr)
+//   Sovereign income 100M/hr → can sustain ~200,000 infantry (feels like a real war kingdom)
+// ──────────────────────────────────────────────────────────────────────────────
 export const SOLDIER_DEFS: SoldierDef[] = [
   {
     id: "infantry",
@@ -35,9 +44,9 @@ export const SOLDIER_DEFS: SoldierDef[] = [
     icon: "🗡️",
     description: "Armored front-line fighters. Tough and reliable, they anchor your battle line against cavalry charges.",
     role: "Tank / Anti-Cavalry",
-    goldCost: 200,
-    upkeepPerHour: 2,
-    trainingTimeSec: 30,
+    goldCost: 2000,
+    upkeepPerHour: 500,
+    trainingTimeSec: 5,
     baseAtk: 18, baseDef: 22, baseHp: 80,
     atkPerLevel: 4, defPerLevel: 5, hpPerLevel: 15,
     counters: ["cavalry"],
@@ -51,9 +60,9 @@ export const SOLDIER_DEFS: SoldierDef[] = [
     icon: "🏹",
     description: "Ranged attackers who pepper enemies from a safe distance. Devastating against Infantry formations.",
     role: "Ranged / Anti-Infantry",
-    goldCost: 300,
-    upkeepPerHour: 3,
-    trainingTimeSec: 45,
+    goldCost: 3000,
+    upkeepPerHour: 750,
+    trainingTimeSec: 8,
     baseAtk: 25, baseDef: 12, baseHp: 55,
     atkPerLevel: 6, defPerLevel: 2, hpPerLevel: 8,
     counters: ["infantry"],
@@ -67,9 +76,9 @@ export const SOLDIER_DEFS: SoldierDef[] = [
     icon: "🐴",
     description: "Swift mounted warriors who smash through archer lines before they can regroup.",
     role: "Fast / Anti-Archer",
-    goldCost: 500,
-    upkeepPerHour: 5,
-    trainingTimeSec: 120,
+    goldCost: 8000,
+    upkeepPerHour: 2000,
+    trainingTimeSec: 20,
     baseAtk: 30, baseDef: 16, baseHp: 70,
     atkPerLevel: 7, defPerLevel: 3, hpPerLevel: 12,
     counters: ["archer"],
@@ -83,9 +92,9 @@ export const SOLDIER_DEFS: SoldierDef[] = [
     icon: "💣",
     description: "Catapults and battering rams. Ineffective in field battles but absolutely devastate base defenses.",
     role: "Structure Destroyer",
-    goldCost: 1200,
-    upkeepPerHour: 12,
-    trainingTimeSec: 480,
+    goldCost: 30000,
+    upkeepPerHour: 8000,
+    trainingTimeSec: 90,
     baseAtk: 12, baseDef: 8, baseHp: 100,
     atkPerLevel: 3, defPerLevel: 2, hpPerLevel: 20,
     counters: [],
@@ -99,9 +108,9 @@ export const SOLDIER_DEFS: SoldierDef[] = [
     icon: "⚔️",
     description: "Your personal guard — hand-picked warriors who inherit your hero's racial combat bonuses. No cap, but very expensive.",
     role: "Hero Unit / All-rounder",
-    goldCost: 5000,
-    upkeepPerHour: 40,
-    trainingTimeSec: 1800,
+    goldCost: 100000,
+    upkeepPerHour: 30000,
+    trainingTimeSec: 450,
     baseAtk: 45, baseDef: 40, baseHp: 150,
     atkPerLevel: 10, defPerLevel: 9, hpPerLevel: 25,
     counters: [],
@@ -130,9 +139,14 @@ export function getArmyCap(_barracksLevel: number): number {
  * Returns the total training duration (ms) for `count` soldiers of a given type.
  * The barracks level can speed training in the future (e.g., lv3+ = 0.75×).
  */
+// Barracks level speed tiers — high levels give significant bonuses to support large armies
 export function calcTrainingDurationMs(type: SoldierType, count: number, barracksLevel = 1): number {
   const def = getSoldierDef(type);
-  const speedMult = barracksLevel >= 4 ? 0.6 : barracksLevel >= 3 ? 0.75 : barracksLevel >= 2 ? 0.88 : 1.0;
+  const speedMult =
+    barracksLevel >= 5 ? 0.35 :
+    barracksLevel >= 4 ? 0.50 :
+    barracksLevel >= 3 ? 0.65 :
+    barracksLevel >= 2 ? 0.80 : 1.0;
   return Math.floor(def.trainingTimeSec * count * speedMult) * 1000;
 }
 

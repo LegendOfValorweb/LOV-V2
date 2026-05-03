@@ -187,7 +187,9 @@ export const HERITAGE_TITLES: Record<number, string> = {
 
 export const BASE_TIER_NAMES = ["", "Camp", "Lodge", "Keep", "Manor", "Castle", "Stronghold", "Citadel", "Eternal Fortress"] as const;
 export const BASE_TIER_COSTS = [0, 500000, 5000000, 50000000, 500000000, 2500000000, 10000000000, 100000000000];
-export const BASE_TIER_RANK_REQUIREMENTS = ["Novice", "Journeyman", "Expert", "Grandmaster", "Legend", "Champion", "Overlord", "Mythical Legend"];
+// Index maps to currentTier (1-7), value = rank needed to upgrade to that tier+1
+// Must be strictly increasing in rank index: Journeyman(3)<Expert(5)<Grandmaster(7)<Champion(8)<Overlord(9)<Ascendant(11)<Mythical Legend(14)
+export const BASE_TIER_RANK_REQUIREMENTS = ["Novice", "Journeyman", "Expert", "Grandmaster", "Champion", "Overlord", "Ascendant", "Mythical Legend"];
 
 export const ROOM_MAX_LEVEL_BY_TIER: Record<number, number> = {
   1: 3,
@@ -341,6 +343,7 @@ export const accounts = pgTable("accounts", {
   weaknessDebuffExpires: timestamp("weakness_debuff_expires"),
   peaceShieldExpires: timestamp("peace_shield_expires"),
   armyLastCheckedAt: timestamp("army_last_checked_at"),
+  armyLastRaidAt: timestamp("army_last_raid_at"),
   // V2: Base system
   baseTier: integer("base_tier").notNull().default(1), // Current base tier (1-5)
   baseSkin: text("base_skin").default("default"), // Cosmetic base skin

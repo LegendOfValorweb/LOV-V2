@@ -4,11 +4,11 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 const SOLDIER_DEFS = [
-  { id:"infantry",    name:"Infantry",       icon:"🗡️", role:"Tank / Anti-Cavalry",    desc:"Armored front-line fighters. Counter cavalry charges.",          goldCost:200,  upkeep:2,  trainingTimeSec:30,   counters:["cavalry"], weakTo:["archer"],   unlockLv:1, color:"from-slate-700 to-gray-800",    border:"border-slate-600" },
-  { id:"archer",      name:"Archers",        icon:"🏹", role:"Ranged / Anti-Infantry",  desc:"Ranged attackers devastating against dense infantry formations.",  goldCost:300,  upkeep:3,  trainingTimeSec:45,   counters:["infantry"],weakTo:["cavalry"],  unlockLv:1, color:"from-green-900 to-emerald-950", border:"border-green-700" },
-  { id:"cavalry",     name:"Cavalry",        icon:"🐴", role:"Fast / Anti-Archer",      desc:"Swift mounted warriors who smash archer lines.",                   goldCost:500,  upkeep:5,  trainingTimeSec:120,  counters:["archer"],  weakTo:["infantry"], unlockLv:2, color:"from-amber-900 to-yellow-950",  border:"border-amber-700" },
-  { id:"siege",       name:"Siege Engines",  icon:"💣", role:"Structure Destroyer",     desc:"Catapults that devastate base defenses. Weak in open field.",      goldCost:1200, upkeep:12, trainingTimeSec:480,  counters:[],          weakTo:["infantry","cavalry"], unlockLv:3, color:"from-red-900 to-rose-950",   border:"border-red-700" },
-  { id:"elite_guard", name:"Elite Guard",    icon:"⚔️", role:"Hero Unit / All-rounder", desc:"Your personal guard. Inherits your hero's racial combat bonuses.", goldCost:5000, upkeep:40, trainingTimeSec:1800, counters:[],          weakTo:[],           unlockLv:5, color:"from-violet-900 to-purple-950", border:"border-violet-700" },
+  { id:"infantry",    name:"Infantry",       icon:"🗡️", role:"Tank / Anti-Cavalry",    desc:"Armored front-line fighters. Counter cavalry charges.",          goldCost:2000,  upkeep:500,   trainingTimeSec:5,   counters:["cavalry"], weakTo:["archer"],   unlockLv:1, color:"from-slate-700 to-gray-800",    border:"border-slate-600" },
+  { id:"archer",      name:"Archers",        icon:"🏹", role:"Ranged / Anti-Infantry",  desc:"Ranged attackers devastating against dense infantry formations.",  goldCost:3000,  upkeep:750,   trainingTimeSec:8,   counters:["infantry"],weakTo:["cavalry"],  unlockLv:1, color:"from-green-900 to-emerald-950", border:"border-green-700" },
+  { id:"cavalry",     name:"Cavalry",        icon:"🐴", role:"Fast / Anti-Archer",      desc:"Swift mounted warriors who smash archer lines.",                   goldCost:8000,  upkeep:2000,  trainingTimeSec:20,  counters:["archer"],  weakTo:["infantry"], unlockLv:2, color:"from-amber-900 to-yellow-950",  border:"border-amber-700" },
+  { id:"siege",       name:"Siege Engines",  icon:"💣", role:"Structure Destroyer",     desc:"Catapults that devastate base defenses. Weak in open field.",      goldCost:30000, upkeep:8000,  trainingTimeSec:90,  counters:[],          weakTo:["infantry","cavalry"], unlockLv:3, color:"from-red-900 to-rose-950",   border:"border-red-700" },
+  { id:"elite_guard", name:"Elite Guard",    icon:"⚔️", role:"Hero Unit / All-rounder", desc:"Your personal guard. Inherits your hero's racial combat bonuses.", goldCost:100000,upkeep:30000, trainingTimeSec:450, counters:[],          weakTo:[],           unlockLv:5, color:"from-violet-900 to-purple-950", border:"border-violet-700" },
 ] as const;
 
 type SoldierType = typeof SOLDIER_DEFS[number]["id"];
@@ -32,7 +32,11 @@ function fmtDuration(ms: number): string {
 
 function calcTrainingMs(type: SoldierType, count: number, barracksLevel = 1): number {
   const def = SOLDIER_DEFS.find(d => d.id === type)!;
-  const speedMult = barracksLevel >= 4 ? 0.6 : barracksLevel >= 3 ? 0.75 : barracksLevel >= 2 ? 0.88 : 1.0;
+  const speedMult =
+    barracksLevel >= 5 ? 0.35 :
+    barracksLevel >= 4 ? 0.50 :
+    barracksLevel >= 3 ? 0.65 :
+    barracksLevel >= 2 ? 0.80 : 1.0;
   return Math.floor(def.trainingTimeSec * count * speedMult) * 1000;
 }
 
@@ -184,8 +188,8 @@ export default function Barracks() {
   const heroLuckBonus = (1 + (stats.Luck ?? 10) / 500);
   const totalHeroMult = heroAtkBonus * heroLuckBonus;
 
-  const speedMult = barracksLevel >= 4 ? 0.6 : barracksLevel >= 3 ? 0.75 : barracksLevel >= 2 ? 0.88 : 1.0;
-  const speedLabel = barracksLevel >= 4 ? "40% faster" : barracksLevel >= 3 ? "25% faster" : barracksLevel >= 2 ? "12% faster" : "Normal speed";
+  const speedMult = barracksLevel >= 5 ? 0.35 : barracksLevel >= 4 ? 0.50 : barracksLevel >= 3 ? 0.65 : barracksLevel >= 2 ? 0.80 : 1.0;
+  const speedLabel = barracksLevel >= 5 ? "65% faster" : barracksLevel >= 4 ? "50% faster" : barracksLevel >= 3 ? "35% faster" : barracksLevel >= 2 ? "20% faster" : "Normal speed";
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
@@ -217,7 +221,7 @@ export default function Barracks() {
               </div>
             </div>
             {peaceShield && <div className="text-xs text-blue-400">🛡️ Peace shield: {shieldRemaining}m left</div>}
-            {barracksLevel === 0 && <div className="text-xs text-orange-400">⚠️ Build Barracks in your Base first</div>}
+            {barracksLevel === 0 && <div className="text-xs text-orange-400">⚠️ Build Barracks in your Base (requires Tier 3+)</div>}
           </div>
         </div>
 
@@ -265,7 +269,7 @@ export default function Barracks() {
               <div className="bg-amber-950/30 border border-amber-700 rounded-xl p-5 text-center">
                 <p className="text-3xl mb-2">🏗️</p>
                 <p className="text-amber-200 font-bold">No Barracks built yet</p>
-                <p className="text-gray-400 text-sm mt-1">Build or upgrade a Barracks in your Base (requires Tier 5+) to raise an army.</p>
+                <p className="text-gray-400 text-sm mt-1">Upgrade your Base to Tier 3 (Keep) or higher, then build the Barracks room to raise an army.</p>
               </div>
             )}
 

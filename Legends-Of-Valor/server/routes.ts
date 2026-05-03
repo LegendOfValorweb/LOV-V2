@@ -1882,8 +1882,8 @@ export async function registerRoutes(
         roomLevels,
         maxRoomLevel,
         availableRooms,
-        nextTierCost: baseTier < 5 ? BASE_TIER_COSTS[baseTier] : null,
-        nextTierRank: baseTier < 5 ? BASE_TIER_RANK_REQUIREMENTS[baseTier] : null,
+        nextTierCost: baseTier < 8 ? BASE_TIER_COSTS[baseTier] : null,
+        nextTierRank: baseTier < 8 ? BASE_TIER_RANK_REQUIREMENTS[baseTier] : null,
         vaultGold: account.vaultGold || 0,
         trainingStatus,
       });
@@ -19973,11 +19973,15 @@ export async function registerRoutes(
       const account = await storage.getAccount(req.params.accountId);
       if (!account) return res.status(404).json({ error: "Not found" });
 
+      // Require base tier 3+ (Keep) to command an army
+      if ((account.baseTier ?? 1) < 3) return res.status(400).json({ error: "Commanding an army requires a Base Tier 3 (Keep) or higher. Upgrade your base first." });
+
       const { getSoldierDef, SOLDIER_DEFS, calcTrainingDurationMs } = await import("@shared/army-data");
       const def = SOLDIER_DEFS.find((s: any) => s.id === type);
       if (!def) return res.status(400).json({ error: "Unknown soldier type" });
 
       const barracksLevel = (account.baseRoomLevels as any)?.barracks ?? 0;
+      if (barracksLevel < 1) return res.status(400).json({ error: "Build a Barracks in your base first (Base → Room Upgrades → Barracks)" });
       if (barracksLevel < def.unlockBarracksLevel) return res.status(400).json({ error: `Requires Barracks level ${def.unlockBarracksLevel}` });
 
       const totalCost = def.goldCost * count;
@@ -20093,10 +20097,18 @@ export async function registerRoutes(
       const [attacker, defender] = await Promise.all([storage.getAccount(attackerId), storage.getAccount(defenderId)]);
       if (!attacker || !defender) return res.status(404).json({ error: "Account not found" });
 
-      // Peace shield check
+      // Peace shield & raid cooldown checks
       const now = new Date();
       if ((attacker as any).peaceShieldExpires && new Date((attacker as any).peaceShieldExpires) > now) {
         return res.status(400).json({ error: "You are under a peace shield" });
+      }
+      const RAID_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours per attacker
+      if ((attacker as any).armyLastRaidAt) {
+        const msSinceLastRaid = now.getTime() - new Date((attacker as any).armyLastRaidAt).getTime();
+        if (msSinceLastRaid < RAID_COOLDOWN_MS) {
+          const minsLeft = Math.ceil((RAID_COOLDOWN_MS - msSinceLastRaid) / 60000);
+          return res.status(400).json({ error: `Raid cooldown active — ${minsLeft} minute${minsLeft === 1 ? "" : "s"} remaining before your army can march again.` });
+        }
       }
 
       const [atkArmyRows, defArmyRows] = await Promise.all([
@@ -20153,6 +20165,9 @@ export async function registerRoutes(
       // 8-hour peace shield for defender after being successfully raided
       const shieldExpiry = new Date(Date.now() + 8 * 60 * 60 * 1000);
       await storage.updateAccount(defenderId, { peaceShieldExpires: shieldExpiry } as any);
+
+      // Record raid timestamp on attacker for cooldown
+      await storage.updateAccount(attackerId, { armyLastRaidAt: now } as any);
 
       evictAccountCache(attackerId);
       evictAccountCache(defenderId);

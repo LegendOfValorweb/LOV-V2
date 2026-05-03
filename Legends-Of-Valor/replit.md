@@ -4,26 +4,32 @@
 
 Legends of Valor is a text-based fantasy RPG with trading, combat, guild systems, and extensive progression mechanics. Players choose from 14 races with unique bonuses, progress through 15 ranks from Novice to Mythical Legend, explore 12 zones, climb a 50-floor Mystic Tower, and work toward endgame content with billion-scale power.
 
-## Army System (Barracks) — Updated
+## Army System (Barracks) — Audited & Balanced
 
 The army system uses a **Whiteout Survival-style training queue** with no hard troop cap.
 
 ### Key Design Points
 - **No army cap** — players can train unlimited soldiers (limited only by gold and upkeep costs)
-- **Time-gated training** — gold is spent immediately; soldiers graduate to the army after a training duration
-  - Infantry: 30s/unit | Archers: 45s/unit | Cavalry: 2m/unit | Siege: 8m/unit | Elite Guard: 30m/unit
-  - Barracks Lv2 = 12% faster, Lv3 = 25% faster, Lv4+ = 40% faster
+- **Requires Base Tier 3+ (Keep)** — server-enforced; players must upgrade their base before commanding armies
+- **Time-gated training** — gold is spent immediately; soldiers graduate after a training duration
+  - Infantry: 5s/unit | Archers: 8s/unit | Cavalry: 20s/unit | Siege: 90s/unit | Elite Guard: 450s/unit
+  - Barracks Lv2 = 20% faster, Lv3 = 35% faster, Lv4 = 50% faster, Lv5 = 65% faster
+- **Balanced costs** — designed so Champion-rank players (10M–25M g/hr) can sustain ~20,000 infantry comfortably
+  - Infantry: 2,000g recruit / 500g/hr upkeep
+  - Archers: 3,000g / 750g/hr | Cavalry: 8,000g / 2,000g/hr
+  - Siege: 30,000g / 8,000g/hr | Elite Guard: 100,000g / 30,000g/hr
+- **Per-attacker raid cooldown** — 2-hour cooldown after each raid (tracked via `armyLastRaidAt` column)
 - **Hero leads the army** — the player's equipped gear boosts their Str/Luck stats, which multiply army ATK in raids
   - `heroAtkBonus = 1 + Str/300` | `heroLuckBonus = 1 + Luck/500`
   - The Barracks UI shows these bonuses in real-time
 - **Training queue UI** — dedicated "⏳ Training" tab shows in-progress batches with live progress bars and countdowns (auto-refreshes every 5s)
-- **Shop items** — buying equipment from the shop equips to the hero normally; hero stats directly amplify the army via the bonus formulas above
 
 ### DB Schema
 - `armies` table — active troop counts per type (infantry/archer/cavalry/siege/elite_guard) + level
 - `army_training_queue` table — in-flight training batches with `completesAt` timestamp
   - Graduated to `armies` automatically when GET /api/accounts/:id/army or the queue endpoint is called
 - `army_raids` table — raid history with snapshots, events, losses, gold looted
+- `accounts.armyLastRaidAt` — timestamp of attacker's last raid (for 2-hour cooldown enforcement)
 
 ## Game Math Reference (Audited & Fixed)
 
@@ -58,6 +64,13 @@ Win counts unchanged. Floor requirements reduced to match 1.5× tower formula:
 - Grandmaster: floor 12, Champion: floor 15, Overlord: floor 18
 - Sovereign: floor 22, Ascendant: floor 26, Legend: floor 29
 - Mythic: floor 32, Mythical Legend: floor 35
+
+### Base Tier Rank Requirements (Fixed)
+`BASE_TIER_RANK_REQUIREMENTS` previously had "Legend" (rank 12) before "Champion" (rank 8), making Tier 4→5 require a higher rank than Tier 5→6. Now fixed to be strictly increasing:
+- Tier 1→2: Journeyman | Tier 2→3: Expert | Tier 3→4: Grandmaster
+- Tier 4→5: Champion | Tier 5→6: Overlord | Tier 6→7: Ascendant | Tier 7→8: Mythical Legend
+
+Barracks access now aligns with Tier 3 (Keep), which requires Expert rank — a natural mid-early-game milestone.
 
 ### PCG Quest Rewards
 `reward = BASE_REWARD × rankRewardMult` where `rankRewardMult = 1.3^rankIndex`
