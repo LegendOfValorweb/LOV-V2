@@ -15,178 +15,273 @@ export function getResourceWeight(rarity: string): number {
 
 export { calculateCarryCapacity };
 
+// ─── FLOOR TARGET POWER RANGES (5x per floor) ────────────────────────────────
+// Floor 1: 100-500       Floor 2: 500-2500      Floor 3: 2500-12500
+// Floor 4: 12500-62500   Floor 5: 62500-312500  Floor 6: 312K-1.56M
+// Floor 7: 1.56M-7.8M   Floor 8: 7.8M-39M      Floor 9: 39M-195M
+// Floor10: 195M-976M     Floor11: 976M-4.9B     Floor12: 4.9B-24.4B
+// Items need combined stats from 3 gear slots ≈ 1.3× floor midpoint
+
+// ─── TIER 1 – Normal (Novice / Floor 1–2, targets ~400 per main stat) ─────────
 const tier1Items: Omit<Item, "id" | "tier">[] = [
-  {"name": "Arcane Staff", "type": "weapon", "stats": {"Int": 20}, "price": 300},
-  {"name": "Thunder Hammer", "type": "weapon", "stats": {"Str": 12, "Luck": 5}, "special": "Stun 5%", "price": 280},
-  {"name": "Shadow Cloak", "type": "armor", "stats": {"Spd": 10, "Luck": 5}, "price": 300},
-  {"name": "Mystic Robes", "type": "armor", "stats": {"Int": 20}, "price": 300},
-  {"name": "Guardian Plate", "type": "armor", "stats": {"Str": 15}, "price": 320},
-  {"name": "Frost Dagger", "type": "weapon", "stats": {"Spd": 15}, "special": "Freeze 1t", "price": 330},
-  {"name": "Ember Wand", "type": "weapon", "stats": {"Int": 18}, "special": "Burn 2t", "price": 340},
-  {"name": "Lucky Ring", "type": "accessory", "stats": {"Luck": 20}, "price": 345},
-  {"name": "Flame Cloak", "type": "armor", "stats": {"Str": 15}, "special": "Fire Resist", "price": 350},
-  {"name": "Swift Helm", "type": "armor", "stats": {"Spd": 12, "Int": 5}, "price": 355},
-  {"name": "Thunder Bow", "type": "weapon", "stats": {"Spd": 18}, "special": "Stun 5%", "price": 360},
-  {"name": "Arcane Amulet", "type": "accessory", "stats": {"Int": 20}, "special": "Mana Regen", "price": 365},
-  {"name": "Shadow Saber", "type": "weapon", "stats": {"Str": 20}, "special": "Critical +5%", "price": 370},
-  {"name": "Frost Robes", "type": "armor", "stats": {"Int": 18}, "special": "Freeze", "price": 365},
-  {"name": "Lucky Pendant", "type": "accessory", "stats": {"Luck": 22, "Str": 6}, "price": 370},
+  { name: "Arcane Staff",       type: "weapon",    stats: { Int: 350 },                  special: "Mana Regen",       price: 300 },
+  { name: "Thunder Hammer",     type: "weapon",    stats: { Str: 280, Luck: 80 },        special: "Stun 5%",          price: 280 },
+  { name: "Shadow Cloak",       type: "armor",     stats: { Spd: 260, Luck: 80 },                                     price: 300 },
+  { name: "Mystic Robes",       type: "armor",     stats: { Int: 320 },                                               price: 300 },
+  { name: "Guardian Plate",     type: "armor",     stats: { Str: 350 },                                               price: 320 },
+  { name: "Frost Dagger",       type: "weapon",    stats: { Spd: 320 },                  special: "Freeze 1t",        price: 330 },
+  { name: "Ember Wand",         type: "weapon",    stats: { Int: 310 },                  special: "Burn 2t",          price: 340 },
+  { name: "Lucky Ring",         type: "accessory", stats: { Luck: 380 },                                              price: 345 },
+  { name: "Flame Cloak",        type: "armor",     stats: { Str: 330 },                  special: "Fire Resist",      price: 350 },
+  { name: "Swift Helm",         type: "armor",     stats: { Spd: 280, Int: 100 },                                     price: 355 },
+  { name: "Thunder Bow",        type: "weapon",    stats: { Spd: 360 },                  special: "Stun 5%",          price: 360 },
+  { name: "Arcane Amulet",      type: "accessory", stats: { Int: 340 },                  special: "Mana Regen",       price: 365 },
+  { name: "Shadow Saber",       type: "weapon",    stats: { Str: 380 },                  special: "Critical +5%",     price: 370 },
+  { name: "Frost Robes",        type: "armor",     stats: { Int: 340 },                  special: "Freeze",           price: 365 },
+  { name: "Lucky Pendant",      type: "accessory", stats: { Luck: 400, Str: 120 },                                    price: 370 },
 ];
 
+// ─── TIER 2 – Super Rare (Novice / Floor 1–2, ~700 per main stat) ─────────────
 const tier2Items: Omit<Item, "id" | "tier">[] = [
-  {"name": "Elemental Vest", "type": "armor", "stats": {"Str": 10, "Spd": 10, "Int": 10, "Luck": 10}, "price": 400},
-  {"name": "SR Ring of Fortune", "type": "accessory", "stats": {"Luck": 20}, "price": 420},
-  {"name": "Frost Bow", "type": "weapon", "stats": {"Spd": 10, "Luck": 10}, "special": "Critical +8%", "price": 430},
-  {"name": "Ember Robes", "type": "armor", "stats": {"Int": 18}, "special": "Fire Resist", "price": 440},
-  {"name": "Shadow Fang", "type": "weapon", "stats": {"Str": 20}, "special": "Stun 8%", "price": 445},
-  {"name": "Arcane Sabre", "type": "weapon", "stats": {"Str": 22}, "special": "Critical +8%", "price": 450},
-  {"name": "Lightning Dagger", "type": "weapon", "stats": {"Spd": 18}, "special": "Life Steal 5%", "price": 455},
-  {"name": "SR Ring of Insight", "type": "accessory", "stats": {"Int": 22, "Luck": 10}, "price": 460},
-  {"name": "SR Swift Boots", "type": "armor", "stats": {"Spd": 20, "Str": 12}, "price": 465},
-  {"name": "SR Ember Staff", "type": "weapon", "stats": {"Int": 25}, "special": "Burn 3t", "price": 470},
-  {"name": "SR Frost Fang", "type": "weapon", "stats": {"Str": 25}, "special": "Stun 8%", "price": 470},
-  {"name": "SR Lucky Pendant", "type": "accessory", "stats": {"Luck": 25, "Str": 15}, "price": 475},
-  {"name": "Shadow Blade", "type": "weapon", "stats": {"Str": 27}, "special": "Life Steal 5%", "price": 480},
-  {"name": "SR Arcane Mantle", "type": "armor", "stats": {"Int": 27}, "special": "Magic Shield", "price": 480},
-  {"name": "Ring of Valor", "type": "accessory", "stats": {"Luck": 28, "Int": 18}, "price": 490},
+  { name: "Elemental Vest",         type: "armor",     stats: { Str: 200, Spd: 200, Int: 200, Luck: 200 },                          price: 400 },
+  { name: "SR Ring of Fortune",     type: "accessory", stats: { Luck: 750 },                                                         price: 420 },
+  { name: "Frost Bow",              type: "weapon",    stats: { Spd: 600, Luck: 250 },               special: "Critical +8%",        price: 430 },
+  { name: "Ember Robes",            type: "armor",     stats: { Int: 680 },                           special: "Fire Resist",         price: 440 },
+  { name: "Shadow Fang",            type: "weapon",    stats: { Str: 720 },                           special: "Stun 8%",             price: 445 },
+  { name: "Arcane Sabre",           type: "weapon",    stats: { Str: 760 },                           special: "Critical +8%",        price: 450 },
+  { name: "Lightning Dagger",       type: "weapon",    stats: { Spd: 700 },                           special: "Life Steal 5%",       price: 455 },
+  { name: "SR Ring of Insight",     type: "accessory", stats: { Int: 700, Luck: 280 },                                               price: 460 },
+  { name: "SR Swift Boots",         type: "armor",     stats: { Spd: 720, Str: 280 },                                               price: 465 },
+  { name: "SR Ember Staff",         type: "weapon",    stats: { Int: 780 },                           special: "Burn 3t",             price: 470 },
+  { name: "SR Frost Fang",          type: "weapon",    stats: { Str: 800 },                           special: "Stun 8%",             price: 470 },
+  { name: "SR Lucky Pendant",       type: "accessory", stats: { Luck: 820, Str: 300 },                                               price: 475 },
+  { name: "Shadow Blade",           type: "weapon",    stats: { Str: 850 },                           special: "Life Steal 5%",       price: 480 },
+  { name: "SR Arcane Mantle",       type: "armor",     stats: { Int: 850 },                           special: "Magic Shield",        price: 480 },
+  { name: "Ring of Valor",          type: "accessory", stats: { Luck: 900, Int: 400 },                                               price: 490 },
 ];
 
+// ─── TIER 3 – X-Tier (Novice / Floor 2–3, ~1500 per main stat) ───────────────
 const tier3Items: Omit<Item, "id" | "tier">[] = [
-  {"name": "Titan's Hammer", "type": "weapon", "stats": {"Str": 40, "Luck": 20}, "special": "Poison 3t", "price": 1000},
-  {"name": "Infinity Bow", "type": "weapon", "stats": {"Spd": 40, "Luck": 20}, "special": "Freeze 2t", "price": 1000},
-  {"name": "Sage's Staff", "type": "weapon", "stats": {"Int": 40}, "special": "Life Steal 8%", "price": 1000},
-  {"name": "Omniguard Armor", "type": "armor", "stats": {"Str": 35, "Spd": 35, "Int": 35, "Luck": 35}, "price": 1050},
-  {"name": "Dragonfang Blade", "type": "weapon", "stats": {"Str": 45, "Spd": 25}, "special": "Critical +10%", "price": 1100},
-  {"name": "Archmage Robes", "type": "armor", "stats": {"Int": 45, "Luck": 25}, "price": 1100},
-  {"name": "Shadow Eclipse Cloak", "type": "armor", "stats": {"Spd": 42, "Luck": 30}, "price": 1120},
-  {"name": "Phoenix Saber", "type": "weapon", "stats": {"Str": 50}, "special": "Critical +10%", "price": 1150},
-  {"name": "Frostbite Bow", "type": "weapon", "stats": {"Spd": 48}, "special": "Freeze 2t", "price": 1150},
-  {"name": "Orb of Wisdom", "type": "accessory", "stats": {"Int": 45, "Luck": 20}, "price": 1130},
-  {"name": "Titan Gauntlets", "type": "armor", "stats": {"Str": 40, "Spd": 20}, "price": 1050},
-  {"name": "Lightning Hammer", "type": "weapon", "stats": {"Str": 48}, "special": "Poison 3t", "price": 1150},
-  {"name": "Mystic Staff", "type": "weapon", "stats": {"Int": 50}, "special": "Life Steal 8%", "price": 1150},
-  {"name": "Ring of Omniscience", "type": "accessory", "stats": {"Luck": 45}, "price": 1150},
+  { name: "Titan's Hammer",          type: "weapon",    stats: { Str: 1800, Luck: 600 },   special: "Poison 3t",        price: 1000 },
+  { name: "Infinity Bow",            type: "weapon",    stats: { Spd: 1800, Luck: 600 },   special: "Freeze 2t",        price: 1000 },
+  { name: "Sage's Staff",            type: "weapon",    stats: { Int: 1800 },               special: "Life Steal 8%",    price: 1000 },
+  { name: "Omniguard Armor",         type: "armor",     stats: { Str: 1000, Spd: 1000, Int: 1000, Luck: 1000 },         price: 1050 },
+  { name: "Dragonfang Blade",        type: "weapon",    stats: { Str: 2000, Spd: 700 },     special: "Critical +10%",    price: 1100 },
+  { name: "Archmage Robes",          type: "armor",     stats: { Int: 2000, Luck: 700 },                                 price: 1100 },
+  { name: "Shadow Eclipse Cloak",    type: "armor",     stats: { Spd: 1800, Luck: 900 },                                 price: 1120 },
+  { name: "Phoenix Saber",           type: "weapon",    stats: { Str: 2200 },               special: "Critical +10%",    price: 1150 },
+  { name: "Frostbite Bow",           type: "weapon",    stats: { Spd: 2100 },               special: "Freeze 2t",        price: 1150 },
+  { name: "Orb of Wisdom",           type: "accessory", stats: { Int: 1900, Luck: 700 },                                 price: 1130 },
+  { name: "Titan Gauntlets",         type: "armor",     stats: { Str: 1800, Spd: 700 },                                  price: 1050 },
+  { name: "Lightning Hammer",        type: "weapon",    stats: { Str: 2100 },               special: "Poison 3t",        price: 1150 },
+  { name: "Mystic Staff",            type: "weapon",    stats: { Int: 2200 },               special: "Life Steal 8%",    price: 1150 },
+  { name: "Ring of Omniscience",     type: "accessory", stats: { Luck: 2100 },                                           price: 1150 },
 ];
 
+// ─── TIER 4 – UMR (Novice / Floor 3, ~4000 per main stat) ────────────────────
 const tier4Items: Omit<Item, "id" | "tier">[] = [
-  {"name": "Oblivion Fang", "type": "weapon", "stats": {"Str": 80, "Luck": 50}, "special": "Stun 10%", "price": 10000},
-  {"name": "Eternal Eclipse Blade", "type": "weapon", "stats": {"Str": 85, "Spd": 45}, "special": "Double Strike", "price": 10500},
-  {"name": "Archmage's Eternal Robe", "type": "armor", "stats": {"Int": 85, "Luck": 50}, "price": 10500},
-  {"name": "Shadow Eclipse Mantle", "type": "armor", "stats": {"Spd": 80, "Luck": 50}, "price": 10200},
-  {"name": "Phoenix Soul Saber", "type": "weapon", "stats": {"Str": 90}, "special": "Double Strike", "price": 11000},
-  {"name": "Frost Reaper Bow", "type": "weapon", "stats": {"Spd": 88}, "special": "Silence 1t", "price": 11000},
-  {"name": "Orb of Divine Insight", "type": "accessory", "stats": {"Int": 85, "Luck": 45}, "price": 10700},
-  {"name": "Titan's Gauntlets", "type": "armor", "stats": {"Str": 80, "Spd": 50}, "price": 10200},
-  {"name": "Lightning Devastator", "type": "weapon", "stats": {"Str": 90}, "special": "Life Steal 12%", "price": 11000},
-  {"name": "Mystic Grand Staff", "type": "weapon", "stats": {"Int": 90}, "special": "Stun 10%", "price": 11000},
-  {"name": "Ring of Eternal Omniscience", "type": "accessory", "stats": {"Luck": 90}, "price": 11000},
-  {"name": "Pendant of Absolute Luck", "type": "accessory", "stats": {"Luck": 90, "Str": 45}, "price": 11200},
+  { name: "Oblivion Fang",              type: "weapon",    stats: { Str: 4500, Luck: 1800 },   special: "Stun 10%",         price: 10000 },
+  { name: "Eternal Eclipse Blade",      type: "weapon",    stats: { Str: 4800, Spd: 1800 },    special: "Double Strike",    price: 10500 },
+  { name: "Archmage's Eternal Robe",    type: "armor",     stats: { Int: 4800, Luck: 1800 },                                price: 10500 },
+  { name: "Shadow Eclipse Mantle",      type: "armor",     stats: { Spd: 4500, Luck: 1800 },                                price: 10200 },
+  { name: "Phoenix Soul Saber",         type: "weapon",    stats: { Str: 5200 },               special: "Double Strike",    price: 11000 },
+  { name: "Frost Reaper Bow",           type: "weapon",    stats: { Spd: 5000 },               special: "Silence 1t",       price: 11000 },
+  { name: "Orb of Divine Insight",      type: "accessory", stats: { Int: 4800, Luck: 1600 },                                price: 10700 },
+  { name: "Titan's Gauntlets",          type: "armor",     stats: { Str: 4500, Spd: 1800 },                                price: 10200 },
+  { name: "Lightning Devastator",       type: "weapon",    stats: { Str: 5200 },               special: "Life Steal 12%",   price: 11000 },
+  { name: "Mystic Grand Staff",         type: "weapon",    stats: { Int: 5200 },               special: "Stun 10%",         price: 11000 },
+  { name: "Ring of Eternal Omniscience",type: "accessory", stats: { Luck: 5200 },                                           price: 11000 },
+  { name: "Pendant of Absolute Luck",   type: "accessory", stats: { Luck: 5200, Str: 2200 },                                price: 11200 },
 ];
 
+// ─── TIER 5 – SSUMR (Apprentice / Floor 3–4, ~10000 per main stat) ───────────
 const tier5Items: Omit<Item, "id" | "tier">[] = [
-  {"name": "SSUMR Dragon Slayer", "type": "weapon", "stats": {"Str": 120}, "special": "Dragon Bane", "price": 5000},
-  {"name": "SSUMR Sage Staff", "type": "weapon", "stats": {"Int": 120}, "special": "Sage Wisdom", "price": 5000},
+  { name: "SSUMR Dragon Slayer",   type: "weapon",    stats: { Str: 10000, Luck: 3000 },  special: "Dragon Bane",      price: 5000 },
+  { name: "SSUMR Sage Staff",      type: "weapon",    stats: { Int: 10000, Luck: 3000 },  special: "Sage Wisdom",      price: 5000 },
+  { name: "SSUMR Void Blade",      type: "weapon",    stats: { Str: 11000, Spd: 4000 },   special: "Void Slash",       price: 5500 },
+  { name: "SSUMR Spirit Robe",     type: "armor",     stats: { Int: 9500, Spd: 4000 },                                  price: 5200 },
+  { name: "SSUMR Titan Plate",     type: "armor",     stats: { Str: 10000, Pot: 4000 },                                 price: 5300 },
+  { name: "SSUMR Fortune Ring",    type: "accessory", stats: { Luck: 12000, Int: 4000 },                                price: 5800 },
 ];
 
+// ─── TIER 6 – Divine (Apprentice / Floor 4, ~18000 per main stat) ────────────
 const tier6Items: Omit<Item, "id" | "tier">[] = [
-  {"name": "Divine World Breaker", "type": "weapon", "stats": {"Str": 250}, "special": "World Ender", "price": 15000},
-  {"name": "Divine Eternity Wand", "type": "weapon", "stats": {"Int": 250}, "special": "Eternal Mana", "price": 15000},
+  { name: "Divine World Breaker",   type: "weapon",    stats: { Str: 20000, Luck: 6000 },  special: "World Ender",      price: 15000 },
+  { name: "Divine Eternity Wand",   type: "weapon",    stats: { Int: 20000, Luck: 6000 },  special: "Eternal Mana",     price: 15000 },
+  { name: "Divine Aegis Plate",     type: "armor",     stats: { Str: 18000, Pot: 8000 },                                price: 14000 },
+  { name: "Divine Veil Robe",       type: "armor",     stats: { Int: 18000, Spd: 7000 },                                price: 14000 },
+  { name: "Divine Star Amulet",     type: "accessory", stats: { Luck: 22000, Int: 8000 },                               price: 16000 },
+  { name: "Divine Storm Bow",       type: "weapon",    stats: { Spd: 20000, Luck: 6000 },  special: "Stun 10%",         price: 15500 },
 ];
 
+// ─── Initiate (Initiate / Floor 4–5, ~35000 per main stat) ───────────────────
 const initiateItems: Omit<Item, "id" | "tier">[] = [
-  {"name": "Initiate Training Sword", "type": "weapon", "stats": {"Str": 40}, "price": 600},
-  {"name": "Initiate Apprentice Wand", "type": "weapon", "stats": {"Int": 40}, "price": 600},
+  { name: "Initiate War Blade",        type: "weapon",    stats: { Str: 38000, Luck: 12000 },   special: "Critical +12%",   price: 35000 },
+  { name: "Initiate Arcane Rod",       type: "weapon",    stats: { Int: 38000, Luck: 12000 },   special: "Silence 1t",      price: 35000 },
+  { name: "Initiate Swift Bow",        type: "weapon",    stats: { Spd: 40000, Luck: 12000 },   special: "Freeze 2t",       price: 36000 },
+  { name: "Initiate Iron Plate",       type: "armor",     stats: { Str: 35000, Pot: 15000 },                               price: 33000 },
+  { name: "Initiate Mage Robe",        type: "armor",     stats: { Int: 35000, Spd: 14000 },                               price: 33000 },
+  { name: "Initiate Luck Stone",       type: "accessory", stats: { Luck: 45000, Str: 15000 },                              price: 38000 },
+  { name: "Initiate Focus Charm",      type: "accessory", stats: { Int: 42000, Luck: 14000 },                              price: 37000 },
 ];
 
+// ─── Journeyman (Journeyman / Floor 5–6, ~100000 per main stat) ──────────────
 const journeymanItems: Omit<Item, "id" | "tier">[] = [
-  {"name": "Journeyman Steel Blade", "type": "weapon", "stats": {"Str": 80}, "price": 1200},
-  {"name": "Journeyman Focus Staff", "type": "weapon", "stats": {"Int": 80}, "price": 1200},
+  { name: "Journeyman Steel Blade",    type: "weapon",    stats: { Str: 110000, Luck: 35000 },  special: "Critical +12%",   price: 120000 },
+  { name: "Journeyman Focus Staff",    type: "weapon",    stats: { Int: 110000, Luck: 35000 },  special: "Life Steal 10%",  price: 120000 },
+  { name: "Journeyman War Bow",        type: "weapon",    stats: { Spd: 115000, Luck: 35000 },  special: "Poison 3t",       price: 125000 },
+  { name: "Journeyman Battle Plate",   type: "armor",     stats: { Str: 100000, Pot: 40000 },                               price: 110000 },
+  { name: "Journeyman Sage Robe",      type: "armor",     stats: { Int: 100000, Spd: 38000 },                               price: 110000 },
+  { name: "Journeyman Power Ring",     type: "accessory", stats: { Luck: 125000, Str: 40000 },                              price: 130000 },
+  { name: "Journeyman Mana Crystal",   type: "accessory", stats: { Int: 120000, Luck: 38000 },                              price: 128000 },
 ];
 
+// ─── Adept (Adept / Floor 6–7, ~300000 per main stat) ────────────────────────
 const adeptItems: Omit<Item, "id" | "tier">[] = [
-  {"name": "Adept Battle Axe", "type": "weapon", "stats": {"Str": 150}, "price": 2500},
-  {"name": "Adept Mystic Orb", "type": "weapon", "stats": {"Int": 150}, "price": 2500},
+  { name: "Adept Battle Axe",          type: "weapon",    stats: { Str: 340000, Luck: 100000 }, special: "Double Strike",   price: 350000 },
+  { name: "Adept Mystic Orb",          type: "weapon",    stats: { Int: 340000, Luck: 100000 }, special: "Stun 12%",        price: 350000 },
+  { name: "Adept Storm Lance",         type: "weapon",    stats: { Spd: 360000, Luck: 100000 }, special: "Critical +15%",   price: 370000 },
+  { name: "Adept Fortress Plate",      type: "armor",     stats: { Str: 310000, Pot: 120000 },                              price: 320000 },
+  { name: "Adept Arcana Robe",         type: "armor",     stats: { Int: 310000, Spd: 110000 },                              price: 320000 },
+  { name: "Adept Destiny Ring",        type: "accessory", stats: { Luck: 400000, Str: 120000 },                             price: 390000 },
+  { name: "Adept Wisdom Pendant",      type: "accessory", stats: { Int: 380000, Luck: 115000 },                             price: 380000 },
 ];
 
+// ─── Expert (Expert / Floor 7–8, ~1000000 per main stat) ─────────────────────
 const expertItems: Omit<Item, "id" | "tier">[] = [
-  {"name": "Expert War Hammer", "type": "weapon", "stats": {"Str": 300}, "price": 6000},
-  {"name": "Expert Sorcerer Cane", "type": "weapon", "stats": {"Int": 300}, "price": 6000},
+  { name: "Expert War Hammer",         type: "weapon",    stats: { Str: 1100000, Luck: 350000 },  special: "Dragon Bane",     price: 1200000 },
+  { name: "Expert Sorcerer Cane",      type: "weapon",    stats: { Int: 1100000, Luck: 350000 },  special: "Silence 2t",      price: 1200000 },
+  { name: "Expert Phantom Bow",        type: "weapon",    stats: { Spd: 1150000, Luck: 350000 },  special: "Poison 4t",       price: 1250000 },
+  { name: "Expert Titan Plate",        type: "armor",     stats: { Str: 1000000, Pot: 400000 },                               price: 1100000 },
+  { name: "Expert Archmage Robe",      type: "armor",     stats: { Int: 1000000, Spd: 380000 },                               price: 1100000 },
+  { name: "Expert Chaos Ring",         type: "accessory", stats: { Luck: 1300000, Str: 420000 },                              price: 1350000 },
+  { name: "Expert Sage Talisman",      type: "accessory", stats: { Int: 1250000, Luck: 400000 },                              price: 1300000 },
 ];
 
+// ─── Master (Master / Floor 8–9, ~4000000 per main stat) ─────────────────────
 const masterItems: Omit<Item, "id" | "tier">[] = [
-  {"name": "Master Katana", "type": "weapon", "stats": {"Str": 600}, "price": 15000},
-  {"name": "Master Archmage Staff", "type": "weapon", "stats": {"Int": 600}, "price": 15000},
+  { name: "Master Katana",             type: "weapon",    stats: { Str: 4500000, Luck: 1400000 },  special: "Life Steal 15%",  price: 5000000 },
+  { name: "Master Archmage Staff",     type: "weapon",    stats: { Int: 4500000, Luck: 1400000 },  special: "Stun 15%",        price: 5000000 },
+  { name: "Master Eclipse Bow",        type: "weapon",    stats: { Spd: 4700000, Luck: 1500000 },  special: "Freeze 3t",       price: 5200000 },
+  { name: "Master Celestial Plate",    type: "armor",     stats: { Str: 4200000, Pot: 1600000 },                               price: 4600000 },
+  { name: "Master Void Robe",          type: "armor",     stats: { Int: 4200000, Spd: 1500000 },                               price: 4600000 },
+  { name: "Master Eternity Ring",      type: "accessory", stats: { Luck: 5500000, Str: 1700000 },                              price: 5800000 },
+  { name: "Master Genesis Orb",        type: "accessory", stats: { Int: 5200000, Luck: 1600000 },                              price: 5600000 },
 ];
 
+// ─── Grandmaster (Grandmaster / Floor 9–10, ~15000000 per main stat) ──────────
 const grandmasterItems: Omit<Item, "id" | "tier">[] = [
-  {"name": "Grandmaster Greatsword", "type": "weapon", "stats": {"Str": 1200}, "price": 40000},
-  {"name": "Grandmaster Void Wand", "type": "weapon", "stats": {"Int": 1200}, "price": 40000},
+  { name: "Grandmaster Greatsword",    type: "weapon",    stats: { Str: 17000000, Luck: 5500000 },  special: "Double Strike",    price: 20000000 },
+  { name: "Grandmaster Void Wand",     type: "weapon",    stats: { Int: 17000000, Luck: 5500000 },  special: "Arcane Burst",     price: 20000000 },
+  { name: "Grandmaster Storm Bow",     type: "weapon",    stats: { Spd: 18000000, Luck: 5500000 },  special: "Poison 4t",        price: 21000000 },
+  { name: "Grandmaster Dragonplate",   type: "armor",     stats: { Str: 15000000, Pot: 6000000 },                                price: 18000000 },
+  { name: "Grandmaster Phantom Robe",  type: "armor",     stats: { Int: 15000000, Spd: 5800000 },                                price: 18000000 },
+  { name: "Grandmaster Omega Ring",    type: "accessory", stats: { Luck: 21000000, Str: 6500000 },                               price: 23000000 },
+  { name: "Grandmaster Arcane Stone",  type: "accessory", stats: { Int: 20000000, Luck: 6000000 },                               price: 22000000 },
 ];
 
+// ─── Champion (Champion / Floor 10–11, ~70000000 per main stat) ───────────────
 const championItems: Omit<Item, "id" | "tier">[] = [
-  {"name": "Champion Lance", "type": "weapon", "stats": {"Str": 2500}, "price": 100000},
-  {"name": "Champion Celestial Harp", "type": "weapon", "stats": {"Int": 2500}, "price": 100000},
+  { name: "Champion Lance",            type: "weapon",    stats: { Str: 75000000, Luck: 24000000 },  special: "World Shatter",    price: 90000000 },
+  { name: "Champion Celestial Harp",   type: "weapon",    stats: { Int: 75000000, Luck: 24000000 },  special: "Silence 2t",       price: 90000000 },
+  { name: "Champion Void Bow",         type: "weapon",    stats: { Spd: 80000000, Luck: 24000000 },  special: "Critical +18%",    price: 95000000 },
+  { name: "Champion Genesis Plate",    type: "armor",     stats: { Str: 68000000, Pot: 27000000 },                                price: 82000000 },
+  { name: "Champion Aether Robe",      type: "armor",     stats: { Int: 68000000, Spd: 25000000 },                                price: 82000000 },
+  { name: "Champion Legend Ring",      type: "accessory", stats: { Luck: 95000000, Str: 29000000 },                               price: 105000000 },
+  { name: "Champion Eternity Gem",     type: "accessory", stats: { Int: 90000000, Luck: 27000000 },                               price: 100000000 },
 ];
 
+// ─── Overlord (Overlord / Floor 11–12, ~280000000 per main stat) ──────────────
 const overlordItems: Omit<Item, "id" | "tier">[] = [
-  {"name": "Overlord Scythe", "type": "weapon", "stats": {"Str": 5000}, "price": 250000},
-  {"name": "Overlord Chaos Orb", "type": "weapon", "stats": {"Int": 5000}, "price": 250000},
+  { name: "Overlord Scythe",           type: "weapon",    stats: { Str: 300000000, Luck: 95000000 },  special: "Soul Harvest",     price: 380000000 },
+  { name: "Overlord Chaos Orb",        type: "weapon",    stats: { Int: 300000000, Luck: 95000000 },  special: "Chaos Rift",       price: 380000000 },
+  { name: "Overlord Genesis Bow",      type: "weapon",    stats: { Spd: 320000000, Luck: 95000000 },  special: "Void Arrow",       price: 400000000 },
+  { name: "Overlord Titan Plate",      type: "armor",     stats: { Str: 270000000, Pot: 110000000 },                               price: 340000000 },
+  { name: "Overlord Void Mantle",      type: "armor",     stats: { Int: 270000000, Spd: 100000000 },                               price: 340000000 },
+  { name: "Overlord Omega Ring",       type: "accessory", stats: { Luck: 380000000, Str: 115000000 },                              price: 450000000 },
+  { name: "Overlord Arcane Heart",     type: "accessory", stats: { Int: 360000000, Luck: 110000000 },                              price: 430000000 },
 ];
 
+// ─── Sovereign (Sovereign / Floor 12–13, ~1200000000 per main stat) ───────────
 const sovereignItems: Omit<Item, "id" | "tier">[] = [
-  {"name": "Sovereign Excalibur", "type": "weapon", "stats": {"Str": 10000}, "price": 750000},
-  {"name": "Sovereign Genesis Staff", "type": "weapon", "stats": {"Int": 10000}, "price": 750000},
+  { name: "Sovereign Excalibur",       type: "weapon",    stats: { Str: 1300000000, Luck: 420000000 },  special: "Holy Slash",       price: 1600000000 },
+  { name: "Sovereign Genesis Staff",   type: "weapon",    stats: { Int: 1300000000, Luck: 420000000 },  special: "Genesis Ray",      price: 1600000000 },
+  { name: "Sovereign Storm Spear",     type: "weapon",    stats: { Spd: 1400000000, Luck: 420000000 },  special: "Storm Pierce",     price: 1700000000 },
+  { name: "Sovereign Aegis Plate",     type: "armor",     stats: { Str: 1150000000, Pot: 460000000 },                               price: 1450000000 },
+  { name: "Sovereign Eclipse Robe",    type: "armor",     stats: { Int: 1150000000, Spd: 440000000 },                               price: 1450000000 },
+  { name: "Sovereign Cosmos Ring",     type: "accessory", stats: { Luck: 1650000000, Str: 490000000 },                              price: 1950000000 },
+  { name: "Sovereign Void Crystal",    type: "accessory", stats: { Int: 1550000000, Luck: 470000000 },                              price: 1850000000 },
 ];
 
+// ─── Ascendant (Ascendant / Floor 13–14, ~5000000000 per main stat) ───────────
 const ascendantItems: Omit<Item, "id" | "tier">[] = [
-  {"name": "Ascendant Star-Eater", "type": "weapon", "stats": {"Str": 25000}, "price": 2000000},
-  {"name": "Ascendant Nebula Wand", "type": "weapon", "stats": {"Int": 25000}, "price": 2000000},
+  { name: "Ascendant Star-Eater",      type: "weapon",    stats: { Str: 5500000000, Luck: 1800000000 },  special: "Star Crush",       price: 7000000000 },
+  { name: "Ascendant Nebula Wand",     type: "weapon",    stats: { Int: 5500000000, Luck: 1800000000 },  special: "Nebula Burst",     price: 7000000000 },
+  { name: "Ascendant Cosmic Bow",      type: "weapon",    stats: { Spd: 5800000000, Luck: 1800000000 },  special: "Starfall",         price: 7400000000 },
+  { name: "Ascendant Nova Plate",      type: "armor",     stats: { Str: 5000000000, Pot: 2000000000 },                               price: 6200000000 },
+  { name: "Ascendant Infinity Robe",   type: "armor",     stats: { Int: 5000000000, Spd: 1900000000 },                               price: 6200000000 },
+  { name: "Ascendant Eternity Ring",   type: "accessory", stats: { Luck: 7200000000, Str: 2100000000 },                              price: 8500000000 },
+  { name: "Ascendant Genesis Jewel",   type: "accessory", stats: { Int: 6800000000, Luck: 2000000000 },                              price: 8100000000 },
 ];
 
+// ─── Legend (Legend / Floor 14–15, ~20000000000 per main stat) ────────────────
 const legendItems: Omit<Item, "id" | "tier">[] = [
-  {"name": "Legendary Ragnarok", "type": "weapon", "stats": {"Str": 75000}, "price": 10000000},
-  {"name": "Legendary Chronos Staff", "type": "weapon", "stats": {"Int": 75000}, "price": 10000000},
+  { name: "Legendary Ragnarok",        type: "weapon",    stats: { Str: 22000000000, Luck: 7000000000 },  special: "Ragnarok Strike",  price: 28000000000 },
+  { name: "Legendary Chronos Staff",   type: "weapon",    stats: { Int: 22000000000, Luck: 7000000000 },  special: "Time Warp",        price: 28000000000 },
+  { name: "Legendary Void Bow",        type: "weapon",    stats: { Spd: 24000000000, Luck: 7000000000 },  special: "Void Arrow",       price: 30000000000 },
+  { name: "Legendary Titan Plate",     type: "armor",     stats: { Str: 20000000000, Pot: 8000000000 },                               price: 25000000000 },
+  { name: "Legendary Arcane Robe",     type: "armor",     stats: { Int: 20000000000, Spd: 7500000000 },                               price: 25000000000 },
+  { name: "Legendary Fate Ring",       type: "accessory", stats: { Luck: 28000000000, Str: 8500000000 },                              price: 34000000000 },
+  { name: "Legendary Genesis Gem",     type: "accessory", stats: { Int: 26000000000, Luck: 8000000000 },                              price: 32000000000 },
 ];
 
+// ─── Elite (Elite / Floor 15–16, ~80000000000 per main stat) ──────────────────
 const eliteItems: Omit<Item, "id" | "tier">[] = [
-  {"name": "Elite Vanguard Blade", "type": "weapon", "stats": {"Str": 200000}, "price": 50000000},
-  {"name": "Elite Oracle Eye", "type": "weapon", "stats": {"Int": 200000}, "price": 50000000},
+  { name: "Elite Vanguard Blade",      type: "weapon",    stats: { Str: 90000000000, Luck: 28000000000 },  special: "Vanguard Slash",   price: 110000000000 },
+  { name: "Elite Oracle Eye",          type: "weapon",    stats: { Int: 90000000000, Luck: 28000000000 },  special: "Oracle Blast",     price: 110000000000 },
+  { name: "Elite Abyss Bow",           type: "weapon",    stats: { Spd: 95000000000, Luck: 28000000000 },  special: "Abyss Arrow",      price: 115000000000 },
+  { name: "Elite Titan's Armor",       type: "armor",     stats: { Str: 82000000000, Pot: 32000000000 },                               price: 100000000000 },
+  { name: "Elite Void Shroud",         type: "armor",     stats: { Int: 82000000000, Spd: 30000000000 },                               price: 100000000000 },
+  { name: "Elite Omega Ring",          type: "accessory", stats: { Luck: 115000000000, Str: 34000000000 }, special: "Omega Luck",       price: 135000000000 },
+  { name: "Elite Genesis Core",        type: "accessory", stats: { Int: 108000000000, Luck: 32000000000 },                              price: 128000000000 },
 ];
 
+// ─── Mythical Legend (Mythical Legend / Floor 17+, massive multi-stat) ────────
 const mythicalLegendItems: Omit<Item, "id" | "tier">[] = [
-  {"name": "Mythical Legend's Worldsplitter", "type": "weapon", "stats": {"Str": 10000, "Luck": 6000}, "special": "Double Strike", "price": 2000000000},
-  {"name": "Bow of Eternal Myths", "type": "weapon", "stats": {"Spd": 10000, "Luck": 6000}, "special": "Life Steal 25%", "price": 2000000000},
-  {"name": "Staff of Creation's End", "type": "weapon", "stats": {"Int": 12000}, "special": "Stun 15%", "price": 2200000000},
-  {"name": "Armor of Mythical Perfection", "type": "armor", "stats": {"Str": 8000, "Spd": 8000, "Int": 6000, "Luck": 6000}, "special": "Myth Shield", "price": 2500000000},
-  {"name": "Crown of Mythical Legends", "type": "accessory", "stats": {"Int": 9000, "Luck": 6000}, "special": "Legendary Wisdom", "price": 1800000000},
-  {"name": "Blade of Infinite Myths", "type": "weapon", "stats": {"Str": 11000, "Spd": 5500}, "special": "Double Strike", "price": 2300000000},
-  {"name": "Mythical Legend's Starweave", "type": "armor", "stats": {"Spd": 9500, "Int": 7000}, "special": "Star Barrier", "price": 2100000000},
-  {"name": "Ring of Legendary Eternity", "type": "accessory", "stats": {"Luck": 9500, "Str": 5000}, "special": "Eternal Legend", "price": 2150000000},
-  {"name": "The Final Blade", "type": "weapon", "stats": {"Str": 15000, "Spd": 8000, "Luck": 8000}, "special": "Life Steal 25%", "price": 5000000000},
-  {"name": "Armor of the One True Legend", "type": "armor", "stats": {"Str": 12000, "Spd": 12000, "Int": 10000, "Luck": 10000}, "special": "Invincibility", "price": 5000000000},
-  {"name": "Mythos Obliterator", "type": "weapon", "stats": {"Str": 12000, "Spd": 6000, "Luck": 7000}, "special": "Stun 15%", "price": 2600000000},
-  {"name": "Legend's Final Bow", "type": "weapon", "stats": {"Spd": 11500, "Luck": 7000}, "special": "Critical +20%", "price": 2400000000},
-  {"name": "Mythical Fortress Plate", "type": "armor", "stats": {"Str": 10000, "Int": 8000, "Luck": 7000}, "price": 2300000000},
-  {"name": "Mythical Oracle Amulet", "type": "accessory", "stats": {"Int": 10000, "Luck": 7000}, "special": "Genesis Collapse", "price": 2000000000},
-  {"name": "Mythical Titan's Last Stand", "type": "armor", "stats": {"Str": 11000, "Spd": 11000, "Int": 8000}, "price": 2700000000},
+  { name: "Mythical Legend's Worldsplitter", type: "weapon",    stats: { Str: 320000000000, Spd: 150000000000, Luck: 180000000000 }, special: "World Shatter",        price: 2000000000000 },
+  { name: "Bow of Eternal Myths",            type: "weapon",    stats: { Spd: 350000000000, Luck: 200000000000 },                    special: "Life Steal 25%",       price: 2000000000000 },
+  { name: "Staff of Creation's End",         type: "weapon",    stats: { Int: 380000000000, Luck: 180000000000 },                    special: "Stun 15%",             price: 2200000000000 },
+  { name: "Armor of Mythical Perfection",    type: "armor",     stats: { Str: 280000000000, Spd: 280000000000, Int: 220000000000, Luck: 220000000000 }, special: "Myth Shield", price: 2500000000000 },
+  { name: "Crown of Mythical Legends",       type: "accessory", stats: { Int: 300000000000, Luck: 220000000000 },                    special: "Legendary Wisdom",     price: 1800000000000 },
+  { name: "Blade of Infinite Myths",         type: "weapon",    stats: { Str: 360000000000, Spd: 180000000000 },                     special: "Double Strike",        price: 2300000000000 },
+  { name: "Mythical Legend's Starweave",     type: "armor",     stats: { Spd: 300000000000, Int: 240000000000 },                     special: "Star Barrier",         price: 2100000000000 },
+  { name: "Ring of Legendary Eternity",      type: "accessory", stats: { Luck: 320000000000, Str: 180000000000 },                    special: "Eternal Legend",       price: 2150000000000 },
+  { name: "The Final Blade",                 type: "weapon",    stats: { Str: 500000000000, Spd: 250000000000, Luck: 250000000000 }, special: "Life Steal 25%",       price: 5000000000000 },
+  { name: "Armor of the One True Legend",    type: "armor",     stats: { Str: 400000000000, Spd: 400000000000, Int: 350000000000, Luck: 350000000000 }, special: "Invincibility", price: 5000000000000 },
+  { name: "Mythos Obliterator",              type: "weapon",    stats: { Str: 420000000000, Spd: 200000000000, Luck: 230000000000 }, special: "Stun 15%",             price: 2600000000000 },
+  { name: "Legend's Final Bow",              type: "weapon",    stats: { Spd: 390000000000, Luck: 240000000000 },                    special: "Critical +20%",        price: 2400000000000 },
+  { name: "Mythical Fortress Plate",         type: "armor",     stats: { Str: 340000000000, Int: 270000000000, Luck: 230000000000 },                                   price: 2300000000000 },
+  { name: "Mythical Oracle Amulet",          type: "accessory", stats: { Int: 340000000000, Luck: 240000000000 },                    special: "Genesis Collapse",     price: 2000000000000 },
+  { name: "Mythical Titan's Last Stand",     type: "armor",     stats: { Str: 370000000000, Spd: 370000000000, Int: 270000000000 },                                   price: 2700000000000 },
 ];
 
+// ─── Forest Zone Weapons (multi-tier) ─────────────────────────────────────────
 const forestWeaponItems: Omit<Item, "id" | "tier">[] = [
-  {"name": "Novice Meadow Stick", "type": "weapon", "stats": {"Str": 15, "Luck": 5}, "special": "Nature's Touch", "price": 200},
-  {"name": "Apprentice Faerie Wand", "type": "weapon", "stats": {"Int": 35, "Luck": 10}, "special": "Pixie Dust", "price": 550},
-  {"name": "Initiate Spirit Blade", "type": "weapon", "stats": {"Str": 55, "Spd": 15}, "special": "Spirit Strike", "price": 900},
-  {"name": "Journeyman Grove Bow", "type": "weapon", "stats": {"Spd": 95, "Luck": 25}, "special": "Nature's Arrow", "price": 1800},
-  {"name": "Adept Elder Branch", "type": "weapon", "stats": {"Int": 175, "Str": 50}, "special": "Elder Wisdom", "price": 3500},
-  {"name": "Expert Forest Fang", "type": "weapon", "stats": {"Str": 350, "Spd": 80}, "special": "Creature's Bite", "price": 8000},
-  {"name": "Master Heartwood Staff", "type": "weapon", "stats": {"Int": 700, "Luck": 150}, "special": "Heart of the Forest", "price": 20000},
-  {"name": "Grandmaster Void Leaf", "type": "weapon", "stats": {"Str": 1400, "Int": 500}, "special": "Void Thorns", "price": 55000},
-  {"name": "Champion World Tree Spear", "type": "weapon", "stats": {"Str": 2800, "Spd": 800}, "special": "World Tree's Fury", "price": 130000},
-  {"name": "Overlord Genesis Blade", "type": "weapon", "stats": {"Str": 5500, "Luck": 1200}, "special": "Genesis Slash", "price": 300000},
-  {"name": "Sovereign Primordial Bow", "type": "weapon", "stats": {"Spd": 11000, "Luck": 2500}, "special": "Primordial Shot", "price": 900000},
-  {"name": "Ascendant Essence Scythe", "type": "weapon", "stats": {"Str": 27000, "Int": 8000}, "special": "Life's Harvest", "price": 2500000},
-  {"name": "Legend's Heartwood Ragnarok", "type": "weapon", "stats": {"Str": 80000, "Int": 20000}, "special": "Forest Ragnarok", "price": 12000000},
-  {"name": "Mythic Forest Obliterator", "type": "weapon", "stats": {"Str": 200000, "Spd": 80000, "Luck": 50000}, "special": "Mythic Overgrowth", "price": 60000000},
-  {"name": "Mythical Legend's World-Root", "type": "weapon", "stats": {"Str": 12000, "Int": 8000, "Luck": 6000}, "special": "Root of Creation", "price": 2100000000},
+  { name: "Novice Meadow Stick",           type: "weapon", stats: { Str: 180, Luck: 60 },                  special: "Nature's Touch",     price: 200 },
+  { name: "Apprentice Faerie Wand",        type: "weapon", stats: { Int: 750, Luck: 250 },                  special: "Pixie Dust",         price: 550 },
+  { name: "Initiate Spirit Blade",         type: "weapon", stats: { Str: 4000, Spd: 1500 },                 special: "Spirit Strike",      price: 900 },
+  { name: "Journeyman Grove Bow",          type: "weapon", stats: { Spd: 120000, Luck: 38000 },             special: "Nature's Arrow",     price: 1800 },
+  { name: "Adept Elder Branch",            type: "weapon", stats: { Int: 360000, Str: 110000 },             special: "Elder Wisdom",       price: 3500 },
+  { name: "Expert Forest Fang",            type: "weapon", stats: { Str: 1200000, Spd: 380000 },            special: "Creature's Bite",    price: 8000 },
+  { name: "Master Heartwood Staff",        type: "weapon", stats: { Int: 4800000, Luck: 1500000 },          special: "Heart of the Forest",price: 20000 },
+  { name: "Grandmaster Void Leaf",         type: "weapon", stats: { Str: 18000000, Int: 5500000 },          special: "Void Thorns",        price: 55000 },
+  { name: "Champion World Tree Spear",     type: "weapon", stats: { Str: 80000000, Spd: 25000000 },         special: "World Tree's Fury",  price: 130000 },
+  { name: "Overlord Genesis Blade",        type: "weapon", stats: { Str: 320000000, Luck: 100000000 },      special: "Genesis Slash",      price: 300000 },
+  { name: "Sovereign Primordial Bow",      type: "weapon", stats: { Spd: 1400000000, Luck: 440000000 },     special: "Primordial Shot",    price: 900000 },
+  { name: "Ascendant Essence Scythe",      type: "weapon", stats: { Str: 5800000000, Int: 1800000000 },     special: "Life's Harvest",     price: 2500000 },
+  { name: "Legend's Heartwood Ragnarok",   type: "weapon", stats: { Str: 24000000000, Int: 7500000000 },    special: "Forest Ragnarok",    price: 12000000 },
+  { name: "Mythic Forest Obliterator",     type: "weapon", stats: { Str: 95000000000, Spd: 30000000000, Luck: 28000000000 }, special: "Mythic Overgrowth", price: 60000000 },
+  { name: "Mythical Legend's World-Root",  type: "weapon", stats: { Str: 380000000000, Int: 260000000000, Luck: 200000000000 }, special: "Root of Creation", price: 2100000000000 },
 ];
 
 function generateItems(items: Omit<Item, "id" | "tier">[], tier: ItemTier): Item[] {
@@ -198,7 +293,7 @@ function generateItems(items: Omit<Item, "id" | "tier">[], tier: ItemTier): Item
 }
 
 const FOREST_WEAPON_RANKS: ItemTier[] = [
-  "initiate", "initiate", "initiate", "journeyman", "adept",
+  "normal", "super_rare", "umr", "journeyman", "adept",
   "expert", "master", "grandmaster", "champion", "overlord",
   "sovereign", "ascendant", "legend", "elite", "mythical_legend",
 ];

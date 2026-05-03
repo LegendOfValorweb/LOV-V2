@@ -516,6 +516,68 @@ const RACE_ACTIVE_SPELLS: Record<string, (stats: { Str?: number; Int?: number },
   }),
 };
 
+// ─── Race Skill Tree helpers ───────────────────────────────────────────────────
+
+export interface RaceSkill {
+  id: string;
+  name: string;
+  description: string;
+  type: "active" | "passive";
+  race: string;
+  rankRequirement: string;
+}
+
+const RANK_ORDER = [
+  "Novice", "Apprentice", "Initiate", "Journeyman", "Adept",
+  "Expert", "Master", "Grandmaster", "Champion", "Overlord",
+  "Sovereign", "Ascendant", "Legend", "Mythic", "Mythical Legend",
+];
+
+const RACE_SKILL_TREES: Record<string, RaceSkill[]> = {
+  human:     [{ id: "human_strike",      name: "Valor Strike",       description: "A powerful melee strike dealing 1.8x damage",          type: "active",  race: "human",     rankRequirement: "Novice"   }, { id: "human_passive",      name: "Human Adaptability",  description: "Balanced stat boost and 10% counter-attack chance",  type: "passive", race: "human",     rankRequirement: "Novice"   }],
+  elf:       [{ id: "elf_moonbeam",       name: "Moonbeam",           description: "A light-infused beam dealing 2.0x magic damage",       type: "active",  race: "elf",       rankRequirement: "Novice"   }, { id: "elf_passive",        name: "Elven Grace",         description: "Enhanced intellect, speed, and critical chance",     type: "passive", race: "elf",       rankRequirement: "Novice"   }],
+  dwarf:     [{ id: "dwarf_stonefist",    name: "Stone Fist",         description: "A crushing earth strike dealing 2.2x damage",         type: "active",  race: "dwarf",     rankRequirement: "Novice"   }, { id: "dwarf_passive",      name: "Dwarven Fortitude",   description: "8% damage reduction and 5% thorns reflect",          type: "passive", race: "dwarf",     rankRequirement: "Novice"   }],
+  orc:       [{ id: "orc_warcry",         name: "War Cry",            description: "Boost Str by 20 for several turns",                   type: "active",  race: "orc",       rankRequirement: "Novice"   }, { id: "orc_passive",        name: "Orcish Brutality",    description: "Massive strength and 10% bonus attack damage",       type: "passive", race: "orc",       rankRequirement: "Novice"   }],
+  beastfolk: [{ id: "beastfolk_feral",    name: "Feral Strike",       description: "A primal strike dealing 2.0x damage",                 type: "active",  race: "beastfolk", rankRequirement: "Novice"   }, { id: "beastfolk_passive",  name: "Beast Instincts",     description: "Speed, crit chance, and 5% dodge bonus",             type: "passive", race: "beastfolk", rankRequirement: "Novice"   }],
+  mystic:    [{ id: "mystic_regrowth",    name: "Regrowth",           description: "Nature magic heals for 1.6x power",                   type: "active",  race: "mystic",    rankRequirement: "Novice"   }, { id: "mystic_passive",     name: "Mystic Harmony",      description: "5% life steal from nature magic",                    type: "passive", race: "mystic",    rankRequirement: "Novice"   }],
+  fae:       [{ id: "fae_illusion",       name: "Fae Illusion",       description: "Boost speed by 25 and confuse enemies",               type: "active",  race: "fae",       rankRequirement: "Novice"   }, { id: "fae_passive",        name: "Fae Tricks",          description: "Extraordinary luck, evasion, and 8% dodge bonus",   type: "passive", race: "fae",       rankRequirement: "Novice"   }],
+  elemental: [{ id: "elemental_nova",     name: "Elemental Nova",     description: "AoE elemental burst dealing 2.3x damage",             type: "active",  race: "elemental", rankRequirement: "Novice"   }, { id: "elemental_passive",  name: "Elemental Affinity",  description: "8% bonus elemental damage and 5% damage reduction",  type: "passive", race: "elemental", rankRequirement: "Novice"   }],
+  undead:    [{ id: "undead_drain",       name: "Soul Drain",         description: "Dark energy drain dealing 1.9x damage",               type: "active",  race: "undead",    rankRequirement: "Novice"   }, { id: "undead_passive",     name: "Undead Resilience",   description: "Dark/soul immunity and 6% damage reduction",         type: "passive", race: "undead",    rankRequirement: "Novice"   }],
+  demon:     [{ id: "demon_hellfire",     name: "Hellfire",           description: "Infernal blast dealing 2.5x fire damage",             type: "active",  race: "demon",     rankRequirement: "Novice"   }, { id: "demon_passive",      name: "Demonic Bloodlust",   description: "Combat fuels demon power: 7% crit + 3% lifesteal",  type: "passive", race: "demon",     rankRequirement: "Novice"   }],
+  draconic:  [{ id: "draconic_breath",    name: "Dragon Breath",      description: "AoE fire breath dealing 2.4x damage",                 type: "active",  race: "draconic",  rankRequirement: "Novice"   }, { id: "draconic_passive",   name: "Dragon Heritage",     description: "Fire immunity and powerful combat stats",            type: "passive", race: "draconic",  rankRequirement: "Novice"   }],
+  celestial: [{ id: "celestial_radiance", name: "Celestial Radiance", description: "Divine light heals for 1.8x and buffs allies",        type: "active",  race: "celestial", rankRequirement: "Novice"   }, { id: "celestial_passive",  name: "Celestial Light",     description: "Divine energy heals; 4% lifesteal",                  type: "passive", race: "celestial", rankRequirement: "Novice"   }],
+  aquatic:   [{ id: "aquatic_surge",      name: "Tidal Surge",        description: "Water surge dealing 2.0x and freezes 1 turn",         type: "active",  race: "aquatic",   rankRequirement: "Novice"   }, { id: "aquatic_passive",    name: "Aquatic Resilience",  description: "Water immunity and fluid combat movement",           type: "passive", race: "aquatic",   rankRequirement: "Novice"   }],
+  titan:     [{ id: "titan_slam",         name: "Titan Slam",         description: "Devastating slam dealing 2.8x earth damage",          type: "active",  race: "titan",     rankRequirement: "Journeyman" }, { id: "titan_passive",      name: "Titan's Might",       description: "12% bonus damage and 8% thorns reflect",            type: "passive", race: "titan",     rankRequirement: "Journeyman" }],
+};
+
+export function getRaceSkillTree(race: string): RaceSkill[] {
+  return RACE_SKILL_TREES[race] || [];
+}
+
+export function getUnlockedRaceSkills(race: string, rank: string): RaceSkill[] {
+  const skills = RACE_SKILL_TREES[race] || [];
+  const playerRankIndex = RANK_ORDER.indexOf(rank);
+  return skills.filter(s => {
+    const reqIndex = RANK_ORDER.indexOf(s.rankRequirement);
+    return reqIndex >= 0 && playerRankIndex >= reqIndex;
+  });
+}
+
+export function getRaceSkillById(skillId: string): RaceSkill | undefined {
+  for (const skills of Object.values(RACE_SKILL_TREES)) {
+    const found = skills.find(s => s.id === skillId);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+export function isRaceSkillUnlocked(skillId: string, race: string, rank: string): boolean {
+  const unlocked = getUnlockedRaceSkills(race, rank);
+  return unlocked.some(s => s.id === skillId);
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+
 export function getRaceActiveAsSpell(
   activeSkillId: string,
   stats: { Str?: number; Int?: number },

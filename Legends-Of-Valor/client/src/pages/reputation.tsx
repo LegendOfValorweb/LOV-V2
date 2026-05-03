@@ -43,7 +43,7 @@ export default function Reputation() {
   return (
     <div className="game-page-scroll" style={{padding:16}}>
       <h1 style={{color:"#d4af37", fontSize:24, fontWeight:"bold", marginBottom:16}}>🏅 Faction Reputation</h1>
-      {reputation?.factions?.map((faction: any) => (
+      {(reputation as any)?.factions?.map((faction: any) => (
         <div key={faction.id} style={{background:"#1a1a2e", border:"1px solid #333", borderRadius:8, padding:16, marginBottom:12}}>
           <div style={{display:"flex", justifyContent:"space-between", marginBottom:8}}>
             <span style={{color:"white", fontWeight:"bold"}}>{faction.icon} {faction.name}</span>
@@ -71,7 +71,7 @@ export default function Reputation() {
       ))}
       <div style={{marginTop: 24, padding: 16, background: "#111", borderRadius: 8, border: "1px solid #d4af37"}}>
         <h3 style={{color: "#d4af37", fontWeight: "bold", marginBottom: 8}}>Total Reputation</h3>
-        <p style={{color: "white", fontSize: 20}}>{reputation?.totalReputation || 0}</p>
+        <p style={{color: "white", fontSize: 20}}>{(reputation as any)?.totalReputation || 0}</p>
       </div>
     </div>
   );

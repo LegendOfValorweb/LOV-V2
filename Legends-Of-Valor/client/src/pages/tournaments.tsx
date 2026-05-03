@@ -182,7 +182,7 @@ export default function Tournaments() {
                     {tournament.status === "pending" && match.player1 && match.player2 && match.player2 !== "BYE" && (
                       <div className="flex gap-2 mt-2">
                         <Button
-                          size="xs"
+                          size="sm"
                           variant="outline"
                           className="text-[10px] h-6 border-amber-600/30 hover:bg-amber-900/20"
                           onClick={() => betMutation.mutate({ tournamentId: tournament.id, matchIndex: idx, betAmount: 1000, targetPlayerId: match.player1 })}
@@ -191,7 +191,7 @@ export default function Tournaments() {
                           Bet 1k on {match.player1?.substring(0, 5)}
                         </Button>
                         <Button
-                          size="xs"
+                          size="sm"
                           variant="outline"
                           className="text-[10px] h-6 border-amber-600/30 hover:bg-amber-900/20"
                           onClick={() => betMutation.mutate({ tournamentId: tournament.id, matchIndex: idx, betAmount: 1000, targetPlayerId: match.player2 })}

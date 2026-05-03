@@ -405,7 +405,7 @@ export default function ZoneNPCPanel({ zoneId }: ZoneNPCPanelProps) {
 
               {fightResult.playerWon && (
                 <p className="text-xs text-amber-400 text-center">
-                  {npc.name} is now {Math.round(npc.growthRate * 100)}% stronger for your next encounter!
+                  {npc.name} is now {Math.round((npc.growthRate ?? 1) * 100)}% stronger for your next encounter!
                 </p>
               )}
             </div>

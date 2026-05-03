@@ -984,11 +984,13 @@ export function processAction(
 
       if (spellCategory === "aoe" && spell?.targetCount && spell.targetCount > 1) {
         const primaryDamage = damage;
-        let totalAoeDamage = primaryDamage;
+        let aoeBonusDamage = 0;
         for (let i = 1; i < spell.targetCount; i++) {
-          totalAoeDamage += calculateAoEFalloff(primaryDamage, i);
+          aoeBonusDamage += calculateAoEFalloff(primaryDamage, i);
         }
-        effects.push(`AoE spell hits ${spell.targetCount} targets! Total AoE damage: ${totalAoeDamage}`);
+        // Apply AoE bonus damage to the single defender (simulates splash)
+        damage = primaryDamage + Math.floor(aoeBonusDamage * 0.5);
+        effects.push(`AoE spell hits ${spell.targetCount} targets! Splash bonus: +${Math.floor(aoeBonusDamage * 0.5).toLocaleString()}`);
 
         if (ccTracker && spell?.ccType && spell?.ccDuration) {
           const ccResult = applyCC(

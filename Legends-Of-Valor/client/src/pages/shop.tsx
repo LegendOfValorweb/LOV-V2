@@ -280,23 +280,55 @@ export default function Shop() {
 
                 <div>
                   <div style={{ fontSize: "0.6rem", color: "hsl(45 10% 50%)", fontFamily: "var(--font-serif)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Tier</div>
-                  <div style={{ display: "flex", gap: 3, flexWrap: "wrap", maxHeight: 200, overflowY: "auto" }}>
-                    {availableTiers.map(tier => (
-                      <button
-                        key={tier}
-                        onClick={() => setSelectedTier(tier)}
-                        style={{
-                          padding: "2px 6px", fontSize: "0.55rem", fontFamily: "var(--font-serif)",
-                          background: selectedTier === tier ? "hsl(45 60% 35% / 0.3)" : "hsl(240 8% 14%)",
-                          border: `1px solid ${selectedTier === tier ? "hsl(45 60% 45% / 0.6)" : "hsl(240 8% 22%)"}`,
-                          borderRadius: 2, cursor: "pointer",
-                          color: tier === "all" ? (selectedTier === tier ? "hsl(45 80% 60%)" : "hsl(45 10% 55%)") : (tierColorMap[tier as ItemTier] || "hsl(45 10% 55%)"),
-                        }}
-                      >
-                        {tier === "all" ? "All" : TIER_LABELS[tier as ItemTier]}
-                      </button>
-                    ))}
+                  {/* "All" button + current rank highlight */}
+                  <div style={{ display: "flex", gap: 3, marginBottom: 4 }}>
+                    <button
+                      onClick={() => setSelectedTier("all")}
+                      style={{
+                        padding: "2px 8px", fontSize: "0.55rem", fontFamily: "var(--font-serif)",
+                        background: selectedTier === "all" ? "hsl(45 60% 35% / 0.3)" : "hsl(240 8% 14%)",
+                        border: `1px solid ${selectedTier === "all" ? "hsl(45 60% 45% / 0.6)" : "hsl(240 8% 22%)"}`,
+                        borderRadius: 2, cursor: "pointer",
+                        color: selectedTier === "all" ? "hsl(45 80% 60%)" : "hsl(45 10% 55%)",
+                      }}
+                    >All</button>
                   </div>
+                  {/* Grouped tiers */}
+                  {[
+                    { label: "Novice", tiers: ["normal","super_rare","x_tier","umr","ssumr"] as ItemTier[] },
+                    { label: "Apprentice", tiers: ["divine"] as ItemTier[] },
+                    { label: "Initiate", tiers: ["initiate"] as ItemTier[] },
+                    { label: "Journeyman+", tiers: ["journeyman","adept","expert"] as ItemTier[] },
+                    { label: "Master+", tiers: ["master","grandmaster","champion"] as ItemTier[] },
+                    { label: "Overlord+", tiers: ["overlord","sovereign","ascendant"] as ItemTier[] },
+                    { label: "Legend+", tiers: ["legend","elite","mythical_legend"] as ItemTier[] },
+                  ].map(group => {
+                    const unlocked = group.tiers.filter(t => !excludedTiers.includes(t));
+                    if (unlocked.length === 0) return null;
+                    return (
+                      <div key={group.label} style={{ marginBottom: 4 }}>
+                        <div style={{ fontSize: "0.5rem", color: "hsl(45 10% 38%)", fontFamily: "var(--font-mono)", marginBottom: 2, textTransform: "uppercase" }}>{group.label}</div>
+                        <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+                          {unlocked.map(tier => (
+                            <button
+                              key={tier}
+                              onClick={() => setSelectedTier(tier)}
+                              style={{
+                                padding: "2px 5px", fontSize: "0.52rem", fontFamily: "var(--font-serif)",
+                                background: selectedTier === tier ? "hsl(45 60% 35% / 0.3)" : "hsl(240 8% 14%)",
+                                border: `1px solid ${selectedTier === tier ? "hsl(45 60% 45% / 0.6)" : "hsl(240 8% 22%)"}`,
+                                borderRadius: 2, cursor: "pointer",
+                                color: selectedTier === tier ? "hsl(45 80% 60%)" : (tierColorMap[tier] || "hsl(45 10% 55%)"),
+                                fontWeight: selectedTier === tier ? 700 : 400,
+                              }}
+                            >
+                              {TIER_LABELS[tier]}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -361,7 +393,7 @@ export default function Shop() {
                         <span className="rpg-shop-slot-price">
                           {formatPrice(item.price)}
                           {(() => {
-                            const trend = getPriceTrend(item.id || item.name, item.price || item.cost || 0);
+                            const trend = getPriceTrend(item.id || item.name, item.price || (item as any).cost || 0);
                             return trend ? <span style={{color: trend.color, fontWeight: "bold", fontSize: 10, marginLeft: 2}}>{trend.indicator}</span> : null;
                           })()}
                         </span>

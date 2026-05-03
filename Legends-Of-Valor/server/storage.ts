@@ -657,8 +657,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createGuildApplication(application: InsertGuildApplication): Promise<GuildApplication> {
-    const insert = { guildId: application.guildId, applicantId: application.applicantId, status: application.status };
-    const [newApplication] = await db.insert(guildApplications).values([insert]).returning();
+    const insert = { guildId: application.guildId, applicantId: application.applicantId, status: application.status as any };
+    const [newApplication] = await db.insert(guildApplications).values(insert).returning();
     return newApplication;
   }
 

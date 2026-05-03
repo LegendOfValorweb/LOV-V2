@@ -1008,7 +1008,7 @@ export const leaderboardCache = pgTable("leaderboard_cache", {
   refreshedAt: timestamp("refreshed_at").notNull().defaultNow(),
 });
 
-export type LeaderboardEntry = {
+export type LeaderboardEntryData = {
   accountId: string;
   username: string;
   value: number | string;

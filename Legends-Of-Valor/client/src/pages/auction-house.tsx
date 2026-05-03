@@ -75,7 +75,7 @@ export default function AuctionHouse() {
     if (!selectedItemForAuction) return;
     try {
       await apiRequest("POST", "/api/auctions", {
-        accountId: account.id,
+        accountId: account!.id,
         itemId: selectedItemForAuction,
         itemType,
         startingPrice,
@@ -94,7 +94,7 @@ export default function AuctionHouse() {
 
   const handleBid = async (auctionId: string, amount: number) => {
     try {
-      await apiRequest("POST", `/api/auctions/${auctionId}/bid`, { accountId: account.id, amount });
+      await apiRequest("POST", `/api/auctions/${auctionId}/bid`, { accountId: account!.id, amount });
       toast({ title: "Bid placed successfully!" });
       queryClient.invalidateQueries({ queryKey: ["/api/auctions"] });
       refetchAccount?.();

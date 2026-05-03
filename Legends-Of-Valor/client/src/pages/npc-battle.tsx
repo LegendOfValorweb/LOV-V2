@@ -674,111 +674,166 @@ export default function NpcBattle() {
       </Dialog>
 
       <Dialog open={!!battleResult} onOpenChange={() => setBattleResult(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className={battleResult?.won ? "text-green-500" : "text-red-500"}>
-              {battleResult?.won ? (
-                <>
-                  <Trophy className="w-6 h-6 inline mr-2" />
-                  Victory!
-                </>
-              ) : (
-                <>
-                  <Skull className="w-6 h-6 inline mr-2" />
-                  Defeated
-                </>
-              )}
+            <DialogTitle className={`flex items-center gap-2 text-xl ${battleResult?.won ? "text-green-400" : "text-red-400"}`}>
+              {battleResult?.won ? <Trophy className="w-6 h-6" /> : <Skull className="w-6 h-6" />}
+              {battleResult?.won ? "Victory!" : "Defeated"}
+              {battleResult?.isBoss && <Badge className="ml-1 bg-yellow-500 text-black text-xs">BOSS</Badge>}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="text-center text-lg">
-              vs {battleResult?.npcName}
-              {battleResult?.isBoss && <Badge className="ml-2 bg-yellow-500">BOSS</Badge>}
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4 text-center">
-              <div>
-                <div className="text-sm text-muted-foreground">Your Power</div>
-                <div className="text-xl font-bold text-green-500">{battleResult?.playerPower?.toLocaleString()}</div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">NPC Power</div>
-                <div className="text-xl font-bold text-red-500">{battleResult?.npcPower?.toLocaleString()}</div>
-              </div>
+          <div className="space-y-3">
+
+            {/* Opponent header */}
+            <div className="text-center text-sm text-muted-foreground">
+              Floor {battleResult?.floor} · Level {battleResult?.level} · vs <span className="text-white font-semibold">{battleResult?.npcName}</span>
             </div>
 
-            {battleResult?.equippedPet && (
-              <div className="bg-muted/50 rounded-md p-3 text-sm">
-                <div className="font-semibold mb-1">Pet: {battleResult.equippedPet.name}</div>
-                <div className="text-muted-foreground">
-                  Elements: {battleResult.equippedPet.elements.join(", ")}
-                </div>
-                {battleResult.petElementImmune && (
-                  <div className="text-destructive mt-1">
-                    <Shield className="w-3 h-3 inline mr-1" />
-                    Pet's elemental power was blocked by immunity
+            {/* VS Power comparison bars */}
+            {(() => {
+              const pp = battleResult?.playerPower || 1;
+              const np = battleResult?.npcPower || 1;
+              const total = pp + np;
+              const playerPct = Math.round((pp / total) * 100);
+              const npcPct = 100 - playerPct;
+              return (
+                <div className="rounded-lg border border-border/40 bg-black/30 p-3 space-y-2">
+                  <div className="flex justify-between text-xs font-semibold mb-1">
+                    <span className="text-green-400">You  ·  {pp.toLocaleString()}</span>
+                    <span className="text-muted-foreground">Power</span>
+                    <span className="text-red-400">{np.toLocaleString()}  ·  {battleResult?.npcName}</span>
                   </div>
-                )}
+                  <div className="flex h-3 rounded-full overflow-hidden gap-0.5">
+                    <div className="rounded-l-full transition-all" style={{ width: `${playerPct}%`, background: "linear-gradient(90deg, #22c55e, #16a34a)" }} />
+                    <div className="rounded-r-full transition-all" style={{ width: `${npcPct}%`, background: "linear-gradient(90deg, #ef4444, #b91c1c)" }} />
+                  </div>
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>{playerPct}%</span>
+                    <span>{npcPct}%</span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Combat stats row */}
+            {battleResult?.combatDetails && (
+              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="bg-black/30 border border-border/40 rounded p-2">
+                  <div className="text-muted-foreground mb-0.5">Rounds</div>
+                  <div className="font-bold text-white">{battleResult.combatDetails.rounds}</div>
+                </div>
+                <div className="bg-black/30 border border-border/40 rounded p-2">
+                  <div className="text-muted-foreground mb-0.5">Dmg Dealt</div>
+                  <div className="font-bold text-green-400">{(battleResult.combatDetails.totalDamageDealt || 0).toLocaleString()}</div>
+                </div>
+                <div className="bg-black/30 border border-border/40 rounded p-2">
+                  <div className="text-muted-foreground mb-0.5">Dmg Taken</div>
+                  <div className="font-bold text-red-400">{(battleResult.combatDetails.totalDamageTaken || 0).toLocaleString()}</div>
+                </div>
               </div>
             )}
 
-            {!battleResult?.won && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-md p-4 space-y-3">
-                <div className="font-bold text-red-500 flex items-center gap-2">
-                  <Skull className="w-5 h-5" />
-                  ⚠️ You Died!
+            {/* Combat highlights log */}
+            {battleResult?.combatDetails?.highlights && battleResult.combatDetails.highlights.length > 0 && (
+              <div className="rounded-lg border border-border/40 bg-black/30 p-2 space-y-1 max-h-36 overflow-y-auto">
+                <div className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">⚔ Combat Log</div>
+                {battleResult.combatDetails.highlights.map((round: any, ri: number) => (
+                  round.effects && round.effects.map((effect: string, ei: number) => {
+                    const isPlayer = round.attacker && !round.attacker.startsWith("npc");
+                    const isSpell = effect.toLowerCase().includes("spell") || effect.toLowerCase().includes("aoe") || effect.toLowerCase().includes("casts");
+                    const isCrit = effect.toLowerCase().includes("crit");
+                    const isStatus = effect.toLowerCase().includes("stun") || effect.toLowerCase().includes("freeze") || effect.toLowerCase().includes("silence") || effect.toLowerCase().includes("poison") || effect.toLowerCase().includes("burn");
+                    return (
+                      <div
+                        key={`${ri}-${ei}`}
+                        className="text-xs px-2 py-0.5 rounded"
+                        style={{
+                          background: isSpell ? "rgba(139,92,246,0.15)" : isCrit ? "rgba(234,179,8,0.12)" : isStatus ? "rgba(239,68,68,0.12)" : isPlayer ? "rgba(34,197,94,0.08)" : "rgba(239,68,68,0.08)",
+                          color: isSpell ? "#c084fc" : isCrit ? "#fbbf24" : isStatus ? "#f87171" : isPlayer ? "#86efac" : "#fca5a5",
+                          borderLeft: `2px solid ${isSpell ? "#7c3aed" : isCrit ? "#ca8a04" : isStatus ? "#dc2626" : isPlayer ? "#16a34a" : "#dc2626"}`,
+                        }}
+                      >
+                        {effect}
+                      </div>
+                    );
+                  })
+                ))}
+              </div>
+            )}
+
+            {/* Pet info */}
+            {battleResult?.equippedPet && (
+              <div className="bg-muted/30 rounded-md p-2 text-xs flex items-center gap-2">
+                <span className="text-lg">🐾</span>
+                <div>
+                  <span className="font-semibold">{battleResult.equippedPet.name}</span>
+                  <span className="text-muted-foreground ml-1">· {battleResult.equippedPet.elements?.join(", ")}</span>
+                  {battleResult.petElementImmune && <span className="text-red-400 ml-2">⊘ Immune blocked</span>}
                 </div>
-                <div className="text-sm space-y-1">
+              </div>
+            )}
+
+            {/* Death penalty */}
+            {!battleResult?.won && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 space-y-1">
+                <div className="font-bold text-red-400 text-sm flex items-center gap-1.5">
+                  <Skull className="w-4 h-4" /> You Died!
+                </div>
+                <div className="text-xs space-y-0.5 text-red-300">
                   {battleResult?.deathPenalty ? (
                     <>
-                      <p>Lost: <span className="font-mono text-yellow-500">{battleResult.deathPenalty.goldLost.toLocaleString()} gold</span></p>
-                      <p>Equipment damage: <span className="text-red-400">−{battleResult.deathPenalty.durabilityDamage} durability on all equipped items</span></p>
+                      <p>Gold lost: <span className="font-mono text-yellow-400">{battleResult.deathPenalty.goldLost.toLocaleString()}</span></p>
+                      <p>Durability damage: <span className="text-red-400">−{battleResult.deathPenalty.durabilityDamage} on equipped</span></p>
                     </>
                   ) : (
-                    <>
-                      <p>Lost: <span className="font-mono text-yellow-500">~{Math.floor((account?.gold || 0) * 0.05).toLocaleString()} gold</span></p>
-                      <p>Equipment damage: <span className="text-red-400">Durability lost on equipped items</span></p>
-                    </>
+                    <p>~{Math.floor((account?.gold || 0) * 0.05).toLocaleString()} gold lost · Durability damaged</p>
                   )}
-                  <p className="mt-2 text-muted-foreground italic">👻 You are now a Ghost. Return to your base to respawn.</p>
+                  <p className="text-muted-foreground italic mt-1">👻 Return to base to respawn</p>
                 </div>
               </div>
             )}
 
+            {/* Rewards */}
             {battleResult?.won && (
               <div className="bg-green-500/10 border border-green-500/30 rounded-md p-3">
-                <div className="font-semibold text-green-500 mb-2">Rewards Collected!</div>
-                <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="font-semibold text-green-400 text-sm mb-2 flex items-center gap-1.5">
+                  <Trophy className="w-4 h-4" /> Rewards Collected
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 text-xs">
                   {battleResult.rewards.gold > 0 && (
-                    <div className="flex items-center gap-1">
-                      <span className="text-yellow-500">Gold:</span> +{battleResult.rewards.gold.toLocaleString()}
+                    <div className="flex items-center gap-1 bg-black/20 rounded px-2 py-1">
+                      <span className="text-yellow-400">⬤</span>
+                      <span className="text-yellow-300">+{battleResult.rewards.gold.toLocaleString()} Gold</span>
                     </div>
                   )}
                   {battleResult.rewards.trainingPoints > 0 && (
-                    <div className="flex items-center gap-1">
-                      <span className="text-blue-400">TP:</span> +{battleResult.rewards.trainingPoints.toLocaleString()}
+                    <div className="flex items-center gap-1 bg-black/20 rounded px-2 py-1">
+                      <span className="text-blue-400">📘</span>
+                      <span className="text-blue-300">+{battleResult.rewards.trainingPoints.toLocaleString()} TP</span>
                     </div>
                   )}
                   {battleResult.rewards.soulShards > 0 && (
-                    <div className="flex items-center gap-1">
-                      <span className="text-purple-400">Soul Shards:</span> +{battleResult.rewards.soulShards.toLocaleString()}
+                    <div className="flex items-center gap-1 bg-black/20 rounded px-2 py-1">
+                      <span className="text-purple-400">💎</span>
+                      <span className="text-purple-300">+{battleResult.rewards.soulShards.toLocaleString()} Shards</span>
                     </div>
                   )}
                   {battleResult.rewards.petExp > 0 && (
-                    <div className="flex items-center gap-1">
-                      <span className="text-green-400">Pet Exp:</span> +{battleResult.rewards.petExp.toLocaleString()}
+                    <div className="flex items-center gap-1 bg-black/20 rounded px-2 py-1">
+                      <span className="text-green-400">🐾</span>
+                      <span className="text-green-300">+{battleResult.rewards.petExp.toLocaleString()} Pet XP</span>
                     </div>
                   )}
                   {battleResult.rewards.runes > 0 && (
-                    <div className="flex items-center gap-1">
-                      <span className="text-red-400">Runes:</span> +{battleResult.rewards.runes.toLocaleString()}
+                    <div className="flex items-center gap-1 bg-black/20 rounded px-2 py-1">
+                      <span className="text-red-400">🔷</span>
+                      <span className="text-red-300">+{battleResult.rewards.runes.toLocaleString()} Runes</span>
                     </div>
                   )}
                 </div>
                 {battleResult.newFloor > battleResult.floor && (
-                  <div className="mt-2 text-green-500 font-semibold">
-                    <ChevronRight className="w-4 h-4 inline" />
-                    Advanced to Floor {battleResult.newFloor}!
+                  <div className="mt-2 text-green-400 font-bold text-sm animate-pulse">
+                    🎉 Advanced to Floor {battleResult.newFloor}!
                   </div>
                 )}
               </div>

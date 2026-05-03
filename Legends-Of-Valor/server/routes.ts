@@ -22,7 +22,7 @@ import {
 } from "./server-achievements";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, type CombatLogEntry, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage } from "@shared/schema";
+import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, type CombatLogEntry, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, shardEvents, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage, worldBosses, worldBossDamage, inventoryItems, playerSkills } from "@shared/schema";
 import { ZONE_NPCS, getZoneNPC, calculateNPCStats, calculateNPCRewards } from "@shared/zone-npcs";
 import { z } from "zod";
 import type { Account, Event, Challenge, PlayerRace, PlayerGender } from "@shared/schema";
@@ -64,7 +64,7 @@ import {
   getZoneExhaustionInfo,
   getRankRequirementLabel,
 } from "./resource-system";
-import { eq, sql, and, lt } from "drizzle-orm";
+import { eq, sql, and, lt, desc } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { getActiveWorldBoss, spawnWorldBoss, recordBossDamage, MAX_ATTACKS_PER_BOSS, getPlayerBossAttackCount } from "./world-boss";
@@ -667,7 +667,7 @@ export async function registerRoutes(
           lastActivity: Date.now(),
         });
         
-        let loginAccount = { ...existing, currentSessionId: sessionId };
+        let loginAccount: typeof existing = { ...existing, currentSessionId: sessionId } as typeof existing;
         const offlineTrainingResult = await collectOfflineTraining(existing);
         const vaultInterestResult = await collectVaultInterest(existing);
         if (offlineTrainingResult || vaultInterestResult) {
@@ -1328,8 +1328,8 @@ export async function registerRoutes(
       const account = await storage.getAccount(accountId);
       if (!account) return;
 
-      const earned = playerTrophiesMap.get(accountId) || new Set();
-      const newEarned = new Set(earned);
+      const earned = new Set<string>((account.trophies as string[]) || []);
+      const newEarned = new Set<string>(earned);
 
       // Gold milestones
       if (account.gold >= 1000000 && !newEarned.has("gold_millionaire")) newEarned.add("gold_millionaire");
@@ -1357,9 +1357,8 @@ export async function registerRoutes(
 
       // Sync if any new ones earned
       if (newEarned.size > earned.size) {
-        playerTrophiesMap.set(accountId, newEarned);
         await storage.updateAccount(accountId, { 
-          trophies: Array.from(newEarned) 
+          trophies: Array.from(newEarned) as string[]
         });
         
         // Notify player
@@ -3828,32 +3827,18 @@ export async function registerRoutes(
   });
 
   // NPC Battle System
-  // Power scaling per floor: 
-  // Floor 1 (levels 1-100): 1-999
-  // Floor 2 (levels 101-200): 999-99,999
-  // Floor 3 (levels 201-300): 99,999-9,999,999
-  // etc. with exponential scaling
+  // Power scaling per floor — 5× per floor (gentle, proportional to item tiers)
+  // Floor 1: 100-500       Floor 2: 500-2500      Floor 3: 2500-12500
+  // Floor 4: 12500-62500   Floor 5: 62500-312500  Floor 6: 312K-1.56M
+  // Floor 7: 1.56M-7.8M   Floor 8: 7.8M-39M      Floor 9: 39M-195M
+  // Floor10: 195M-976M     … etc.  Items are balanced to match these ranges.
   
   const getNpcPowerRange = (floor: number): { min: number; max: number } => {
-    const ranges = [
-      { min: 1, max: 999 },                    // Floor 1
-      { min: 999, max: 99999 },                // Floor 2
-      { min: 99999, max: 9999999 },            // Floor 3
-      { min: 9999999, max: 999999999 },        // Floor 4
-      { min: 999999999, max: 99999999999 },    // Floor 5
-    ];
-    
-    if (floor <= 5) {
-      return ranges[floor - 1];
-    }
-    
-    // For floors 6+, continue exponential scaling
-    const baseMax = 99999999999; // Floor 5 max
-    const multiplier = Math.pow(100, floor - 5);
-    return {
-      min: ranges[4].max * Math.pow(100, floor - 6),
-      max: baseMax * multiplier,
-    };
+    const base = 100;
+    const mult = 5;
+    const maxPow = base * Math.pow(mult, floor);       // 100 × 5^floor
+    const minPow = floor === 1 ? base : base * Math.pow(mult, floor - 1);
+    return { min: Math.floor(minPow), max: Math.floor(maxPow) };
   };
   
   const getNpcPower = (floor: number, level: number): number => {
@@ -4158,13 +4143,14 @@ export async function registerRoutes(
           newLevel = level + 1;
         }
         
-        // Auto-update all rewards into player account (no win/loss tracking for NPC)
+        // Auto-update all rewards into player account (track wins for achievements)
         const newGoldAfterNpc = account.gold + rewards.gold;
         await storage.updateAccount(account.id, {
           gold: newGoldAfterNpc,
           trainingPoints: (account.trainingPoints || 0) + rewards.trainingPoints,
           soulShards: (account.soulShards || 0) + rewards.soulShards,
           runes: (account.runes || 0) + rewards.runes,
+          wins: (account.wins || 0) + 1,
         } as any);
 
         // Honour Hall: gold milestone from NPC battle rewards
@@ -4173,6 +4159,9 @@ export async function registerRoutes(
           broadcastToAllPlayers("serverAchievement", { achievementKey: k, displayName: getAchievementDisplayName(k), holderUsername: account.username, holderRace: account.race });
         }
         if (npcGoldClaimed.length > 0) broadcastToPlayer(account.id, "serverAchievementClaimed", { keys: npcGoldClaimed, displayNames: npcGoldClaimed.map(getAchievementDisplayName) });
+
+        // Auto-check all achievements after every win
+        await autoCheckAchievementsAndTrophies(account.id);
         
         // Give pet exp directly to the equipped pet
         if (equippedPet && rewards.petExp > 0) {
@@ -4241,7 +4230,7 @@ export async function registerRoutes(
           npcFinalHP: combatResult.finalHP[npcCombatant.id],
           totalDamageDealt: combatResult.totalDamageDealt[account.id] || 0,
           totalDamageTaken: combatResult.totalDamageDealt[npcCombatant.id] || 0,
-          highlights: combatResult.rounds.slice(-3).flatMap(r => r.effects).slice(0, 5),
+          highlights: combatResult.rounds.slice(0, 8).map(r => ({ attacker: r.attacker, effects: r.effects.slice(0, 2) })),
         },
       };
       
@@ -4691,7 +4680,7 @@ export async function registerRoutes(
   // Helper: reset a recurring quest (clear completions, re-assign to all previous participants)
   async function resetRecurringQuest(quest: any) {
     const assignments = await storage.getQuestAssignmentsByQuest(quest.id);
-    const participantIds = [...new Set(assignments.map((a: any) => a.accountId))];
+    const participantIds = Array.from(new Set(assignments.map((a: any) => a.accountId as string)));
 
     // Remove all old assignments
     await db.delete(questAssignments).where(eq(questAssignments.questId, quest.id));
@@ -10754,12 +10743,12 @@ export async function registerRoutes(
     ],
   };
 
-  const hellZoneParticipants: Map<string, { enteredAt: number; kills: number; alive: boolean }> = new Map();
+  const inMemoryHZParticipants: Map<string, { enteredAt: number; kills: number; alive: boolean }> = new Map();
 
   app.get("/api/hell-zone/config", (_req, res) => {
     res.json({
       ...HELL_ZONE_CONFIG,
-      activeParticipants: Array.from(hellZoneParticipants.entries())
+      activeParticipants: Array.from(inMemoryHZParticipants.entries())
         .filter(([_, data]) => data.alive)
         .length,
     });
@@ -10782,14 +10771,14 @@ export async function registerRoutes(
         });
       }
       
-      if (hellZoneParticipants.has(accountId)) {
-        const data = hellZoneParticipants.get(accountId)!;
+      if (inMemoryHZParticipants.has(accountId)) {
+        const data = inMemoryHZParticipants.get(accountId)!;
         if (data.alive) {
           return res.status(400).json({ error: "Already in Hell Zone" });
         }
       }
       
-      hellZoneParticipants.set(accountId, { enteredAt: Date.now(), kills: 0, alive: true });
+      inMemoryHZParticipants.set(accountId, { enteredAt: Date.now(), kills: 0, alive: true });
       
       await storage.createActivityFeed({
         type: "hell_zone_entry",
@@ -10819,7 +10808,7 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Account not found" });
       }
       
-      const participant = hellZoneParticipants.get(accountId);
+      const participant = inMemoryHZParticipants.get(accountId);
       if (!participant || !participant.alive) {
         return res.status(400).json({ error: "Not in Hell Zone or already defeated" });
       }
@@ -10893,13 +10882,13 @@ export async function registerRoutes(
     try {
       const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
       
-      const participant = hellZoneParticipants.get(accountId);
+      const participant = inMemoryHZParticipants.get(accountId);
       if (!participant) {
         return res.status(400).json({ error: "Not in Hell Zone" });
       }
       
       const timeSpent = Date.now() - participant.enteredAt;
-      hellZoneParticipants.delete(accountId);
+      inMemoryHZParticipants.delete(accountId);
       
       res.json({
         success: true,
@@ -10916,7 +10905,7 @@ export async function registerRoutes(
     try {
       const { accountId, healAmount } = z.object({ accountId: z.string(), healAmount: z.number() }).parse(req.body);
       
-      const participant = hellZoneParticipants.get(accountId);
+      const participant = inMemoryHZParticipants.get(accountId);
       if (!participant || !participant.alive) {
         return res.json({
           success: true,
@@ -10943,8 +10932,8 @@ export async function registerRoutes(
 
   app.get("/api/hell-zone/leaderboard", async (_req, res) => {
     try {
-      const leaderboard = Array.from(hellZoneParticipants.entries())
-        .map(([accountId, data]) => ({ accountId, kills: data.kills, alive: data.alive }))
+      const leaderboard = Array.from(inMemoryHZParticipants.entries())
+        .map(([accountId, data]: [string, { enteredAt: number; kills: number; alive: boolean }]) => ({ accountId, kills: data.kills, alive: data.alive }))
         .sort((a, b) => b.kills - a.kills)
         .slice(0, 10);
       
@@ -10976,7 +10965,7 @@ export async function registerRoutes(
         onlinePlayers: activeSessions.size,
         totalGuilds: allGuilds.length,
         totalActivityLogs: activityFeeds.length,
-        hellZoneParticipants: hellZoneParticipants.size,
+        hellZoneParticipants: inMemoryHZParticipants.size,
         suspiciousAccounts: suspiciousActivity.size,
         serverUptime: process.uptime(),
       };
@@ -11382,7 +11371,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: `Requires Tower Floor ${req_obj.towerFloor}` });
       }
       if (req_obj.hellZoneKills) {
-        const participant = hellZoneParticipants.get(accountId);
+        const participant = inMemoryHZParticipants.get(accountId);
         const kills = participant?.kills || 0;
         if (kills < req_obj.hellZoneKills) {
           return res.status(400).json({ error: `Requires ${req_obj.hellZoneKills} Hell Zone kills (you have ${kills})` });
@@ -13262,7 +13251,7 @@ export async function registerRoutes(
     return achievements;
   }
 
-  const allExpandedAchievements = EXPANDED_ACHIEVEMENT_CATEGORIES.flatMap(c => c.achievements) as any[];
+  const allExpandedAchievements: any[] = (EXPANDED_ACHIEVEMENT_CATEGORIES as any[]).flatMap((c: any) => c.achievements);
 
   app.get("/api/achievements", (_req, res) => {
     res.json({ categories: EXPANDED_ACHIEVEMENT_CATEGORIES, total: allExpandedAchievements.length });
@@ -13358,13 +13347,13 @@ export async function registerRoutes(
       return res.status(404).json({ error: "Trophy not found" });
     }
     
-    const earned = playerTrophiesMap.get(accountId) || new Set();
+    const existingAccount = await storage.getAccount(accountId);
+    const earned = new Set<string>((existingAccount?.trophies as string[]) || []);
     if (earned.has(trophyId)) {
       return res.status(400).json({ error: "Trophy already earned" });
     }
     
     earned.add(trophyId);
-    playerTrophiesMap.set(accountId, earned);
     
     const account = await storage.getAccount(accountId);
     if (account) {
@@ -13634,9 +13623,10 @@ export async function registerRoutes(
             trainingPoints: (winner.trainingPoints || 0) + (tournament.rewards.trainingPoints || 0),
           });
           
-          const trophies = playerTrophiesMap.get(winners[0]) || new Set();
+          const winnerForTrophy = await storage.getAccount(winners[0]);
+          const trophies = new Set<string>((winnerForTrophy?.trophies as string[]) || []);
           trophies.add("tournament_winner");
-          playerTrophiesMap.set(winners[0], trophies);
+          await storage.updateAccount(winners[0], { trophies: Array.from(trophies) as string[] });
         }
         
         await storage.createActivityFeed({
@@ -13707,7 +13697,7 @@ export async function registerRoutes(
       const egg = PET_SHOP_EGGS.find(e => e.id === eggId);
       if (!egg) return res.status(404).json({ error: "Egg not found" });
 
-      const requiredRankIndex = playerRanks.indexOf(egg.rankRequired);
+      const requiredRankIndex = playerRanks.indexOf(egg.rankRequired as any);
       const playerRankIndex = playerRanks.indexOf(account.rank);
       if (playerRankIndex < requiredRankIndex) {
         return res.status(403).json({ error: `This egg requires ${egg.rankRequired} rank or higher`, required: egg.rankRequired });
@@ -13924,10 +13914,10 @@ export async function registerRoutes(
       const account = await storage.getAccount(accountId);
       if (!account) return res.status(404).json({ error: "Account not found" });
 
-      const requiredRankIndex = playerRanks.indexOf("Grand Master");
+      const requiredRankIndex = playerRanks.indexOf("Grandmaster" as any);
       const playerRankIndex = playerRanks.indexOf(account.rank);
       if (playerRankIndex < requiredRankIndex) {
-        return res.status(403).json({ error: "Hell Zone requires Grand Master rank or higher", required: "Grand Master" });
+        return res.status(403).json({ error: "Hell Zone requires Grandmaster rank or higher", required: "Grandmaster" });
       }
 
       const challenges: Record<string, { rewards: { gold: number; rubies: number; soulShards: number }; riskPercent: number; difficulty: number }> = {
@@ -14121,10 +14111,10 @@ export async function registerRoutes(
       return res.status(404).json({ error: "Account not found" });
     }
     
-    const requiredRankIndex = playerRanks.indexOf("Grand Master");
+    const requiredRankIndex = playerRanks.indexOf("Grandmaster" as any);
     const playerRankIndex = playerRanks.indexOf(account.rank);
     if (playerRankIndex < requiredRankIndex) {
-      return res.status(403).json({ error: "Hell Zone requires Grand Master rank or higher" });
+      return res.status(403).json({ error: "Hell Zone requires Grandmaster rank or higher" });
     }
     
     if (battleRoyale.registrations.has(accountId)) {
@@ -14694,9 +14684,9 @@ export async function registerRoutes(
           monsterElement: "Lightning",
           monsterLevel: 50,
           isBoss: true,
-          source: "weather",
+          source: "action",
           weather: "thunderstorm",
-        });
+        } as any);
         return res.json({
           monsterActive: true,
           monster: {
@@ -16168,7 +16158,7 @@ export async function registerRoutes(
   app.post("/api/admin/guild-quests", async (req, res) => {
     try {
       const questData = insertGuildQuestSchema.parse(req.body);
-      const [newQuest] = await db.insert(guildQuests).values(questData).returning();
+      const [newQuest] = await db.insert(guildQuests).values(questData as any).returning();
       res.status(201).json(newQuest);
     } catch (error) {
       console.error("Error creating guild quest:", error);
@@ -16256,7 +16246,7 @@ export async function registerRoutes(
 
       const bossAttacker = await storage.getAccount(accountId);
       const rawBossStats = await getPlayerTotalStats(accountId);
-      let bossAttackStats = applyRaceModifiers(rawBossStats, bossAttacker?.race);
+      let bossAttackStats = applyRaceModifiers(rawBossStats, bossAttacker?.race ?? null);
       bossAttackStats = applyRacePassiveSkill(bossAttackStats, bossAttacker?.equippedRacePassive);
       bossAttackStats = applyWeaknessDebuff(bossAttackStats, bossAttacker?.weaknessDebuffExpires ? new Date(bossAttacker.weaknessDebuffExpires) : null);
       const damage = Math.max(1, Math.floor(bossAttackStats.Str + bossAttackStats.Int * 0.5 + bossAttackStats.Luck * 0.25));
@@ -16327,8 +16317,10 @@ export async function registerRoutes(
         tournamentId: id,
         matchId: parseInt(matchIndex),
         accountId,
-        betAmount
-      });
+        amount: betAmount,
+        targetPlayerId: req.body.targetPlayerId || accountId,
+        odds: "1.0",
+      } as any);
 
       await storage.updateAccountGold(accountId, -betAmount);
       res.json({ success: true });
@@ -16381,8 +16373,10 @@ export async function registerRoutes(
       const [newShard] = await db.insert(shards).values({
         shardType,
         ownerId: accountId,
-        zone,
-        isPhysical: true
+        zone: zone || "world",
+        isPhysical: true,
+        name: `${shardType} Shard`,
+        description: `A shard of ${shardType} energy`,
       }).returning();
       
       // Also update the account's shard count
@@ -17715,7 +17709,7 @@ export async function registerRoutes(
         const raceField = `${shard.shardType}Shards` as keyof Account;
         if (raceField in account) {
           await tx.update(accounts)
-            .set({ [raceField]: sql`${accounts[raceField as any]} + 1` })
+            .set({ [raceField]: sql`${(accounts as any)[raceField]} + 1` })
             .where(eq(accounts.id, accountId));
         }
       });
@@ -17765,7 +17759,7 @@ export async function registerRoutes(
       for (const type of shardTypes) {
         const field = `${type}Shards`;
         const result = await db.select({
-          total: sql<number>`sum(${accounts[field as any]})::int`
+          total: sql<number>`sum(${(accounts as any)[field]})::int`
         }).from(accounts);
         totals[type] = result[0]?.total || 0;
       }
@@ -17823,26 +17817,26 @@ export async function registerRoutes(
     try {
       const { accountId } = req.body;
       const account = await storage.getAccount(accountId);
-      if (!account || !account.guildId) return res.status(400).json({ error: "You must be in a guild to claim a zone" });
+      if (!account || !(account as any).guildId) return res.status(400).json({ error: "You must be in a guild to claim a zone" });
 
       const existing = await db.select().from(zoneConquests).where(eq(zoneConquests.zoneId, req.params.zoneId));
       if (existing.length > 0 && existing[0].guildId) {
         return res.status(409).json({ error: "Zone is already claimed by another guild" });
       }
 
-      const guild = await storage.getGuild(account.guildId);
+      const guild = await storage.getGuild((account as any).guildId);
       if (!guild) return res.status(404).json({ error: "Guild not found" });
       const bank = guild.bank as any;
       if ((bank?.gold || 0) < 5000) {
         return res.status(400).json({ error: "Your guild needs at least 5,000 gold in the bank to claim a zone" });
       }
 
-      await db.update(guildsTable).set({ bank: { ...bank, gold: (bank.gold || 0) - 5000 } }).where(eq(guildsTable.id, account.guildId));
+      await db.update(guildsTable).set({ bank: { ...bank, gold: (bank.gold || 0) - 5000 } }).where(eq(guildsTable.id, (account as any).guildId));
 
       if (existing.length > 0) {
-        await db.update(zoneConquests).set({ guildId: account.guildId, conqueredAt: new Date(), defensePoints: 100 }).where(eq(zoneConquests.zoneId, req.params.zoneId));
+        await db.update(zoneConquests).set({ guildId: (account as any).guildId, conqueredAt: new Date(), defensePoints: 100 }).where(eq(zoneConquests.zoneId, req.params.zoneId));
       } else {
-        await db.insert(zoneConquests).values({ zoneId: req.params.zoneId, guildId: account.guildId, taxRate: 5, defensePoints: 100 });
+        await db.insert(zoneConquests).values({ zoneId: req.params.zoneId, guildId: (account as any).guildId, taxRate: 5, defensePoints: 100 });
       }
       res.json({ success: true, message: "Zone claimed!" });
     } catch (error) {
@@ -17854,15 +17848,15 @@ export async function registerRoutes(
     try {
       const { accountId } = req.body;
       const account = await storage.getAccount(accountId);
-      if (!account || !account.guildId) return res.status(400).json({ error: "You must be in a guild to attack a zone" });
+      if (!account || !(account as any).guildId) return res.status(400).json({ error: "You must be in a guild to attack a zone" });
 
       const rows = await db.select().from(zoneConquests).where(eq(zoneConquests.zoneId, req.params.zoneId));
       if (rows.length === 0 || !rows[0].guildId) return res.status(400).json({ error: "Zone is not claimed" });
-      if (rows[0].guildId === account.guildId) return res.status(400).json({ error: "Cannot attack your own zone" });
+      if (rows[0].guildId === (account as any).guildId) return res.status(400).json({ error: "Cannot attack your own zone" });
 
       const newDefense = (rows[0].defensePoints || 100) - 10;
       if (newDefense <= 0) {
-        await db.update(zoneConquests).set({ guildId: account.guildId, defensePoints: 100, conqueredAt: new Date() }).where(eq(zoneConquests.zoneId, req.params.zoneId));
+        await db.update(zoneConquests).set({ guildId: (account as any).guildId, defensePoints: 100, conqueredAt: new Date() }).where(eq(zoneConquests.zoneId, req.params.zoneId));
         return res.json({ success: true, conquered: true, message: "Zone conquered! Your guild now controls this zone." });
       } else {
         await db.update(zoneConquests).set({ defensePoints: newDefense }).where(eq(zoneConquests.zoneId, req.params.zoneId));
@@ -17949,7 +17943,7 @@ export async function registerRoutes(
         : item;
 
       await db.update(accounts).set({ rubies: rubies - item.rubyPrice } as any).where(eq(accounts.id, accountId));
-      await storage.addInventoryItem(accountId, { name: inventoryItem.name, type: inventoryItem.type, tier: inventoryItem.tier, stats: inventoryItem.stats, special: inventoryItem.special || "", id: `${inventoryItem.id}-${Date.now()}` });
+      await storage.addToInventory({ accountId, name: inventoryItem.name, type: inventoryItem.type, tier: inventoryItem.tier, stats: inventoryItem.stats, special: inventoryItem.special || "", id: `${inventoryItem.id}-${Date.now()}` } as any);
 
       // Honour Hall: item tier purchase
       const itemTierClaimed = await checkAndClaimOnItemPurchase(accountId, account.username, account.race, item.tier, item.name);
@@ -18043,7 +18037,7 @@ export async function registerRoutes(
 
       const since = new Date(Date.now() - 24 * 3600 * 1000);
       const recentWin = await db.select().from(challengesTable).where(
-        sql`${challengesTable.challengerId} = ${claimerId} AND ${challengesTable.challengedId} = ${bounty.targetId} AND ${challengesTable.status} = 'completed' AND ${challengesTable.winner} = ${claimerId} AND ${challengesTable.updatedAt} > ${since}`
+        sql`${challengesTable.challengerId} = ${claimerId} AND ${challengesTable.challengedId} = ${bounty.targetId} AND ${challengesTable.status} = 'completed' AND ${challengesTable.winnerId} = ${claimerId}`
       );
       if (recentWin.length === 0) return res.status(400).json({ error: "You must defeat the target in PvP within the last 24 hours to claim this bounty" });
 
@@ -18109,7 +18103,7 @@ export async function registerRoutes(
 
   app.get("/api/admin/shop-items-overview", (_req, res) => {
     const { ALL_ITEMS } = require("../client/src/lib/items-data");
-    const tiers = [...new Set(ALL_ITEMS.map((i: any) => i.tier))];
+    const tiers = Array.from(new Set(ALL_ITEMS.map((i: any) => i.tier)));
     const overview = tiers.map((tier: any) => {
       const items = ALL_ITEMS.filter((i: any) => i.tier === tier);
       return {

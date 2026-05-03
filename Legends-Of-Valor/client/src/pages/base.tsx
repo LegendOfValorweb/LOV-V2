@@ -825,7 +825,7 @@ export default function Base() {
   const { data: trainingStatus, refetch: refetchTraining } = useQuery<any>({
     queryKey: ["/api/accounts/" + account?.id + "/offline-training/status"],
     queryFn: async () => {
-      const res = await fetch(`/api/accounts/${account.id}/offline-training/status`);
+      const res = await fetch(`/api/accounts/${account!.id}/offline-training/status`);
       return res.json();
     },
     enabled: !!account?.id,
@@ -834,7 +834,7 @@ export default function Base() {
 
   const startTrainingMutation = useMutation({
     mutationFn: async (stat: string) => {
-      const res = await apiRequest("POST", `/api/accounts/${account.id}/offline-training/start`, { stat });
+      const res = await apiRequest("POST", `/api/accounts/${account!.id}/offline-training/start`, { stat });
       return res.json();
     },
     onSuccess: () => {
@@ -848,7 +848,7 @@ export default function Base() {
 
   const collectTrainingMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/accounts/${account.id}/offline-training/stop`, {});
+      const res = await apiRequest("POST", `/api/accounts/${account!.id}/offline-training/stop`, {});
       return res.json();
     },
     onSuccess: (data) => {
