@@ -1,16 +1,46 @@
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
-import { Map, Crown, Coins, Heart, Zap } from "lucide-react";
+import { Map, Crown, Coins, Zap, Gem } from "lucide-react";
 import { useGame } from "@/lib/game-context";
 import { useState, useEffect } from "react";
+import GameBackground from "@/components/game-background";
 
 interface PageLayoutProps {
   children: React.ReactNode;
   title: string;
   backdrop?: string;
   showPlayerInfo?: boolean;
+}
+
+const ZONE_ICONS: Record<string, string> = {
+  "Inventory": "🎒",
+  "Skills": "📖",
+  "Shop": "🛒",
+  "Base": "🏰",
+  "World Map": "🗺",
+  "Quests": "📜",
+  "Guild Hall": "⚜",
+  "Pets": "🐾",
+  "Birds": "🦅",
+  "Leaderboard": "🏆",
+  "Achievements": "🎖",
+  "Trading Post": "🤝",
+  "Fishing": "🎣",
+  "Mining": "⛏",
+  "Tournaments": "⚔",
+  "Combat Log": "📋",
+  "Black Market": "💀",
+  "Events": "📅",
+  "Challenges": "🎯",
+  "Reputation": "🏅",
+  "Co-op": "🤺",
+  "Pet Arena": "🐉",
+};
+
+function formatNumber(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
+  return n.toLocaleString();
 }
 
 export function PageLayout({ children, title, backdrop, showPlayerInfo = true }: PageLayoutProps) {
@@ -36,96 +66,125 @@ export function PageLayout({ children, title, backdrop, showPlayerInfo = true }:
 
   const getPortraitPath = () => {
     if (!account) return '/portraits/human_male.png';
-    // Check for equipped character skin first
     if (account.equippedCharacterSkin && account.equippedCharacterSkin !== 'default') {
       return `/skins/character/${account.equippedCharacterSkin}.png`;
     }
-    // Check portrait field (may contain skin path or race_gender)
     if (account.portrait) {
-      if (account.portrait.startsWith('skins/')) {
-        return `/${account.portrait}.png`;
-      }
-      if (account.portrait.includes('/')) {
-        return account.portrait;
-      }
+      if (account.portrait.startsWith('skins/')) return `/${account.portrait}.png`;
+      if (account.portrait.includes('/')) return account.portrait;
       return `/portraits/${account.portrait}.png`;
     }
-    // Default to race/gender portrait
-    if (account.race && account.gender) {
-      return `/portraits/${account.race}_${account.gender}.png`;
-    }
+    if (account.race && account.gender) return `/portraits/${account.race}_${account.gender}.png`;
     return '/portraits/human_male.png';
   };
   const portraitPath = getPortraitPath();
 
+  const zoneIcon = ZONE_ICONS[title] || "⚔";
+  const energy = energyData?.energy ?? account?.energy ?? 50;
+  const maxEnergy = energyData?.maxEnergy ?? account?.maxEnergy ?? 50;
+  const energyPct = Math.min(100, (energy / maxEnergy) * 100);
+
   return (
     <div className="game-page relative">
+      <GameBackground />
+
       {backdrop && (
-        <>
-          <div 
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ zIndex: 1 }}
+        >
+          <div
             className="absolute inset-0 bg-cover bg-center"
-            style={{ backgroundImage: `url('${backdrop}')` }}
+            style={{
+              backgroundImage: `url('${backdrop}')`,
+              filter: "brightness(0.25) saturate(0.6)",
+            }}
           />
-          <div className="absolute inset-0 bg-black/50" />
-        </>
+        </div>
       )}
-      
-      <div className={`relative z-10 h-full flex flex-col ${backdrop ? '' : 'bg-background'}`}>
-        <div className="flex-shrink-0 p-3">
-          <div className="flex items-center justify-between">
+
+      <div className="relative flex flex-col h-full" style={{ zIndex: 2 }}>
+        <div className="page-layout-header flex-shrink-0">
+          <div className="page-layout-header-inner">
+
             {showPlayerInfo && account ? (
-              <Card className="bg-card/90 backdrop-blur">
-                <CardContent className="p-2 flex items-center gap-3">
-                  <img 
+              <div className="pl-player-block">
+                <div className="pl-portrait-frame">
+                  <img
                     src={portraitPath}
                     alt={account.username}
-                    className="w-10 h-10 rounded-lg border border-primary object-cover"
+                    className="pl-portrait-img"
                     onError={(e) => {
                       (e.target as HTMLImageElement).src = "/portraits/human_male.png";
                     }}
                   />
-                  <div>
-                    <div className="font-serif font-bold text-sm flex items-center gap-1 rpg-gold-text">
-                      {account.username}
-                      {account.vipUntil && new Date(account.vipUntil) > new Date() && (
-                        <Crown className="w-3 h-3 text-yellow-400" />
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground rpg-stat-number">
-                      <div className="flex items-center gap-1">
-                        <Coins className="w-3 h-3 text-yellow-400" />
-                        <span>{(account.gold || 0).toLocaleString()}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="text-red-400 font-bold">$V</span>
-                        <span className="text-red-300">{(account.valorTokens || 0).toLocaleString()}</span>
-                      </div>
-                      {energyData && (
-                        <div className="flex items-center gap-1">
-                          <Zap className="w-3 h-3 text-cyan-400" />
-                          <span className="text-cyan-300">{energyData.energy}/{energyData.maxEnergy}</span>
-                        </div>
-                      )}
-                    </div>
+                </div>
+                <div className="pl-player-info">
+                  <div className="pl-player-name">
+                    {account.username}
+                    {account.vipUntil && new Date(account.vipUntil) > new Date() && (
+                      <Crown className="pl-vip-icon" />
+                    )}
                   </div>
-                </CardContent>
-              </Card>
+                  <div className="pl-player-rank">{account.rank}</div>
+                  <div className="pl-resources">
+                    <span className="pl-res pl-res-gold">
+                      <Coins className="pl-res-icon" />
+                      {formatNumber(account.gold || 0)}
+                    </span>
+                    <span className="pl-res pl-res-ruby">
+                      <Gem className="pl-res-icon" />
+                      {formatNumber(account.rubies || 0)}
+                    </span>
+                    <span className="pl-res pl-res-energy">
+                      <Zap className="pl-res-icon" />
+                      {energy}/{maxEnergy}
+                    </span>
+                  </div>
+                  <div className="pl-energy-bar-track">
+                    <div
+                      className="pl-energy-bar-fill"
+                      style={{ width: `${energyPct}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
             ) : (
-              <h1 className="rpg-title text-2xl font-bold rpg-gold-text">{title}</h1>
+              <div className="pl-empty-left" />
             )}
 
-            <Button 
-              variant="outline" 
-              className="bg-card/90 backdrop-blur"
-              onClick={() => navigate("/world-map")}
-            >
-              <Map className="w-4 h-4 mr-2" />
-              World Map
-            </Button>
+            <div className="pl-title-block">
+              <div className="pl-title-decorators">
+                <span className="pl-title-line" />
+                <span className="pl-title-diamond">◆</span>
+                <span className="pl-title-line" />
+              </div>
+              <h1 className="pl-title">
+                <span className="pl-title-icon">{zoneIcon}</span>
+                {title}
+              </h1>
+              <div className="pl-title-decorators">
+                <span className="pl-title-line" />
+                <span className="pl-title-diamond pl-title-diamond-sm">◆</span>
+                <span className="pl-title-line" />
+              </div>
+            </div>
+
+            <div className="pl-nav-block">
+              <Button
+                className="pl-map-btn"
+                onClick={() => navigate("/world-map")}
+              >
+                <Map className="pl-map-btn-icon" />
+                <span>World Map</span>
+              </Button>
+            </div>
+
           </div>
+          <div className="page-layout-separator" />
         </div>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 pt-0">
+        <div className="pl-content">
           {children}
         </div>
       </div>

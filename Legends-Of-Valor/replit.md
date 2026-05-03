@@ -719,3 +719,5 @@ Existing accounts without traits are automatically assigned on their first visit
 - **Tournament Player UI**: Full tournament page at /tournaments with join, view brackets, and auto-refresh. Tournament Grounds zone added to World Map
 - **Battle Royale**: Full PvP mode in Hell Zone with admin controls, registration, target selection, elimination mechanics, and top 5 rewards (final V2 feature)
 - **Auto-Achievements**: Automatic achievement/trophy unlocking based on player progress
+- **Game Math Audit** (May 2026): Fixed calculateMaxHP (+Def×5), min damage floor (15%), tower NPC multiplier (5→1.5), rank floor requirements, PCG quest rewards (1.3^idx × 5× base)
+- **In-Game Visual Overhaul** (May 2026): Added `GameBackground` component (canvas particle system with ember/orb effects + dimmed `races-battle.png`) injected into `GameViewport` for all in-game pages; redesigned `PageLayout` with cinematic ornate header (portrait frame, gold separators, zone title with Cinzel font, resource bars); enhanced HUD CSS (top bar blur, icon strip glow states, player panel, menu popup glassmorphism); page backgrounds now transparent to reveal atmospheric layer
