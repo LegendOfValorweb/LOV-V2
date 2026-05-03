@@ -22,7 +22,7 @@ import {
 } from "./server-achievements";
 import { storage, evictAccountCache } from "./storage";
 import { db } from "./db";
-import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, type CombatLogEntry, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, shardEvents, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage, worldBosses, worldBossDamage, inventoryItems, playerSkills, casinoHistory, skillTreeNodes, playerModifiers, prestigeHistory, playerSnapshots, dimensionPortals, dimensionRuns, armies, armyRaids } from "@shared/schema";
+import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, type CombatLogEntry, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, shardEvents, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage, worldBosses, worldBossDamage, inventoryItems, playerSkills, casinoHistory, skillTreeNodes, playerModifiers, prestigeHistory, playerSnapshots, dimensionPortals, dimensionRuns, armies, armyRaids, playerQuests, worldEvents } from "@shared/schema";
 import { ZONE_NPCS, getZoneNPC, calculateNPCStats, calculateNPCRewards } from "@shared/zone-npcs";
 import { z } from "zod";
 import type { Account, Event, Challenge, PlayerRace, PlayerGender } from "@shared/schema";
@@ -64,7 +64,7 @@ import {
   getZoneExhaustionInfo,
   getRankRequirementLabel,
 } from "./resource-system";
-import { eq, sql, and, lt, desc } from "drizzle-orm";
+import { eq, sql, and, lt, gt, desc, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { getActiveWorldBoss, spawnWorldBoss, recordBossDamage, MAX_ATTACKS_PER_BOSS, getPlayerBossAttackCount } from "./world-boss";
@@ -19427,6 +19427,358 @@ export async function registerRoutes(
     } catch (e) {
       if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
       res.status(500).json({ error: "Failed to fuse skills" });
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════
+  // PROCEDURAL CONTENT GENERATION — Quests, Enemies, Loot, World Events
+  // ══════════════════════════════════════════════════════════════════════
+
+  // In-memory world event bonus cache (refreshed every 60s)
+  let _cachedEventBonuses: import("@shared/pcg-templates").ActiveWorldEventBonuses | null = null;
+  let _eventCacheTs = 0;
+
+  async function getWorldEventBonusesNow(): Promise<import("@shared/pcg-templates").ActiveWorldEventBonuses> {
+    const now = Date.now();
+    if (_cachedEventBonuses && now - _eventCacheTs < 60_000) return _cachedEventBonuses;
+    const { aggregateEventBonuses, getWorldEventType } = await import("@shared/pcg-templates");
+    const active = await db.select().from(worldEvents)
+      .where(and(eq(worldEvents.isActive, true), gt(worldEvents.expiresAt, new Date())));
+    const effects = active.map(e => getWorldEventType(e.typeId)?.effects).filter(Boolean) as any[];
+    _cachedEventBonuses = aggregateEventBonuses(effects);
+    _eventCacheTs = now;
+    return _cachedEventBonuses;
+  }
+
+  // Auto-generate a new world event every 3 hours if none are currently active
+  const worldEventInterval = setInterval(async () => {
+    try {
+      const { generateWorldEvent, getWorldEventType } = await import("@shared/pcg-templates");
+      await db.update(worldEvents).set({ isActive: false })
+        .where(lt(worldEvents.expiresAt, new Date()));
+      const current = await db.select().from(worldEvents)
+        .where(and(eq(worldEvents.isActive, true), gt(worldEvents.expiresAt, new Date())));
+      if (current.length < 2) {
+        const { typeId, expiresInMs } = generateWorldEvent();
+        const evType = getWorldEventType(typeId);
+        if (evType) {
+          const expiresAt = new Date(Date.now() + expiresInMs);
+          await db.insert(worldEvents).values({
+            typeId,
+            title: evType.name,
+            description: evType.description,
+            effects: evType.effects as any,
+            startedAt: new Date(),
+            expiresAt,
+            isActive: true,
+          });
+          _cachedEventBonuses = null; // invalidate cache
+          broadcastToAllPlayers("worldEvent", { typeId, title: evType.name, label: evType.effects.label, expiresAt });
+        }
+      }
+    } catch {}
+  }, 3 * 60 * 60 * 1000); // 3 hours
+
+  // Seed one event on startup if none active
+  (async () => {
+    try {
+      const { generateWorldEvent, getWorldEventType } = await import("@shared/pcg-templates");
+      const current = await db.select().from(worldEvents)
+        .where(and(eq(worldEvents.isActive, true), gt(worldEvents.expiresAt, new Date())));
+      if (current.length === 0) {
+        const { typeId, expiresInMs } = generateWorldEvent();
+        const evType = getWorldEventType(typeId);
+        if (evType) {
+          await db.insert(worldEvents).values({
+            typeId, title: evType.name, description: evType.description,
+            effects: evType.effects as any,
+            startedAt: new Date(), expiresAt: new Date(Date.now() + expiresInMs), isActive: true,
+          });
+        }
+      }
+    } catch {}
+  })();
+
+  // GET quest board — generate 6 quests for this player
+  app.get("/api/pcg/quest-board", async (req, res) => {
+    try {
+      const accountId = req.query.accountId as string;
+      const seed = parseInt(req.query.seed as string) || Date.now();
+      if (!accountId) return res.status(400).json({ error: "accountId required" });
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Not found" });
+
+      const { generateQuestBoard } = await import("@shared/pcg-templates");
+      const acctForPcg = {
+        rank: account.rank as any,
+        wins: account.wins ?? 0,
+        npcFloor: (account as any).npcFloor ?? 1,
+        npcLevel: (account as any).npcLevel ?? 1,
+        stats: (account.stats as Record<string, number>) ?? {},
+        gold: account.gold ?? 0,
+        soulShards: (account as any).soulShards ?? 0,
+        baseTier: (account as any).baseTier ?? 1,
+        prestigeLevel: (account as any).prestigeLevel ?? 0,
+      };
+      const quests = generateQuestBoard(acctForPcg, 6, seed);
+      res.json({ quests });
+    } catch (e) {
+      console.error("PCG quest board error:", e);
+      res.status(500).json({ error: "Failed to generate quest board" });
+    }
+  });
+
+  // POST accept a quest
+  app.post("/api/pcg/quests/accept", async (req, res) => {
+    try {
+      const { accountId, quest } = z.object({ accountId: z.string(), quest: z.any() }).parse(req.body);
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Not found" });
+
+      // Check active quest limit (max 6 active at once)
+      const activeCount = await db.select({ id: playerQuests.id }).from(playerQuests)
+        .where(and(eq(playerQuests.accountId, accountId), eq(playerQuests.status, "active")));
+      if (activeCount.length >= 6) return res.status(400).json({ error: "Maximum of 6 active quests reached" });
+
+      // Stamp baseline into objective for delta-tracking
+      const objective = { ...quest.objective };
+      objective.baseline = {
+        wins: account.wins ?? 0,
+        npcFloor: (account as any).npcFloor ?? 1,
+        npcLevel: (account as any).npcLevel ?? 1,
+        soulShards: (account as any).soulShards ?? 0,
+      };
+
+      const expiresAt = quest.timeLimit
+        ? new Date(Date.now() + quest.timeLimit * 3600 * 1000) : null;
+
+      const [saved] = await db.insert(playerQuests).values({
+        accountId,
+        templateId: quest.templateId,
+        title: quest.title,
+        description: quest.description,
+        category: quest.category,
+        difficulty: quest.difficulty,
+        objective,
+        rewards: quest.rewards,
+        status: "active",
+        acceptedAt: new Date(),
+        expiresAt: expiresAt ?? undefined,
+      }).returning();
+
+      res.json({ quest: saved });
+    } catch (e) {
+      console.error("PCG accept error:", e);
+      res.status(500).json({ error: "Failed to accept quest" });
+    }
+  });
+
+  // GET active quests for a player (with live progress)
+  app.get("/api/pcg/quests/active", async (req, res) => {
+    try {
+      const accountId = req.query.accountId as string;
+      if (!accountId) return res.status(400).json({ error: "accountId required" });
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Not found" });
+
+      const { validateQuestProgress } = await import("@shared/pcg-templates");
+      const active = await db.select().from(playerQuests)
+        .where(and(eq(playerQuests.accountId, accountId), eq(playerQuests.status, "active")))
+        .orderBy(playerQuests.acceptedAt);
+
+      const acctForPcg = {
+        rank: account.rank as any,
+        wins: account.wins ?? 0,
+        npcFloor: (account as any).npcFloor ?? 1,
+        npcLevel: (account as any).npcLevel ?? 1,
+        stats: (account.stats as Record<string, number>) ?? {},
+        gold: account.gold ?? 0,
+        soulShards: (account as any).soulShards ?? 0,
+        baseTier: (account as any).baseTier ?? 1,
+        prestigeLevel: (account as any).prestigeLevel ?? 0,
+      };
+
+      const quests = active.map(q => ({
+        ...q,
+        progress: validateQuestProgress(q.objective as any, acctForPcg),
+      }));
+
+      res.json({ quests });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch active quests" });
+    }
+  });
+
+  // POST complete a quest
+  app.post("/api/pcg/quests/:questId/complete", async (req, res) => {
+    try {
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      const questId = req.params.questId;
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Not found" });
+
+      const [quest] = await db.select().from(playerQuests)
+        .where(and(eq(playerQuests.id, questId), eq(playerQuests.accountId, accountId)));
+      if (!quest) return res.status(404).json({ error: "Quest not found" });
+      if (quest.status !== "active") return res.status(400).json({ error: "Quest is not active" });
+
+      // Check expiry
+      if (quest.expiresAt && new Date(quest.expiresAt) < new Date()) {
+        await db.update(playerQuests).set({ status: "expired" }).where(eq(playerQuests.id, questId));
+        return res.status(400).json({ error: "Quest has expired" });
+      }
+
+      const { validateQuestProgress } = await import("@shared/pcg-templates");
+      const acctForPcg = {
+        rank: account.rank as any,
+        wins: account.wins ?? 0,
+        npcFloor: (account as any).npcFloor ?? 1,
+        npcLevel: (account as any).npcLevel ?? 1,
+        stats: (account.stats as Record<string, number>) ?? {},
+        gold: account.gold ?? 0,
+        soulShards: (account as any).soulShards ?? 0,
+        baseTier: (account as any).baseTier ?? 1,
+        prestigeLevel: (account as any).prestigeLevel ?? 0,
+      };
+
+      const { complete, current, required } = validateQuestProgress(quest.objective as any, acctForPcg);
+      if (!complete) return res.status(400).json({ error: `Not complete yet: ${current}/${required}` });
+
+      // Apply world event bonus multipliers to rewards
+      const rawRewards = quest.rewards as any;
+      const eventBonuses = await getWorldEventBonusesNow();
+      const rewards = {
+        gold: Math.round((rawRewards.gold ?? 0) * eventBonuses.goldMult),
+        trainingPoints: Math.round((rawRewards.trainingPoints ?? 0) * eventBonuses.tpMult),
+        soulShards: Math.round((rawRewards.soulShards ?? 0) * eventBonuses.shardMult),
+        focusedShards: rawRewards.focusedShards ?? 0,
+        runes: Math.round((rawRewards.runes ?? 0) * eventBonuses.runeMult),
+        bonus: rawRewards.bonus ?? null,
+      };
+
+      // Award rewards
+      await storage.updateAccount(accountId, {
+        gold: account.gold + rewards.gold,
+        trainingPoints: ((account as any).trainingPoints ?? 0) + rewards.trainingPoints,
+        soulShards: ((account as any).soulShards ?? 0) + rewards.soulShards,
+        focusedShards: ((account as any).focusedShards ?? 0) + rewards.focusedShards,
+        runes: ((account as any).runes ?? 0) + rewards.runes,
+      } as any);
+      evictAccountCache(accountId);
+
+      // Mark quest completed
+      await db.update(playerQuests).set({ status: "completed", completedAt: new Date() })
+        .where(eq(playerQuests.id, questId));
+
+      res.json({ success: true, rewards });
+    } catch (e) {
+      console.error("PCG complete error:", e);
+      res.status(500).json({ error: "Failed to complete quest" });
+    }
+  });
+
+  // POST abandon a quest
+  app.post("/api/pcg/quests/:questId/abandon", async (req, res) => {
+    try {
+      const { accountId } = z.object({ accountId: z.string() }).parse(req.body);
+      const questId = req.params.questId;
+      await db.update(playerQuests)
+        .set({ status: "abandoned" })
+        .where(and(eq(playerQuests.id, questId), eq(playerQuests.accountId, accountId)));
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to abandon quest" });
+    }
+  });
+
+  // GET quest history
+  app.get("/api/pcg/quests/history", async (req, res) => {
+    try {
+      const accountId = req.query.accountId as string;
+      if (!accountId) return res.status(400).json({ error: "accountId required" });
+      const history = await db.select().from(playerQuests)
+        .where(and(eq(playerQuests.accountId, accountId), inArray(playerQuests.status, ["completed", "abandoned", "expired"])))
+        .orderBy(desc(playerQuests.completedAt));
+      res.json({ quests: history.slice(0, 50) });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch history" });
+    }
+  });
+
+  // GET procedurally generated enemies
+  app.get("/api/pcg/enemies", async (req, res) => {
+    try {
+      const { ENEMY_ARCHETYPES, generateEnemy } = await import("@shared/pcg-templates");
+      const rank = (req.query.rank as string) || "Novice";
+      const difficulty = (req.query.difficulty as any) || "medium";
+      const archetypeId = req.query.archetypeId as string | undefined;
+      const seed = parseInt(req.query.seed as string) || undefined;
+      const enemy = generateEnemy(rank as any, difficulty, archetypeId, seed);
+      res.json({ enemy, archetypes: ENEMY_ARCHETYPES.map(a => ({ id: a.id, family: a.family, icon: a.icon, names: a.names })) });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to generate enemy" });
+    }
+  });
+
+  // GET procedurally generated encounter (1-4 enemies)
+  app.get("/api/pcg/encounter", async (req, res) => {
+    try {
+      const { generateEncounter } = await import("@shared/pcg-templates");
+      const rank = (req.query.rank as string) || "Novice";
+      const zone = (req.query.zone as string) || "default";
+      const difficulty = (req.query.difficulty as any) || "medium";
+      const enemies = generateEncounter(rank as any, zone, difficulty);
+      res.json({ enemies });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to generate encounter" });
+    }
+  });
+
+  // GET loot roll preview
+  app.get("/api/pcg/loot", async (req, res) => {
+    try {
+      const { rollLoot } = await import("@shared/pcg-templates");
+      const tier = (req.query.tier as string) || "common";
+      const rank = (req.query.rank as string) || "Novice";
+      const seed = parseInt(req.query.seed as string) || undefined;
+      const loot = rollLoot(tier, rank as any, seed);
+      res.json({ loot });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to roll loot" });
+    }
+  });
+
+  // GET active world events
+  app.get("/api/pcg/world-events", async (req, res) => {
+    try {
+      // Expire old events first
+      await db.update(worldEvents).set({ isActive: false })
+        .where(and(eq(worldEvents.isActive, true), lt(worldEvents.expiresAt, new Date())));
+      const active = await db.select().from(worldEvents)
+        .where(and(eq(worldEvents.isActive, true), gt(worldEvents.expiresAt, new Date())));
+      res.json({ events: active });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch world events" });
+    }
+  });
+
+  // POST admin: force generate a world event
+  app.post("/api/pcg/world-events/generate", async (req, res) => {
+    try {
+      const { generateWorldEvent, getWorldEventType } = await import("@shared/pcg-templates");
+      const { typeId, expiresInMs } = generateWorldEvent();
+      const evType = getWorldEventType(typeId);
+      if (!evType) return res.status(500).json({ error: "Unknown event type" });
+      const expiresAt = new Date(Date.now() + expiresInMs);
+      const [saved] = await db.insert(worldEvents).values({
+        typeId, title: evType.name, description: evType.description,
+        effects: evType.effects as any, startedAt: new Date(), expiresAt, isActive: true,
+      }).returning();
+      _cachedEventBonuses = null;
+      broadcastToAllPlayers("worldEvent", { typeId, title: evType.name, label: evType.effects.label, expiresAt });
+      res.json({ event: saved });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to generate world event" });
     }
   });
 

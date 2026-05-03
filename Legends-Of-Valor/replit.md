@@ -590,8 +590,67 @@ Existing accounts without traits are automatically assigned on their first visit
 ### Navigation
 - World Map: "Trait Shrine" zone (easy, no PvP, at 22, 42)
 
+## PHASE 20: Procedural Content Generation (May 2026)
+
+### New DB Tables
+- `player_quests` — accepted/completed/abandoned procedural quests per player (objective JSONB with baseline tracking)
+- `world_events` — server-wide timed bonus events (persistent, active flag, effects JSONB)
+
+### New Shared File
+- `shared/pcg-templates.ts` — all PCG logic: quest templates (30), enemy archetypes (20), loot tables (6 tiers), world event types (12), generators, validators
+
+### Quest Board System — `/quest-board` (Quest Board on World Map)
+
+**Concept:** Every player gets a procedurally generated board of 6 quests scaled to their current rank. Quests fall into 5 categories (combat, progression, wealth, exploration, mastery) and 5 difficulties (trivial → legendary). Objectives are verified against live account state using baseline snapshots captured at accept time.
+
+**Quest Objective Types:**
+- `win_battles` — win X battles since acceptance (delta from baseline)
+- `reach_rank` — achieve a target rank
+- `climb_floors` — reach NPC tower floor X
+- `train_stat` — raise a specific stat to X
+- `earn_gold` — hold X gold
+- `collect_shards` — hold X soul shards
+- `upgrade_base` — reach base tier X
+- `reach_prestige` — reach prestige level X
+- `defeat_npc_level` — reach NPC global level X in tower
+
+**Reward Scaling:** Base rewards × `Math.pow(3.2, rankIndex)` — ensures meaningful rewards at every tier.
+
+**API Routes:**
+- `GET /api/pcg/quest-board?accountId=&seed=` — generate fresh board of 6 quests
+- `POST /api/pcg/quests/accept` — accept a quest (saves with baseline snapshot)
+- `GET /api/pcg/quests/active?accountId=` — active quests with live progress
+- `POST /api/pcg/quests/:id/complete` — validate + claim rewards
+- `POST /api/pcg/quests/:id/abandon` — abandon
+- `GET /api/pcg/quests/history?accountId=` — completed/abandoned history
+- `GET /api/pcg/enemies?rank=&difficulty=&archetypeId=` — generate single enemy
+- `GET /api/pcg/encounter?rank=&zone=&difficulty=` — generate 1–4 enemy encounter
+- `GET /api/pcg/loot?tier=&rank=` — roll loot bundle
+- `GET /api/pcg/world-events` — current active world events
+- `POST /api/pcg/world-events/generate` — admin: force generate a new event
+
+### Enemy Generator
+20 archetypes across 6 families (Undead, Beast, Elemental, Demon, Dragon, Humanoid). Each archetype has stat ratios, ability pool, immunities, loot tier. Stats scale with `Math.pow(2.5, rankIndex)` × difficulty multiplier × ±10% jitter.
+
+### World Events
+12 event types that apply server-wide bonuses (goldMult, xpMult, shardMult, tpMult, runeMult, luckBonus, atkBonus, defBonus, pvpGoldMult, skillDamageMult, hpMult). Events auto-seed on server start (1 initial event), auto-generate every 3 hours if < 2 are active. Quest rewards respect active event multipliers at claim time. In-memory cache with 60s TTL for zero-latency bonus lookups.
+
+**Active events:** displayed as a banner on the Quest Board and in the World Events tab.
+
+### Frontend `/quest-board`
+- 4-tab UI: Available | Active | Completed | World Events
+- Available: 6 ranked quest cards with difficulty color coding, expandable descriptions, reward badges, Accept button; "Refresh Board" for new quests
+- Active: progress bars (current/required), Check Progress + Claim buttons, abandon option
+- Completed: scrollable history with status (Completed ✓ / Abandoned ✗)
+- World Events: live event cards with countdown timers, event reference table showing all 12 possible events
+- Active event banner persists across all tabs
+
+### Navigation
+- World Map: "Quest Board" zone (easy, no PvP, at 38, 28)
+
 ## Recent Changes
 
+- May 2026: PCG system (30 quest templates, 20 enemy archetypes, 12 world events, loot tables, `/quest-board` page)
 - May 2026: Genetic Traits (38 traits, 6 rarities, permanent at creation, full combat injection)
 - May 2026: Army system (5 soldier types, RPS combat, raids, upkeep, peace shields)
 - May 2026: Alternate Dimensions (7 realms, dimension-specific combat rules, portals, 5-encounter runs)

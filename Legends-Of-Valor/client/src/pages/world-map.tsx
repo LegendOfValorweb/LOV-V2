@@ -153,6 +153,17 @@ const zones: Zone[] = [
     route: "/barracks",
   },
   {
+    id: "quest-board",
+    name: "Quest Board",
+    description: "A grand notice board where procedurally generated quests appear daily — combat challenges, wealth goals, tower climbs, and rare legendary contracts scaled precisely to your rank.",
+    landmark: "dungeon",
+    difficulty: "easy",
+    pvpEnabled: false,
+    activities: ["Available Quests", "Active Quests", "World Events", "Loot Preview"],
+    coordinates: { x: 38, y: 28 },
+    route: "/quest-board",
+  },
+  {
     id: "trait-shrine",
     name: "Trait Shrine",
     description: "An ancient shrine where the essence of genetics is made visible. Consult the Oracle to learn which permanent traits were woven into your bloodline at birth — and what they mean for your destiny.",

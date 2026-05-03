@@ -429,6 +429,35 @@ export const armyRaids = pgTable("army_raids", {
   baseDamageDealt: integer("base_damage_dealt").notNull().default(0),
 });
 
+// ── PCG Quest System ─────────────────────────────────────────────────────────
+export const playerQuests = pgTable("player_quests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  accountId: varchar("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
+  templateId: text("template_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  category: text("category").notNull().default("combat"),
+  difficulty: text("difficulty").notNull().default("easy"),
+  objective: jsonb("objective").notNull().default({}).$type<Record<string, any>>(),
+  rewards: jsonb("rewards").notNull().default({}).$type<Record<string, any>>(),
+  status: text("status").notNull().default("active"),
+  acceptedAt: timestamp("accepted_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+  expiresAt: timestamp("expires_at"),
+});
+
+// ── PCG World Events ─────────────────────────────────────────────────────────
+export const worldEvents = pgTable("world_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  typeId: text("type_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  effects: jsonb("effects").notNull().default({}).$type<Record<string, any>>(),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+});
+
 export const dimensionPortals = pgTable("dimension_portals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   accountId: varchar("account_id").references(() => accounts.id, { onDelete: "cascade" }),
