@@ -38,7 +38,7 @@ export default function Reputation() {
     },
   });
 
-  const isDev = window.location.hostname === "localhost" || window.location.hostname.includes("replit");
+  const isDev = window.location.hostname === "localhost" || import.meta.env.DEV;
 
   return (
     <div className="game-page-scroll" style={{padding:16}}>
