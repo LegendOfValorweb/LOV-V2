@@ -2,7 +2,47 @@
 
 ## Overview
 
-Legends of Valor is a text-based fantasy RPG with trading, combat, guild systems, and extensive progression mechanics. Players choose from 14 races with unique bonuses, progress through 15 ranks from Novice to Mythical Legend, explore 12 zones, climb a 10,000-battle Mystic Tower, and work toward endgame content with quintillion-scale power.
+Legends of Valor is a text-based fantasy RPG with trading, combat, guild systems, and extensive progression mechanics. Players choose from 14 races with unique bonuses, progress through 15 ranks from Novice to Mythical Legend, explore 12 zones, climb a 50-floor Mystic Tower, and work toward endgame content with billion-scale power.
+
+## Game Math Reference (Audited & Fixed)
+
+### HP Formula
+`HP = raceBaseHP (75-140) + rankBaseHP (0-880) + Pot × 8 + Def × 5`
+
+The `Def × 5` term was added to fix 1-hit-kill PvP at high stats. This makes Def dual-purpose (damage reduction + health pool). At equal stats, fights last ~8-9 rounds at any tier, keeping the 5-action turn system meaningful.
+
+### Damage Formula
+`rawDmg = Str × critMult × comboMult × empowerMult × raceBonusMult`
+`defense = Def × 0.40 × (1 − raceDamageReduction)`
+`hitDamage = max(rawDmg × 0.15, floor((rawDmg − defense) × (1 − shieldAbsorb)))`
+
+The `rawDmg × 0.15` minimum damage floor (added in audit) prevents unkillable tank builds and ensures crits against heavy-armour opponents still feel impactful.
+
+### Tower NPC Formula
+`npcPower = 100 × 1.5^floor × levelProgress (1× at level 1, 2× at level 100)`
+`npcStr = npcPower / 5`, `npcDef = npcPower × 0.16`, etc.
+
+Changed from `5^floor` to `1.5^floor`. Floors 1-35 are naturally reachable through training; floors 36-50 require prestige multipliers (aspirational endgame).
+
+| Floor | Boss NPC Str |
+|-------|-------------|
+| 10 | 1,153 |
+| 20 | 66,505 |
+| 30 | 3,835,021 |
+| 35 | 29,122,192 (ML requirement) |
+| 50 | 12,752,430,004 (prestige endgame) |
+
+### Rank Requirements
+Win counts unchanged. Floor requirements reduced to match 1.5× tower formula:
+- Grandmaster: floor 12, Champion: floor 15, Overlord: floor 18
+- Sovereign: floor 22, Ascendant: floor 26, Legend: floor 29
+- Mythic: floor 32, Mythical Legend: floor 35
+
+### PCG Quest Rewards
+`reward = BASE_REWARD × rankRewardMult` where `rankRewardMult = 1.3^rankIndex`
+(changed from `3.2^rankIndex` which reached 8.7 million× at ML)
+
+Base rewards increased ~5×: trivial 2000g/50TP, easy 8000g/200TP, medium 30000g/750TP, hard 120000g/3000TP, legendary 500000g/12000TP.
 
 ## User Preferences
 

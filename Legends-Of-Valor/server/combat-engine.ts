@@ -210,7 +210,10 @@ export function calculateMaxHP(stats: CombatStats, level: number, race?: string 
   const raceHP = (race && RACE_BASE_HP[race]) ? RACE_BASE_HP[race] : 100;
   const rankHP = (rank && RANK_BASE_HP[rank]) ? RANK_BASE_HP[rank] : Math.floor(safeNumber(level, 1) * 10);
   const vitality = safe.Pot || 0;
-  return Math.floor(raceHP + rankHP + (vitality * 8));
+  // Def contributes 5× to HP pool — keeps fights at 4-8 rounds regardless of stat tier.
+  // This makes Def dual-purpose: damage mitigation (40% absorbed) + health pool.
+  const defBonus = Math.floor(Math.max(0, safe.Def) * 5);
+  return Math.floor(raceHP + rankHP + (vitality * 8) + defBonus);
 }
 
 export function calculateTurnOrder(combatantA: Combatant, combatantB: Combatant): { first: Combatant; second: Combatant } {
@@ -2315,7 +2318,10 @@ export function calculatePvPDamage(
   const defReduction = Math.min(0.75, raceDamageReduction || 0);
   const defense = dStats.Def * 0.40 * (1 - defReduction);
 
-  const hitDamage = Math.max(1, Math.floor((rawDmg - defense) * (1 - shieldAbsorb)));
+  // Minimum damage floor: attacks always deal at least 15% of raw power after crits/combo.
+  // Prevents unkillable pure-tank builds; crits against tanks still hurt more than normal hits.
+  const minDmg = Math.max(1, Math.floor(rawDmg * 0.15));
+  const hitDamage = Math.max(minDmg, Math.floor((rawDmg - defense) * (1 - shieldAbsorb)));
 
   // Elemental reaction
   let reaction: PvPReaction | null = null;

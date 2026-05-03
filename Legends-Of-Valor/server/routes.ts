@@ -117,22 +117,27 @@ const MAX_PLAYERS_PER_RACE = 20; // Max 20 players per race
 const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes of inactivity
 const SLEEP_TIMEOUT = 60 * 60 * 1000; // 60 minutes of inactivity to sleep the app
 
+// Floor requirements calibrated to the 1.5× tower formula:
+// Floors 1-12 = early-game (Novice→Grandmaster, achievable in first few hundred wins)
+// Floors 13-22 = mid-game (Champion→Ascendant, serious grinding required)
+// Floors 23-35 = late-game (Legend→Mythical Legend, dedicated long-term play)
+// Floors 36-50 = post-prestige endgame (aspirational; prestige multipliers required)
 const RANK_REQUIREMENTS = [
   { rank: "Novice",          index: 0,  winsRequired: 0,      floorRequired: 1  },
   { rank: "Apprentice",      index: 1,  winsRequired: 5,      floorRequired: 1  },
-  { rank: "Initiate",        index: 2,  winsRequired: 15,     floorRequired: 3  },
-  { rank: "Journeyman",      index: 3,  winsRequired: 30,     floorRequired: 5  },
-  { rank: "Adept",           index: 4,  winsRequired: 60,     floorRequired: 10 },
-  { rank: "Expert",          index: 5,  winsRequired: 120,    floorRequired: 15 },
-  { rank: "Master",          index: 6,  winsRequired: 250,    floorRequired: 20 },
-  { rank: "Grandmaster",     index: 7,  winsRequired: 500,    floorRequired: 30 },
-  { rank: "Champion",        index: 8,  winsRequired: 1000,   floorRequired: 40 },
-  { rank: "Overlord",        index: 9,  winsRequired: 2000,   floorRequired: 50 },
-  { rank: "Sovereign",       index: 10, winsRequired: 5000,   floorRequired: 50 },
-  { rank: "Ascendant",       index: 11, winsRequired: 10000,  floorRequired: 50 },
-  { rank: "Legend",          index: 12, winsRequired: 25000,  floorRequired: 50 },
-  { rank: "Mythic",          index: 13, winsRequired: 50000,  floorRequired: 50 },
-  { rank: "Mythical Legend", index: 14, winsRequired: 100000, floorRequired: 50 },
+  { rank: "Initiate",        index: 2,  winsRequired: 15,     floorRequired: 2  },
+  { rank: "Journeyman",      index: 3,  winsRequired: 30,     floorRequired: 3  },
+  { rank: "Adept",           index: 4,  winsRequired: 60,     floorRequired: 5  },
+  { rank: "Expert",          index: 5,  winsRequired: 120,    floorRequired: 7  },
+  { rank: "Master",          index: 6,  winsRequired: 250,    floorRequired: 9  },
+  { rank: "Grandmaster",     index: 7,  winsRequired: 500,    floorRequired: 12 },
+  { rank: "Champion",        index: 8,  winsRequired: 1000,   floorRequired: 15 },
+  { rank: "Overlord",        index: 9,  winsRequired: 2000,   floorRequired: 18 },
+  { rank: "Sovereign",       index: 10, winsRequired: 5000,   floorRequired: 22 },
+  { rank: "Ascendant",       index: 11, winsRequired: 10000,  floorRequired: 26 },
+  { rank: "Legend",          index: 12, winsRequired: 25000,  floorRequired: 29 },
+  { rank: "Mythic",          index: 13, winsRequired: 50000,  floorRequired: 32 },
+  { rank: "Mythical Legend", index: 14, winsRequired: 100000, floorRequired: 35 },
 ];
 
 async function checkAndAutoRankUp(accountId: string, wins: number, floor: number): Promise<void> {
@@ -4061,16 +4066,19 @@ export async function registerRoutes(
   });
 
   // NPC Battle System
-  // Power scaling per floor — 5× per floor (gentle, proportional to item tiers)
-  // Floor 1: 100-500       Floor 2: 500-2500      Floor 3: 2500-12500
-  // Floor 4: 12500-62500   Floor 5: 62500-312500  Floor 6: 312K-1.56M
-  // Floor 7: 1.56M-7.8M   Floor 8: 7.8M-39M      Floor 9: 39M-195M
-  // Floor10: 195M-976M     … etc.  Items are balanced to match these ranges.
+  // Power scaling per floor — 1.5× per floor (each floor is 50% harder than the last).
+  // Calibrated so floors 1-35 are progressively reachable through natural stat training,
+  // and floors 36-50 are post-prestige aspirational content.
+  // Floor 1:  100-150      Floor 5:  759-1139      Floor 10: 5,766-8,650
+  // Floor 15: 43,810-66K   Floor 20: 333K-499K     Floor 25: 2.5M-3.8M
+  // Floor 30: 19.2M-28.8M  Floor 35: 146M-219M     Floor 40: 1.1B-1.6B
+  // Floor 45: 8.3B-12.5B   Floor 50: 63B-95B       (post-prestige endgame)
+  // NPC combat stats = npcPower / 5 (Str), ×0.8 (Def), ×0.7 (Spd), ×0.6 (Int), ×0.3 (Luck)
   
   const getNpcPowerRange = (floor: number): { min: number; max: number } => {
     const base = 100;
-    const mult = 5;
-    const maxPow = base * Math.pow(mult, floor);       // 100 × 5^floor
+    const mult = 1.5;
+    const maxPow = base * Math.pow(mult, floor);       // 100 × 1.5^floor
     const minPow = floor === 1 ? base : base * Math.pow(mult, floor - 1);
     return { min: Math.floor(minPow), max: Math.floor(maxPow) };
   };

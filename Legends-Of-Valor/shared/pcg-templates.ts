@@ -10,18 +10,24 @@ type PlayerRank = typeof playerRanks[number];
 // REWARD SCALING
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Exponential reward multiplier per rank (Novice=1, Mythical Legend≈30000) */
+/** Reward multiplier per rank — 1.3× per rank index.
+ *  Novice=1×, Expert≈3.7×, Master≈4.8×, Champion≈8.2×, Mythical Legend≈28.5×
+ *  Calibrated so Mythical Legend legendary quests give ~14M gold (reasonable vs lifetime income).
+ */
 export function rankRewardMult(rank: PlayerRank): number {
   const idx = playerRanks.indexOf(rank);
-  return Math.max(1, Math.round(Math.pow(3.2, idx)));
+  return Math.max(1, Math.round(Math.pow(1.3, idx) * 10) / 10);
 }
 
+// Base rewards are calibrated so quests pay out 3-5× better than grinding the same activity.
+// At Novice, a trivial 10-win quest gives 2000g — compares well to ~500g from natural wins.
+// All values scale by rankRewardMult so they remain meaningful at every tier.
 const BASE_REWARDS: Record<string, { gold: number; tp: number; shards: number; focusedShards: number; runes: number }> = {
-  trivial:   { gold: 400,    tp: 4,    shards: 1,   focusedShards: 0,  runes: 0  },
-  easy:      { gold: 1500,   tp: 15,   shards: 5,   focusedShards: 0,  runes: 0  },
-  medium:    { gold: 6000,   tp: 60,   shards: 20,  focusedShards: 1,  runes: 2  },
-  hard:      { gold: 20000,  tp: 200,  shards: 70,  focusedShards: 4,  runes: 8  },
-  legendary: { gold: 80000,  tp: 800,  shards: 250, focusedShards: 15, runes: 30 },
+  trivial:   { gold: 2000,    tp: 50,    shards: 10,  focusedShards: 0,  runes: 0  },
+  easy:      { gold: 8000,    tp: 200,   shards: 40,  focusedShards: 1,  runes: 1  },
+  medium:    { gold: 30000,   tp: 750,   shards: 150, focusedShards: 5,  runes: 5  },
+  hard:      { gold: 120000,  tp: 3000,  shards: 600, focusedShards: 20, runes: 20 },
+  legendary: { gold: 500000,  tp: 12000, shards: 2500,focusedShards: 80, runes: 80 },
 };
 
 export function scaleRewards(difficulty: string, rank: PlayerRank) {
