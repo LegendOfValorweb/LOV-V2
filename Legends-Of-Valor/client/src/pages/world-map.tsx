@@ -83,7 +83,7 @@ const zones: Zone[] = [
     pvpEnabled: true,
     rankRequired: "Apprentice",
     activities: ["Mining", "Hunting", "Resource Gathering"],
-    coordinates: { x: 78, y: 22 },
+    coordinates: { x: 78, y: 26 },
     route: "/mining",
   },
   {
@@ -105,7 +105,7 @@ const zones: Zone[] = [
     difficulty: "medium",
     pvpEnabled: false,
     activities: ["Crafting", "Enchanting", "Skill Research"],
-    coordinates: { x: 35, y: 72 },
+    coordinates: { x: 28, y: 74 },
     route: "/research-lab",
   },
   {
@@ -138,7 +138,7 @@ const zones: Zone[] = [
     difficulty: "starter",
     pvpEnabled: false,
     activities: ["Upgrade", "Modifiers", "Fusion"],
-    coordinates: { x: 35, y: 72 },
+    coordinates: { x: 44, y: 78 },
     route: "/skill-workshop",
   },
   {
@@ -193,7 +193,7 @@ const zones: Zone[] = [
     difficulty: "hard",
     pvpEnabled: false,
     activities: ["Echo Battles", "Build Scouting", "Echo Leaderboard"],
-    coordinates: { x: 78, y: 35 },
+    coordinates: { x: 78, y: 40 },
     route: "/shadow-echoes",
   },
   {
@@ -204,7 +204,7 @@ const zones: Zone[] = [
     difficulty: "hell",
     pvpEnabled: false,
     activities: ["Prestige", "Prestige Shop", "Legend History"],
-    coordinates: { x: 50, y: 15 },
+    coordinates: { x: 38, y: 16 },
     route: "/prestige",
   },
   {
@@ -272,7 +272,7 @@ const zones: Zone[] = [
     difficulty: "hard",
     pvpEnabled: true,
     activities: ["Tournaments", "Brackets", "Championships"],
-    coordinates: { x: 72, y: 22 },
+    coordinates: { x: 70, y: 16 },
     route: "/tournaments",
   },
   {
@@ -283,7 +283,7 @@ const zones: Zone[] = [
     difficulty: "medium",
     pvpEnabled: true,
     activities: ["Pet PvP", "3v3 Battles", "Wagers"],
-    coordinates: { x: 76, y: 42 },
+    coordinates: { x: 72, y: 50 },
     route: "/pet-arena",
   },
   {
@@ -317,7 +317,7 @@ const zones: Zone[] = [
     pvpEnabled: true,
     rankRequired: "Grandmaster",
     activities: ["High-Risk PvP", "Mythic Drops", "Battle Royale"],
-    coordinates: { x: 50, y: 6 },
+    coordinates: { x: 63, y: 6 },
     route: "/hell-zone",
   },
   {
@@ -1000,7 +1000,7 @@ export default function WorldMap() {
       </div>
 
       {selectedZone && (
-        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20 w-full max-w-md px-4">
+        <div className="absolute bottom-[62px] left-1/2 -translate-x-1/2 z-20 w-full max-w-md px-4">
           <div className="rpg-panel-ornate p-4 space-y-3">
             <div className="flex items-center gap-3">
               <div className={`p-2 rounded-lg bg-black/40 ${difficultyColors[selectedZone.difficulty]}`}>

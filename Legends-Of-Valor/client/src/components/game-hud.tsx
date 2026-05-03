@@ -19,7 +19,7 @@ const ZONE_NAMES: Record<string, string> = {
   "/events": "Events Hall",
   "/challenges": "Challenge Board",
   "/pets": "Pet Sanctuary",
-  "/npc-battle": "NPC Battle",
+  "/npc-battle": "Mystic Tower",
   "/leaderboard": "Hall of Fame",
   "/quests": "Quest Board",
   "/guild": "Guild Hall",
@@ -28,21 +28,35 @@ const ZONE_NAMES: Record<string, string> = {
   "/ai-chat": "Game Master",
   "/coop": "Co-op Story",
   "/birds": "Aviary",
-  "/fishing": "Fishing Grounds",
+  "/fishing": "Crystal Lake",
   "/base": "Home Base",
   "/pet-arena": "Pet Arena",
   "/achievements": "Trophy Hall",
   "/valor-shop": "Valor Shop",
   "/cosmetics-shop": "Cosmetics",
-  "/tournaments": "Tournament Arena",
-  "/pet-shop": "Pet Shop",
-  "/mining": "Mining Camp",
+  "/tournaments": "Tournament Grounds",
+  "/pet-shop": "Mystic Egg Emporium",
+  "/mining": "Mountain Caverns",
   "/ruby-mines": "Ruby Mines",
   "/hell-zone": "Hell Zone",
   "/valorpedia": "Valorpedia",
   "/reputation": "Faction Reputation",
   "/honour-hall": "Honour Hall",
   "/admin": "Admin Console",
+  "/barracks": "War Front",
+  "/skill-tree": "Skill Sanctum",
+  "/skill-workshop": "Skill Workshop",
+  "/dimensions": "Dimension Portals",
+  "/shadow-echoes": "Shadow Realm",
+  "/prestige": "Hall of Legends",
+  "/traits": "Trait Shrine",
+  "/ancient-ruins": "Ancient Ruins",
+  "/enchanted-forest": "Enchanted Forest",
+  "/quest-board": "Quest Board",
+  "/casino": "The Golden Den",
+  "/research-lab": "Research Lab",
+  "/black-market": "Black Market",
+  "/combat-log": "Combat Log",
 };
 
 interface PetData {
@@ -611,6 +625,60 @@ export function GameHUD() {
       )}
 
       <DailyLoginModal />
+
+      <div className="hud-bottom-nav">
+        <button
+          className={`hud-nav-btn ${location === '/world-map' ? 'hud-nav-active' : ''}`}
+          onClick={() => navigateTo("/world-map")}
+        >
+          <span className="hud-nav-icon">🗺</span>
+          <span className="hud-nav-label">Map</span>
+        </button>
+        <button
+          className={`hud-nav-btn ${location === '/npc-battle' ? 'hud-nav-active' : ''}`}
+          onClick={() => navigateTo("/npc-battle")}
+        >
+          <span className="hud-nav-icon">🗼</span>
+          <span className="hud-nav-label">Tower</span>
+        </button>
+        <button
+          className={`hud-nav-btn ${location === '/base' ? 'hud-nav-active' : ''}`}
+          onClick={() => navigateTo("/base")}
+        >
+          <span className="hud-nav-icon">🏰</span>
+          <span className="hud-nav-label">Base</span>
+        </button>
+        <button
+          className={`hud-nav-btn ${location === '/barracks' ? 'hud-nav-active' : ''}`}
+          onClick={() => navigateTo("/barracks")}
+        >
+          <span className="hud-nav-icon">🪖</span>
+          <span className="hud-nav-label">Army</span>
+        </button>
+        <button
+          className={`hud-nav-btn ${location === '/quests' ? 'hud-nav-active' : ''}`}
+          onClick={() => navigateTo("/quests")}
+        >
+          <span className="hud-nav-icon">📜</span>
+          <span className="hud-nav-label">Quests</span>
+          {activeQuests.length > 0 && (
+            <span style={{
+              position: "absolute", top: 4, right: "20%",
+              background: "hsl(45 90% 55%)", borderRadius: "50%",
+              width: 10, height: 10, fontSize: "0.42rem",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#000", fontWeight: 700,
+            }}>{activeQuests.length}</span>
+          )}
+        </button>
+        <button
+          className={`hud-nav-btn ${menuOpen ? 'hud-nav-active' : ''}`}
+          onClick={() => { setMenuOpen(!menuOpen); setSettingsOpen(false); }}
+        >
+          <span className="hud-nav-icon">☰</span>
+          <span className="hud-nav-label">More</span>
+        </button>
+      </div>
     </div>
   );
 }

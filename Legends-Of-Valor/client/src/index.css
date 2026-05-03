@@ -1185,8 +1185,11 @@
 /* MENU POPUP */
 .hud-menu-popup {
   position: absolute;
-  top: 40px;
+  bottom: 58px;
+  top: auto;
   left: 44px;
+  max-height: 65vh;
+  overflow-y: auto;
   background: linear-gradient(
     135deg,
     hsl(240 12% 9% / 0.97),
@@ -1259,7 +1262,7 @@
 /* BOTTOM-LEFT: Player Panel */
 .hud-bottom-left {
   position: absolute;
-  bottom: 10px;
+  bottom: 62px;
   left: 10px;
   z-index: 41;
 }
@@ -1402,7 +1405,7 @@
 /* BOTTOM-RIGHT: Companion Panels */
 .hud-bottom-right {
   position: absolute;
-  bottom: 8px;
+  bottom: 62px;
   right: 8px;
   display: flex;
   flex-direction: column;
@@ -1471,6 +1474,91 @@
 
 .hud-companion-emoji {
   font-size: 20px;
+}
+
+/* BOTTOM NAVIGATION BAR (Whiteout Survival style) */
+.hud-bottom-nav {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: stretch;
+  height: 54px;
+  background: linear-gradient(
+    0deg,
+    hsl(240 15% 4% / 0.98) 0%,
+    hsl(240 12% 8% / 0.96) 100%
+  );
+  border-top: 1px solid hsl(45 55% 32% / 0.55);
+  box-shadow:
+    0 -2px 16px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 hsl(45 50% 35% / 0.15);
+  z-index: 43;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.hud-nav-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 2px;
+  background: transparent;
+  border: none;
+  border-right: 1px solid hsl(45 35% 22% / 0.25);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  color: hsl(240 15% 52%);
+  position: relative;
+}
+
+.hud-nav-btn:last-child {
+  border-right: none;
+}
+
+.hud-nav-btn:hover {
+  background: hsl(45 30% 12% / 0.5);
+  color: hsl(45 80% 65%);
+}
+
+.hud-nav-btn.hud-nav-active {
+  color: hsl(45 90% 60%);
+  background: hsl(45 25% 10% / 0.6);
+}
+
+.hud-nav-btn.hud-nav-active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(45 80% 55%) 30%,
+    hsl(45 80% 55%) 70%,
+    transparent
+  );
+  border-radius: 0 0 2px 2px;
+}
+
+.hud-nav-icon {
+  font-size: 18px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+}
+
+.hud-nav-label {
+  font-size: 9px;
+  font-family: var(--font-serif);
+  letter-spacing: 0.03em;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 /* GHOST STATE MODAL */
