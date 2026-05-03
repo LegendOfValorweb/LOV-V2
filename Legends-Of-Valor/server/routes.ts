@@ -599,6 +599,32 @@ export async function registerRoutes(
       }
     }
 
+    // Apply active guild dungeon buffs (e.g. +5% Def, +8% Str, +15% all stats)
+    try {
+      const membership = await storage.getGuildMember(accountId);
+      if (membership) {
+        const guild = await storage.getGuild(membership.guildId);
+        if (guild) {
+          const now = new Date();
+          const activeGuildBuffs = ((guild as any).guildBuffs || []).filter((b: any) => new Date(b.expiresAt) > now);
+          for (const buff of activeGuildBuffs) {
+            const mult = 1 + (buff.bonusPercent || 0) / 100;
+            if (buff.stat === "all") {
+              total.Str = Math.floor(total.Str * mult);
+              total.Def = Math.floor(total.Def * mult);
+              total.Spd = Math.floor(total.Spd * mult);
+              total.Int = Math.floor(total.Int * mult);
+              total.Luck = Math.floor(total.Luck * mult);
+            } else if (buff.stat === "Str") total.Str = Math.floor(total.Str * mult);
+            else if (buff.stat === "Def") total.Def = Math.floor(total.Def * mult);
+            else if (buff.stat === "Spd") total.Spd = Math.floor(total.Spd * mult);
+            else if (buff.stat === "Int") total.Int = Math.floor(total.Int * mult);
+            else if (buff.stat === "Luck") total.Luck = Math.floor(total.Luck * mult);
+          }
+        }
+      }
+    } catch { /* non-critical — guild lookup failure must not break combat */ }
+
     return total;
   };
 
@@ -5975,12 +6001,16 @@ export async function registerRoutes(
       const dungeons = GUILD_DUNGEON_TIERS.map(dt => {
         const isUnlocked = (guild.level || 1) >= dt.unlockRequirement.guildLevel &&
           (guild.dungeonsCompleted || 0) >= dt.unlockRequirement.previousDungeon;
-        const isCompleted = (guild.dungeonsCompleted || 0) >= dt.tier;
+        // isCompleted means "buff currently active = on 24h cooldown", not "permanently done"
+        const tierBuff = activeBuffs.find((b: GuildBuff) => b.fromDungeon === dt.tier);
+        const isCompleted = !!tierBuff;
+        const buffExpiresAt = tierBuff ? tierBuff.expiresAt : null;
 
         const avgMemberPower = onlineMembers.length > 0
           ? (combinedMemberStats.Str + combinedMemberStats.Spd + combinedMemberStats.Int) / onlineMembers.length
           : 50;
-        const scaledDifficulty = Math.floor(avgMemberPower * dt.difficultyMultiplier * 1.2);
+        // Factor 0.3: balanced so 1 member can solo tier 1 at ~47% odds; higher tiers need more members
+        const scaledDifficulty = Math.floor(avgMemberPower * dt.difficultyMultiplier * 0.3);
 
         const npcStats = {
           Str: Math.floor(scaledDifficulty * 1.0),
@@ -5995,6 +6025,7 @@ export async function registerRoutes(
           description: dt.description,
           isUnlocked,
           isCompleted,
+          buffExpiresAt,
           unlockRequirement: dt.unlockRequirement,
           npcStats,
           rewards: {
@@ -6067,15 +6098,23 @@ export async function registerRoutes(
       if ((guild.dungeonsCompleted || 0) < dungeonConfig.unlockRequirement.previousDungeon) {
         return res.status(400).json({ error: `Complete dungeon ${dungeonConfig.unlockRequirement.previousDungeon} first` });
       }
-      if ((guild.dungeonsCompleted || 0) >= tier) {
-        return res.status(400).json({ error: `${dungeonConfig.name} has already been completed` });
+      // Dungeons are repeatable every 24h (cooldown = active buff duration)
+      const existingActiveBuff = ((guild as any).guildBuffs || []).find(
+        (b: GuildBuff) => b.fromDungeon === tier && new Date(b.expiresAt) > new Date()
+      );
+      if (existingActiveBuff) {
+        const hoursLeft = Math.ceil((new Date(existingActiveBuff.expiresAt).getTime() - Date.now()) / 3600000);
+        return res.status(400).json({ error: `${dungeonConfig.name} is on cooldown! Buff refreshes in ${hoursLeft}h.` });
       }
 
       const members = await storage.getGuildMembers(guild.id);
       const allAccounts = await storage.getAllAccounts();
       const allPets = await storage.getAllPets();
 
-      const onlineMembers = members.filter(m => activeSessions.has(m.accountId));
+      // Always include the requesting player in the online count even if heartbeat is stale
+      const onlineMemberIds = new Set(members.filter(m => activeSessions.has(m.accountId)).map(m => m.accountId));
+      onlineMemberIds.add(accountId);
+      const onlineMembers = members.filter(m => onlineMemberIds.has(m.accountId));
 
       let combinedStats = { Str: 0, Spd: 0, Int: 0, Luck: 0 };
       let combinedPetPower = 0;
@@ -6102,7 +6141,8 @@ export async function registerRoutes(
       const avgMemberPower = onlineMembers.length > 0
         ? (combinedStats.Str + combinedStats.Spd + combinedStats.Int) / onlineMembers.length
         : 50;
-      const scaledDifficulty = Math.floor(avgMemberPower * dungeonConfig.difficultyMultiplier * 1.2);
+      // Factor 0.3: solo-soloable at tier 1 (~47% odds), higher tiers require more members
+      const scaledDifficulty = Math.floor(avgMemberPower * dungeonConfig.difficultyMultiplier * 0.3);
 
       const npcStats = {
         Str: Math.floor(scaledDifficulty * 1.0),

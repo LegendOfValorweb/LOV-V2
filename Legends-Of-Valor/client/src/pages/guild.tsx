@@ -85,6 +85,7 @@ interface GuildDungeonTierInfo {
   description: string;
   isUnlocked: boolean;
   isCompleted: boolean;
+  buffExpiresAt: string | null;
   unlockRequirement: { guildLevel: number; previousDungeon: number };
   npcStats: { Str: number; Spd: number; Int: number; Luck: number };
   rewards: { unityCoins: number; gold: number; shards: number; label: string };
@@ -1704,12 +1705,16 @@ export default function GuildPage() {
                     </div>
 
                     <div className="grid gap-4 md:grid-cols-1">
-                      {(dungeonInfo.dungeons || []).map((dungeon) => (
+                      {(dungeonInfo.dungeons || []).map((dungeon) => {
+                        const cooldownHoursLeft = dungeon.buffExpiresAt
+                          ? Math.max(0, Math.ceil((new Date(dungeon.buffExpiresAt).getTime() - Date.now()) / 3600000))
+                          : 0;
+                        return (
                         <div
                           key={dungeon.tier}
                           className={`p-4 rounded-lg border ${
                             dungeon.isCompleted
-                              ? 'bg-green-500/10 border-green-500/30'
+                              ? 'bg-blue-500/10 border-blue-500/30'
                               : dungeon.isUnlocked
                               ? 'bg-red-500/10 border-red-500/30'
                               : 'bg-muted/30 border-border opacity-60'
@@ -1717,10 +1722,10 @@ export default function GuildPage() {
                         >
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2">
-                              <Castle className={`w-5 h-5 ${dungeon.isCompleted ? 'text-green-500' : dungeon.isUnlocked ? 'text-red-500' : 'text-muted-foreground'}`} />
+                              <Castle className={`w-5 h-5 ${dungeon.isCompleted ? 'text-blue-400' : dungeon.isUnlocked ? 'text-red-500' : 'text-muted-foreground'}`} />
                               <span className="font-bold">Tier {dungeon.tier}: {dungeon.name}</span>
                               {dungeon.isCompleted && (
-                                <Badge className="bg-green-600 text-white">Completed</Badge>
+                                <Badge className="bg-blue-600 text-white">On Cooldown ({cooldownHoursLeft}h)</Badge>
                               )}
                               {!dungeon.isUnlocked && (
                                 <Badge variant="outline" className="text-muted-foreground">
@@ -1730,6 +1735,13 @@ export default function GuildPage() {
                             </div>
                           </div>
                           <p className="text-sm text-muted-foreground mb-3">{dungeon.description}</p>
+
+                          {dungeon.isCompleted && (
+                            <div className="p-2 rounded bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300 mb-3">
+                              <Sparkles className="w-3 h-3 inline mr-1 text-yellow-400" />
+                              <span className="text-yellow-400 font-medium">{dungeon.buff.name}</span> buff is active on all guild members — +{dungeon.buff.bonusPercent}% {dungeon.buff.stat === "all" ? "All Stats" : dungeon.buff.stat}. Refreshes in {cooldownHoursLeft}h.
+                            </div>
+                          )}
                           
                           {dungeon.isUnlocked && !dungeon.isCompleted && (
                             <div className="grid gap-3 md:grid-cols-3">
@@ -1753,7 +1765,7 @@ export default function GuildPage() {
                                 </div>
                               </div>
                               <div className="p-2 rounded bg-blue-500/10 border border-blue-500/30">
-                                <p className="text-xs text-blue-400 mb-1">Buff (24h)</p>
+                                <p className="text-xs text-blue-400 mb-1">Buff (24h on win)</p>
                                 <p className="text-xs">{dungeon.buff.name}</p>
                                 <p className="text-xs text-muted-foreground">+{dungeon.buff.bonusPercent}% {dungeon.buff.stat === "all" ? "All Stats" : dungeon.buff.stat}</p>
                               </div>
@@ -1765,15 +1777,16 @@ export default function GuildPage() {
                               className="w-full mt-3"
                               size="sm"
                               onClick={() => fightDungeonMutation.mutate(dungeon.tier)}
-                              disabled={fightDungeonMutation.isPending || dungeonInfo.onlineMembers.length === 0}
+                              disabled={fightDungeonMutation.isPending}
                               data-testid={`button-fight-dungeon-${dungeon.tier}`}
                             >
                               <Swords className="w-4 h-4 mr-2" />
-                              {fightDungeonMutation.isPending ? "Fighting..." : `Fight with ${dungeonInfo.onlineMembers.length} Members`}
+                              {fightDungeonMutation.isPending ? "Fighting..." : `Fight with ${Math.max(1, dungeonInfo.onlineMembers.length)} Members`}
                             </Button>
                           )}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
