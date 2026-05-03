@@ -553,10 +553,11 @@ export default function WorldMap() {
 
   const isPageLoading = isZonesLoading || isArchetypesLoading || isSkinsLoading;
 
-  if (!account) {
-    navigate("/");
-    return null;
-  }
+  useEffect(() => {
+    if (!account) navigate("/");
+  }, [account]);
+
+  if (!account) return null;
 
   const handleZoneHover = (zone: Zone, e: React.MouseEvent) => {
     setHoveredZone(zone);
