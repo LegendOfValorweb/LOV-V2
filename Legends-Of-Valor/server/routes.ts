@@ -9379,6 +9379,61 @@ export async function registerRoutes(
     }
   });
 
+  // Research Lab: research a project (deducts gold, boosts stat + grants TP)
+  app.post("/api/accounts/:id/research", async (req, res) => {
+    try {
+      const { projectId, goldCost, statBoost, tpGain } = z.object({
+        projectId: z.string(),
+        goldCost: z.number().min(0),
+        statBoost: z.object({ stat: z.string(), amount: z.number() }).optional(),
+        tpGain: z.number().min(0).optional(),
+      }).parse(req.body);
+
+      const account = await storage.getAccount(req.params.id);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+      if (account.gold < goldCost) return res.status(400).json({ error: `Need ${goldCost.toLocaleString()} gold (have ${account.gold.toLocaleString()})` });
+
+      const updates: Record<string, unknown> = { gold: account.gold - goldCost };
+      if (tpGain) updates.trainingPoints = (account.trainingPoints || 0) + tpGain;
+      if (statBoost) {
+        const currentStats = (account.stats as Record<string, number>) || {};
+        updates.stats = { ...currentStats, [statBoost.stat]: (currentStats[statBoost.stat] || 0) + statBoost.amount };
+      }
+
+      await storage.updateAccount(account.id, updates as any);
+      res.json({ success: true, goldSpent: goldCost, statBoost: statBoost || null, tpGained: tpGain || 0 });
+    } catch (error) {
+      console.error("Research error:", error);
+      res.status(500).json({ error: "Research failed" });
+    }
+  });
+
+  // Ancient Ruins: explore a site (grants gold + TP)
+  app.post("/api/ancient-ruins/explore", async (req, res) => {
+    try {
+      const { accountId, siteId, goldReward, expReward } = z.object({
+        accountId: z.string(),
+        siteId: z.string(),
+        goldReward: z.number().min(0),
+        expReward: z.number().min(0),
+      }).parse(req.body);
+
+      const account = await storage.getAccount(accountId);
+      if (!account) return res.status(404).json({ error: "Account not found" });
+      if (account.isDead || account.ghostState) return res.status(403).json({ error: "Cannot explore while dead" });
+
+      await storage.updateAccount(accountId, {
+        gold: account.gold + goldReward,
+        trainingPoints: (account.trainingPoints || 0) + expReward,
+      } as any);
+
+      res.json({ success: true, goldGained: goldReward, tpGained: expReward, siteId });
+    } catch (error) {
+      console.error("Ancient ruins explore error:", error);
+      res.status(500).json({ error: "Exploration failed" });
+    }
+  });
+
   // Get guild level requirements
   app.get("/api/guild-levels", async (_req, res) => {
     const { guildLevelRequirements } = await import("@shared/schema");

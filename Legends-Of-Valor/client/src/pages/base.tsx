@@ -789,6 +789,53 @@ export default function Base() {
   const [visitDialog, setVisitDialog] = useState(false);
   const [visitorData, setVisitorData] = useState<any>(null);
   const [isLoadingVisit, setIsLoadingVisit] = useState(false);
+  const [mountsDialog, setMountsDialog] = useState(false);
+
+  const { data: allMounts = [] } = useQuery<any[]>({
+    queryKey: ["/api/mounts"],
+    queryFn: async () => {
+      const res = await fetch("/api/mounts");
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const { data: accountMounts = [], refetch: refetchAccountMounts } = useQuery<any[]>({
+    queryKey: ["/api/accounts", account?.id, "mounts"],
+    queryFn: async () => {
+      if (!account?.id) return [];
+      const res = await fetch(`/api/accounts/${account.id}/mounts`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!account?.id,
+  });
+
+  const unlockMountMutation = useMutation({
+    mutationFn: async (mountId: string) => {
+      const res = await apiRequest("POST", `/api/mounts/${mountId}/unlock`, { accountId: account!.id });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Mount Unlocked!" });
+      refetchAccountMounts();
+      refetchAccount();
+    },
+    onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+
+  const equipMountMutation = useMutation({
+    mutationFn: async (mountId: string) => {
+      const res = await apiRequest("POST", `/api/mounts/${mountId}/equip`, { accountId: account!.id });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Mount Equipped!" });
+      refetchAccountMounts();
+      refetchAccount();
+    },
+    onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
 
   const { data: onlinePlayers = [] } = useQuery<any[]>({
     queryKey: ["/api/online-players"],
@@ -1100,6 +1147,13 @@ export default function Base() {
             <Castle className="w-4 h-4 text-yellow-400" />
             <span className="text-sm font-bold text-white">{currentTierData?.name || "Base"}</span>
             <Badge variant="secondary" className="text-[10px] h-4 px-1.5">Tier {currentTier}</Badge>
+            <button
+              onClick={() => setMountsDialog(true)}
+              className="ml-1 flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-amber-800/60 hover:bg-amber-700/60 border border-amber-600/40 text-amber-200 font-medium transition-colors"
+              title="Open Mounts Stable"
+            >
+              🐴 Mounts
+            </button>
           </div>
           <div className="flex items-center gap-1.5">
             <Coins className="w-3.5 h-3.5 text-yellow-400" />
@@ -2390,6 +2444,81 @@ export default function Base() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setVisitDialog(false); setVisitorData(null); }}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mounts Stable Dialog */}
+      <Dialog open={mountsDialog} onOpenChange={setMountsDialog}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              🐴 Mounts Stable
+            </DialogTitle>
+            <DialogDescription>Unlock and equip mounts for speed bonuses in exploration.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            {allMounts.length === 0 ? (
+              <p className="text-center text-muted-foreground py-6">Loading mounts...</p>
+            ) : (
+              allMounts.map((mount: any) => {
+                const owned = accountMounts.find((am: any) => am.mountId === mount.id || am.id === mount.id);
+                const isEquipped = owned?.isEquipped;
+                const rarityColor = {
+                  common: "border-gray-500/40 bg-gray-800/30",
+                  uncommon: "border-green-500/40 bg-green-900/20",
+                  rare: "border-blue-500/40 bg-blue-900/20",
+                  epic: "border-purple-500/40 bg-purple-900/20",
+                  legendary: "border-amber-500/40 bg-amber-900/20",
+                  mythic: "border-pink-500/40 bg-pink-900/20",
+                }[mount.rarity as string] ?? "border-border bg-card/40";
+                return (
+                  <div key={mount.id} className={`rounded-lg border p-3 flex items-center gap-3 ${rarityColor}`}>
+                    <div className="text-3xl shrink-0">
+                      {mount.rarity === "legendary" ? "🦄" : mount.rarity === "mythic" ? "🐉" : mount.rarity === "epic" ? "🦅" : mount.rarity === "rare" ? "🐎" : "🐴"}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-semibold capitalize">{mount.name?.replace(/_/g, " ") || mount.id}</p>
+                        <Badge variant="outline" className="text-[10px] capitalize">{mount.rarity}</Badge>
+                        {isEquipped && <Badge className="text-[10px] bg-green-500/30 text-green-300 border-green-500">Equipped</Badge>}
+                      </div>
+                      {mount.speedBonus && (
+                        <p className="text-xs text-amber-300 mt-0.5">+{mount.speedBonus}% Speed Bonus</p>
+                      )}
+                      {mount.unlockRequirement && (
+                        <p className="text-xs text-muted-foreground mt-0.5">Requires: {mount.unlockRequirement}</p>
+                      )}
+                    </div>
+                    <div className="shrink-0 flex gap-1.5">
+                      {!owned ? (
+                        <Button
+                          size="sm"
+                          onClick={() => unlockMountMutation.mutate(mount.id)}
+                          disabled={unlockMountMutation.isPending}
+                          className="text-xs h-7 px-2"
+                          data-testid={`button-unlock-mount-${mount.id}`}
+                        >Unlock</Button>
+                      ) : !isEquipped ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => equipMountMutation.mutate(mount.id)}
+                          disabled={equipMountMutation.isPending}
+                          className="text-xs h-7 px-2"
+                          data-testid={`button-equip-mount-${mount.id}`}
+                        >Equip</Button>
+                      ) : (
+                        <span className="text-xs text-green-400 px-2 py-1">Active</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMountsDialog(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

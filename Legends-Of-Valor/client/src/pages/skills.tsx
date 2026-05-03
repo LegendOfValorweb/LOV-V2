@@ -151,6 +151,53 @@ export default function Skills() {
     refetchInterval: 30000,
   });
 
+  const { data: raceSkillsData, isLoading: raceSkillsLoading, refetch: refetchRaceSkills } = useQuery<any>({
+    queryKey: ["/api/accounts", account?.id, "race-skills"],
+    queryFn: async () => {
+      if (!account?.id) return null;
+      const res = await fetch(`/api/accounts/${account.id}/race-skills`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!account?.id,
+  });
+
+  const equipActiveSkillMutation = useMutation({
+    mutationFn: async (skillId: string) => {
+      const res = await apiRequest("POST", `/api/accounts/${account!.id}/race-skills/equip-active`, { skillId });
+      return res.json();
+    },
+    onSuccess: () => { toast({ title: "Active Skill Equipped!" }); refetchRaceSkills(); },
+    onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+
+  const equipPassiveSkillMutation = useMutation({
+    mutationFn: async (skillId: string) => {
+      const res = await apiRequest("POST", `/api/accounts/${account!.id}/race-skills/equip-passive`, { skillId });
+      return res.json();
+    },
+    onSuccess: () => { toast({ title: "Passive Skill Equipped!" }); refetchRaceSkills(); },
+    onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+
+  const unequipActiveSkillMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/accounts/${account!.id}/race-skills/unequip-active`, {});
+      return res.json();
+    },
+    onSuccess: () => { toast({ title: "Active Skill Unequipped" }); refetchRaceSkills(); },
+    onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+
+  const unequipPassiveSkillMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/accounts/${account!.id}/race-skills/unequip-passive`, {});
+      return res.json();
+    },
+    onSuccess: () => { toast({ title: "Passive Skill Unequipped" }); refetchRaceSkills(); },
+    onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+
   useEffect(() => {
     if (auctionData?.auction?.endAt) {
       const interval = setInterval(() => {
@@ -283,7 +330,7 @@ export default function Skills() {
 
       <main className="container mx-auto px-4 py-6">
           <Tabs defaultValue="auction" className="space-y-6">
-            <TabsList className="flex w-full mb-6 overflow-x-auto no-scrollbar justify-start sm:grid sm:grid-cols-3">
+            <TabsList className="flex w-full mb-6 overflow-x-auto no-scrollbar justify-start sm:grid sm:grid-cols-4">
               <TabsTrigger value="auction" className="flex-1 min-w-[100px]" data-testid="tab-skills-auction">
                 <Gavel className="h-4 w-4 mr-2 shrink-0" />
                 <span className="truncate">Auction</span>
@@ -291,6 +338,10 @@ export default function Skills() {
               <TabsTrigger value="my-skills" className="flex-1 min-w-[100px]" data-testid="tab-skills-equipped">
                 <Sparkles className="h-4 w-4 mr-2 shrink-0" />
                 <span className="truncate">My Skills</span>
+              </TabsTrigger>
+              <TabsTrigger value="race-skills" className="flex-1 min-w-[100px]" data-testid="tab-skills-race">
+                <Shield className="h-4 w-4 mr-2 shrink-0" />
+                <span className="truncate">Race Skills</span>
               </TabsTrigger>
               <TabsTrigger value="news" className="flex-1 min-w-[100px]" data-testid="tab-skills-news">
                 <Activity className="h-4 w-4 mr-2 shrink-0" />
@@ -421,6 +472,108 @@ export default function Skills() {
                         />
                       );
                     })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="race-skills" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-primary" /> Race Skills
+                </CardTitle>
+                <CardDescription>
+                  Innate abilities granted by your race. Equip one active and one passive skill.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {raceSkillsLoading ? (
+                  <div className="text-center py-8 text-muted-foreground">Loading race skills...</div>
+                ) : !raceSkillsData ? (
+                  <div className="text-center py-8 text-muted-foreground">No race skill data found.</div>
+                ) : (
+                  <div className="space-y-5">
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/10 border border-primary/30">
+                      <Shield className="h-5 w-5 text-primary shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold capitalize">{raceSkillsData.race} — Rank {raceSkillsData.rank}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Active: <span className="text-amber-300 font-medium">{raceSkillsData.equippedActive?.name || "None"}</span>
+                          {" · "}Passive: <span className="text-emerald-300 font-medium">{raceSkillsData.equippedPassive?.name || "None"}</span>
+                        </p>
+                      </div>
+                      <div className="flex gap-1">
+                        {raceSkillsData.equippedActive && (
+                          <button
+                            onClick={() => unequipActiveSkillMutation.mutate()}
+                            className="text-[10px] px-2 py-0.5 rounded bg-red-800/60 hover:bg-red-700/60 border border-red-600/30 text-red-200"
+                          >Unequip Active</button>
+                        )}
+                        {raceSkillsData.equippedPassive && (
+                          <button
+                            onClick={() => unequipPassiveSkillMutation.mutate()}
+                            className="text-[10px] px-2 py-0.5 rounded bg-red-800/60 hover:bg-red-700/60 border border-red-600/30 text-red-200"
+                          >Unequip Passive</button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {(raceSkillsData.skills ?? []).map((skill: any) => {
+                        const isActive = raceSkillsData.equippedActive?.id === skill.id;
+                        const isPassive = raceSkillsData.equippedPassive?.id === skill.id;
+                        return (
+                          <div
+                            key={skill.id}
+                            className={`rounded-lg border p-3 space-y-2 transition-colors ${
+                              isActive ? "border-amber-500/60 bg-amber-500/10" :
+                              isPassive ? "border-emerald-500/60 bg-emerald-500/10" :
+                              skill.isUnlocked ? "border-border bg-card/40" :
+                              "border-border/40 bg-black/30 opacity-60"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-white truncate">{skill.name}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">{skill.description}</p>
+                              </div>
+                              <div className="flex flex-col gap-1 shrink-0">
+                                {isActive && <Badge className="text-[9px] px-1.5 bg-amber-500/30 text-amber-300 border-amber-500">Active</Badge>}
+                                {isPassive && <Badge className="text-[9px] px-1.5 bg-emerald-500/30 text-emerald-300 border-emerald-500">Passive</Badge>}
+                                {!skill.isUnlocked && <Badge variant="outline" className="text-[9px] px-1.5">Locked</Badge>}
+                              </div>
+                            </div>
+                            {skill.effects && (
+                              <div className="flex flex-wrap gap-1">
+                                {Object.entries(skill.effects as Record<string, any>).map(([k, v]) => (
+                                  <span key={k} className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-muted-foreground">
+                                    {k}: +{v}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            {skill.isUnlocked && !isActive && !isPassive && (
+                              <div className="flex gap-1.5 pt-1">
+                                <button
+                                  onClick={() => equipActiveSkillMutation.mutate(skill.id)}
+                                  disabled={equipActiveSkillMutation.isPending}
+                                  className="text-[10px] px-2 py-1 rounded bg-amber-700/60 hover:bg-amber-600/60 border border-amber-500/30 text-amber-200 font-medium"
+                                  data-testid={`button-equip-active-${skill.id}`}
+                                >Equip Active</button>
+                                <button
+                                  onClick={() => equipPassiveSkillMutation.mutate(skill.id)}
+                                  disabled={equipPassiveSkillMutation.isPending}
+                                  className="text-[10px] px-2 py-1 rounded bg-emerald-700/60 hover:bg-emerald-600/60 border border-emerald-500/30 text-emerald-200 font-medium"
+                                  data-testid={`button-equip-passive-${skill.id}`}
+                                >Equip Passive</button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </CardContent>

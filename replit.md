@@ -84,6 +84,14 @@ cd Legends-Of-Valor && npm run db:push
 
 ## Recent Changes
 
+- May 2026: Fixed 6 frontend/backend mismatches:
+  - **Research Lab** — `handleResearch` now calls `POST /api/accounts/:id/research` (deducts gold, boosts stat, grants TP); `handleCraft` calls same route with goldCost only; enchanting tab replaced with redirect to Inventory (real enchanting via Soul Shards)
+  - **Ancient Ruins** — `handleExplore` now calls `POST /api/ancient-ruins/explore` instead of the old mining endpoint with unsupported override params
+  - **Race Skills tab** — New 4th tab added to `/skills` page: fetches `/api/accounts/:id/race-skills`, shows all race skills with equip-active / equip-passive / unequip buttons
+  - **Mounts Stable** — New 🐴 Mounts button in the Base HUD bar opens a full dialog fetching `/api/mounts` and `/api/accounts/:id/mounts`; supports unlock and equip actions
+  - **Soul Links** — New Soul Links card section added to `/guild` page; fetches `/api/soul-links/:accountId` and supports creating new links via `POST /api/soul-links`
+  - **Backend routes added** — `POST /api/accounts/:id/research` and `POST /api/ancient-ruins/explore` added to `routes.ts`
+
 - January 2026: Initial import and setup in Replit environment
 - Configured OpenAI AI integration for game AI features
 - Set up PostgreSQL database with Drizzle ORM

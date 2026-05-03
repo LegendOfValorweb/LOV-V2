@@ -112,11 +112,11 @@ export default function AncientRuins() {
       clearInterval(interval);
       setExplorationProgress(100);
       try {
-        const res = await apiRequest("POST", "/api/mining/mine", {
+        const res = await apiRequest("POST", "/api/ancient-ruins/explore", {
           accountId: account.id,
-          nodeId: `ruins_${siteId}`,
-          goldOverride: site.goldReward,
-          expOverride: site.expReward,
+          siteId,
+          goldReward: site.goldReward,
+          expReward: site.expReward,
         });
         const data = await res.json();
 
@@ -127,7 +127,7 @@ export default function AncientRuins() {
 
         if (loreText) setLastDiscovery({ lore: loreText });
 
-        const goldGained = data.goldReward ?? site.goldReward;
+        const goldGained = data.goldGained ?? site.goldReward;
         toast({
           title: site.bossEncounter ? "Boss Defeated!" : "Exploration Complete!",
           description: `Discovered ${goldGained.toLocaleString()} gold${loreText ? " and an ancient lore fragment!" : "!"}`,
@@ -136,13 +136,11 @@ export default function AncientRuins() {
         const [accRes] = await Promise.all([fetch(`/api/accounts/${account.id}`), refreshInventory()]);
         if (accRes.ok) setAccount(await accRes.json());
       } catch {
-        const goldGained = site.goldReward;
         toast({
-          title: "Exploration Complete!",
-          description: `Discovered ${goldGained.toLocaleString()} gold from the ruins!`,
+          title: "Exploration Blocked",
+          description: "You cannot explore while dead or in ghost state.",
+          variant: "destructive",
         });
-        const [accRes] = await Promise.all([fetch(`/api/accounts/${account.id}`), refreshInventory()]);
-        if (accRes.ok) setAccount(await accRes.json());
       } finally {
         setIsExploring(null);
         setExplorationProgress(0);

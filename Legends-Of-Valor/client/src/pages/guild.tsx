@@ -414,6 +414,7 @@ export default function GuildPage() {
 
   const [zoneDungeonOpen, setZoneDungeonOpen] = useState(false);
   const [selectedDungeonZone, setSelectedDungeonZone] = useState<string | null>(null);
+  const [soulLinkPartner, setSoulLinkPartner] = useState("");
   const [dungeonRun, setDungeonRun] = useState<any>(null);
   const [zoneDungeonMeta, setZoneDungeonMeta] = useState<any>(null);
   const [lastFightResult, setLastFightResult] = useState<any>(null);
@@ -703,6 +704,33 @@ export default function GuildPage() {
     onError: (error: any) => {
       toast({ title: "Level Up Failed", description: error.message || "Cannot level up guild", variant: "destructive" });
     },
+  });
+
+  const { data: soulLinks = [], refetch: refetchSoulLinks } = useQuery<any[]>({
+    queryKey: ["/api/soul-links", account?.id],
+    queryFn: async () => {
+      if (!account?.id) return [];
+      const res = await fetch(`/api/soul-links/${account.id}`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!account?.id,
+  });
+
+  const createSoulLinkMutation = useMutation({
+    mutationFn: async (player2Id: string) => {
+      const res = await apiRequest("POST", "/api/soul-links", {
+        player1Id: account!.id,
+        player2Id,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Soul Link Created!", description: "Your soul link has been forged." });
+      setSoulLinkPartner("");
+      refetchSoulLinks();
+    },
+    onError: (e: any) => toast({ title: "Failed", description: e.message || "Could not create soul link", variant: "destructive" }),
   });
 
   const pendingBattles = guildBattles.filter(b => b.status === "pending" && b.challengedGuildId === guild?.id);
@@ -2144,6 +2172,72 @@ export default function GuildPage() {
             </Card>
           </div>
         )}
+
+        {/* Soul Links Section */}
+        <div className="max-w-4xl mx-auto mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-purple-400" />
+                Soul Links
+              </CardTitle>
+              <CardDescription>
+                Form a mystical bond with another player for shared stat bonuses. Soul links cost gold from both players.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {soulLinks.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-2">No active soul links. Forge a bond with another player below.</p>
+              ) : (
+                <div className="space-y-2">
+                  {soulLinks.map((link: any) => {
+                    const partner = link.player1Id === account.id ? link.player2Name : link.player1Name;
+                    return (
+                      <div key={link.id} className="flex items-center gap-3 p-3 rounded-lg border border-purple-500/30 bg-purple-900/10">
+                        <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-white">Linked with <span className="text-purple-300">{partner || "Unknown"}</span></p>
+                          {link.bonuses && (
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Bonuses: {Object.entries(link.bonuses as Record<string, any>).map(([k, v]) => `+${v} ${k}`).join(", ")}
+                            </p>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            Since {new Date(link.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <Badge className="text-[10px] bg-purple-500/30 text-purple-300 border-purple-500">Active</Badge>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="pt-2 border-t border-border">
+                <p className="text-xs text-muted-foreground mb-2 font-medium">Forge New Soul Link</p>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Enter player ID or username..."
+                    value={soulLinkPartner}
+                    onChange={(e) => setSoulLinkPartner(e.target.value)}
+                    className="flex-1 h-8 text-sm"
+                    data-testid="input-soul-link-partner"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => createSoulLinkMutation.mutate(soulLinkPartner)}
+                    disabled={!soulLinkPartner.trim() || createSoulLinkMutation.isPending}
+                    className="shrink-0 bg-purple-700 hover:bg-purple-600 border border-purple-500/40"
+                    data-testid="button-create-soul-link"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 mr-1" />
+                    {createSoulLinkMutation.isPending ? "Forging..." : "Forge Link"}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </main>
 
       <Dialog open={roleDialogOpen} onOpenChange={setRoleDialogOpen}>

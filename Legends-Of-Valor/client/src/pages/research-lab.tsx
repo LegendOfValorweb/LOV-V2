@@ -95,40 +95,6 @@ const CRAFTING_RECIPES = [
   },
 ];
 
-const ENCHANTING_OPTIONS = [
-  {
-    id: "enchant_str",
-    name: "Strength Rune",
-    description: "Add +10 Str to any equipped weapon or armor.",
-    cost: 15000,
-    icon: "🔥",
-    statBonus: { Str: 10 },
-  },
-  {
-    id: "enchant_spd",
-    name: "Swiftness Rune",
-    description: "Add +10 Spd to any equipped weapon or armor.",
-    cost: 15000,
-    icon: "💫",
-    statBonus: { Spd: 10 },
-  },
-  {
-    id: "enchant_int",
-    name: "Wisdom Rune",
-    description: "Add +10 Int to any equipped weapon or armor.",
-    cost: 15000,
-    icon: "🌟",
-    statBonus: { Int: 10 },
-  },
-  {
-    id: "enchant_luck",
-    name: "Fortune Rune",
-    description: "Add +10 Luck to any equipped weapon or armor.",
-    cost: 15000,
-    icon: "✨",
-    statBonus: { Luck: 10 },
-  },
-];
 
 const FOREST_WEAPON_RECIPES_UI = [
   { weaponIndex: 0,  requiredRank: "Novice",          requiredRankIndex: 0,  ingredients: ["Healing Herb x3", "Wood x5"],                                                goldCost: 100 },
@@ -166,6 +132,13 @@ export default function ResearchLab() {
 
   const playerRankIndex = playerRanks.indexOf(account.rank as any);
 
+  const STAT_MAP: Record<string, string> = {
+    stat_boost_str: "Str",
+    stat_boost_spd: "Spd",
+    stat_boost_int: "Int",
+    stat_boost_luck: "Luck",
+  };
+
   const handleResearch = async (projectId: string, cost: number) => {
     if (!account || (account.gold ?? 0) < cost) {
       toast({ title: "Not enough gold", description: `You need ${cost.toLocaleString()} gold.`, variant: "destructive" });
@@ -178,49 +151,51 @@ export default function ResearchLab() {
     await new Promise(r => setTimeout(r, project.duration));
 
     try {
-      const res = await apiRequest("POST", "/api/mining/mine", {
-        accountId: account.id,
-        nodeId: `research_${projectId}`,
-        goldOverride: 0,
-        expOverride: project.tpCost * 2,
+      const stat = STAT_MAP[projectId];
+      const res = await apiRequest("POST", `/api/accounts/${account.id}/research`, {
+        projectId,
+        goldCost: cost,
+        tpGain: project.tpCost * 2,
+        ...(stat ? { statBoost: { stat, amount: 2 } } : {}),
       });
-      await res.json();
-    } catch {}
-
-    toast({
-      title: "Research Complete!",
-      description: `${project.name} research finished! ${project.reward}`,
-    });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast({
+        title: "Research Complete!",
+        description: `${project.name} finished! ${project.reward}${data.tpGained ? ` (+${data.tpGained} TP)` : ""}`,
+      });
+    } catch (err: any) {
+      toast({ title: "Research Failed", description: err?.message || "Server error", variant: "destructive" });
+    }
 
     const accRes = await fetch(`/api/accounts/${account.id}`);
     if (accRes.ok) setAccount(await accRes.json());
     setIsWorking(null);
   };
 
-  const handleCraft = (recipeId: string, cost: number) => {
+  const handleCraft = async (recipeId: string, cost: number) => {
     if (!account || (account.gold ?? 0) < cost) {
       toast({ title: "Not enough gold", description: `You need ${cost.toLocaleString()} gold.`, variant: "destructive" });
       return;
     }
+    setIsWorking(recipeId);
     const recipe = CRAFTING_RECIPES.find(r => r.id === recipeId);
     if (!recipe) return;
-    toast({
-      title: "Item Crafted!",
-      description: `${recipe.name} has been added to your inventory. (-${cost.toLocaleString()} gold)`,
-    });
-  };
-
-  const handleEnchant = (enchantId: string, cost: number) => {
-    if (!account || (account.gold ?? 0) < cost) {
-      toast({ title: "Not enough gold", description: `You need ${cost.toLocaleString()} gold.`, variant: "destructive" });
-      return;
+    try {
+      const res = await apiRequest("POST", `/api/accounts/${account.id}/research`, {
+        projectId: recipeId,
+        goldCost: cost,
+        tpGain: 0,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast({ title: "Item Crafted!", description: `${recipe.name} crafted! (-${cost.toLocaleString()} gold)` });
+      const accRes = await fetch(`/api/accounts/${account.id}`);
+      if (accRes.ok) setAccount(await accRes.json());
+    } catch (err: any) {
+      toast({ title: "Craft Failed", description: err?.message || "Server error", variant: "destructive" });
     }
-    const enchant = ENCHANTING_OPTIONS.find(e => e.id === enchantId);
-    if (!enchant) return;
-    toast({
-      title: "Enchantment Applied!",
-      description: `${enchant.name} applied to your gear. (-${cost.toLocaleString()} gold)`,
-    });
+    setIsWorking(null);
   };
 
   const handleCraftForestWeapon = async (weaponIndex: number, goldCost: number, requiredRankIndex: number, requiredRank: string) => {
@@ -356,32 +331,23 @@ export default function ResearchLab() {
             </TabsContent>
 
             <TabsContent value="enchanting" className="space-y-2 mt-0">
-              <p className="text-xs text-muted-foreground mb-2">Enchant your equipped gear with magical runes for permanent stat bonuses.</p>
-              {ENCHANTING_OPTIONS.map(enchant => {
-                const canAfford = (account.gold ?? 0) >= enchant.cost;
-                return (
-                  <Card key={enchant.id} className="bg-black/60 border-purple-900/40">
-                    <CardContent className="p-3">
-                      <div className="flex items-start gap-3">
-                        <span className="text-2xl shrink-0">{enchant.icon}</span>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-sm font-semibold text-white">{enchant.name}</h3>
-                          <p className="text-xs text-muted-foreground mt-0.5">{enchant.description}</p>
-                          <p className="text-xs text-yellow-400 mt-1">💰 {enchant.cost.toLocaleString()} gold</p>
-                        </div>
-                        <Button
-                          size="sm"
-                          disabled={!canAfford}
-                          onClick={() => handleEnchant(enchant.id, enchant.cost)}
-                          className="shrink-0 text-xs h-8 bg-purple-800 hover:bg-purple-700 border border-purple-600/40"
-                        >
-                          Enchant
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+              <Card className="bg-black/60 border-purple-900/40">
+                <CardContent className="p-4 text-center">
+                  <Sparkles className="w-10 h-10 mx-auto mb-3 text-purple-400" />
+                  <h3 className="text-sm font-semibold text-white mb-1">Enchant Items in Your Inventory</h3>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Item enchanting is done directly in your Inventory. Select any item and click <span className="text-purple-300 font-medium">✦ Enchant</span> to add random stat bonuses using Soul Shards.
+                  </p>
+                  <p className="text-xs text-purple-400/80 mb-3">Each enchant costs Soul Shards and adds +5–15 to a random stat. Max 10 enchantment levels per item.</p>
+                  <Button
+                    size="sm"
+                    onClick={() => window.location.href = "/inventory"}
+                    className="bg-purple-800 hover:bg-purple-700 border border-purple-600/40 text-purple-100"
+                  >
+                    <Sparkles className="w-3 h-3 mr-1" /> Go to Inventory
+                  </Button>
+                </CardContent>
+              </Card>
             </TabsContent>
 
             <TabsContent value="forest_weapons" className="space-y-2 mt-0">
