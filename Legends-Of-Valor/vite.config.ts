@@ -46,8 +46,11 @@ export default defineConfig({
       ? await (async () => {
           try {
             return [
+              // @ts-ignore — optional Replit dev plugin, types not bundled
               await import("@replit/vite-plugin-runtime-error-modal").then((m) => m.default()),
+              // @ts-ignore — optional Replit dev plugin, types not bundled
               await import("@replit/vite-plugin-cartographer").then((m) => m.cartographer()),
+              // @ts-ignore — optional Replit dev plugin, types not bundled
               await import("@replit/vite-plugin-dev-banner").then((m) => m.devBanner()),
             ];
           } catch {

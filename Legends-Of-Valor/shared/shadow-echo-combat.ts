@@ -500,7 +500,7 @@ export function runShadowEchoBattle(
   ].indexOf(echo.rank);
   const rankTier = Math.max(0, rankIdx);
 
-  const goldReward  = winner === "challenger" ? (rankTier + 1) * 5_000  * (1 + (echo as any).prestigeLevel ?? 0) : 0;
+  const goldReward  = winner === "challenger" ? (rankTier + 1) * 5_000  * (1 + ((echo as any).prestigeLevel ?? 0)) : 0;
   const shardReward = winner === "challenger" ? (rankTier + 1) * 25     : 0;
   const xpReward    = winner === "challenger" ? (rankTier + 1) * 500    : Math.floor((rankTier + 1) * 100);
 

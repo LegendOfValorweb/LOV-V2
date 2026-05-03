@@ -79,7 +79,7 @@ export type QuestRewards = {
 
 type QuestTemplate = {
   id: string;
-  category: "combat" | "progression" | "wealth" | "exploration" | "mastery";
+  category: "combat" | "progression" | "wealth" | "exploration" | "mastery" | "fortune";
   difficulty: "trivial" | "easy" | "medium" | "hard" | "legendary";
   minRankIndex: number;
   maxRankIndex: number;

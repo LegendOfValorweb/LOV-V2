@@ -187,7 +187,7 @@ export default function EnchantedForest() {
       loreText="A mystical woodland alive with ancient magic. Faeries, spirits, and rare creatures call this place home..."
       interactables={[
         { id: "herb", type: "resource", name: "Rare Herbs", emoji: "🌿", position: { x: 20, y: 55 }, onClick: () => handleGather("meadow_edge") },
-        { id: "faerie", type: "npc", name: "Faerie Queen", emoji: "🧚", position: { x: 65, y: 38 }, onClick: () => {} },
+        { id: "faerie", type: "npc", name: "Faerie Queen", emoji: "🧚", position: { x: 65, y: 38 }, onClick: () => handleGather("faerie_grove") },
         { id: "tree", type: "resource", name: "Spirit Tree", emoji: "🌲", position: { x: 45, y: 30 }, onClick: () => handleGather("spirit_wood") },
       ]}
     >

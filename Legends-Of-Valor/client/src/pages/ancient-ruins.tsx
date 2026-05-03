@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useGame } from "@/lib/game-context";
 import { useZoneDiscovery } from "@/hooks/use-zone-discovery";
@@ -87,10 +87,11 @@ export default function AncientRuins() {
   const [explorationProgress, setExplorationProgress] = useState(0);
   const [lastDiscovery, setLastDiscovery] = useState<{ lore: string } | null>(null);
 
-  if (!account || account.role !== "player" && account.role !== "admin") {
-    navigate("/");
-    return null;
-  }
+  useEffect(() => {
+    if (!account || (account.role !== "player" && account.role !== "admin")) navigate("/");
+  }, [account]);
+
+  if (!account || (account.role !== "player" && account.role !== "admin")) return null;
 
   const handleExplore = async (siteId: string) => {
     setIsExploring(siteId);
@@ -155,8 +156,8 @@ export default function AncientRuins() {
       ambientClass="zone-ambient-mystical"
       loreText="Crumbling temples of a forgotten age. Artifacts of immense power lie buried beneath the stone..."
       interactables={[
-        { id: "scroll", type: "resource", name: "Lore Scroll", emoji: "📜", position: { x: 20, y: 40 }, onClick: () => {} },
-        { id: "boss", type: "npc", name: "Ancient Boss", emoji: "☠️", position: { x: 78, y: 30 }, onClick: () => {} },
+        { id: "scroll", type: "resource", name: "Lore Scroll", emoji: "📜", position: { x: 20, y: 40 }, onClick: () => handleExplore("inner_sanctum") },
+        { id: "boss", type: "npc", name: "Ancient Boss", emoji: "☠️", position: { x: 78, y: 30 }, onClick: () => handleExplore("apex_tower") },
       ]}
     >
       <div className="flex flex-col h-full">
