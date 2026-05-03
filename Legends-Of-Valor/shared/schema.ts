@@ -403,6 +403,24 @@ export const prestigeHistory = pgTable("prestige_history", {
   prestigedAt: timestamp("prestiged_at").notNull().defaultNow(),
 });
 
+export const playerSnapshots = pgTable("player_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  accountId: varchar("account_id").notNull().unique().references(() => accounts.id, { onDelete: "cascade" }),
+  capturedAt: timestamp("captured_at").notNull().defaultNow(),
+  username: text("username").notNull(),
+  race: text("race").default("human"),
+  gender: text("gender").default("male"),
+  portrait: text("portrait"),
+  rank: text("rank").notNull().default("Novice"),
+  prestigeLevel: integer("prestige_level").notNull().default(0),
+  stats: jsonb("stats").notNull().default({}).$type<Record<string, number>>(),
+  skills: jsonb("skills").notNull().default([]).$type<string[]>(),
+  strategyProfile: text("strategy_profile").notNull().default("balanced"),
+  hp: integer("hp").notNull().default(100),
+  echoWins: integer("echo_wins").notNull().default(0),
+  echoLosses: integer("echo_losses").notNull().default(0),
+});
+
 export const recipes = pgTable("recipes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),

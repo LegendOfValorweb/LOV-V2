@@ -343,8 +343,52 @@ Three-tab page for meta-progression beyond Mythical Legend rank:
 ### Navigation
 - World Map: "Hall of Legends" zone (hell-tier, top-center at 50, 15)
 
+## PHASE 16: Shadow Echoes (May 2026)
+
+### New DB table
+- `player_snapshots` — one row per player, upserted whenever they visit the Shadow Realm (or win a fight)
+  - Stores: username, race, rank, prestige level, computed stats, equipped skill IDs, detected strategy profile, echo W/L record
+
+### Shadow Echoes — `/shadow-echoes` (Shadow Realm on World Map)
+
+**Concept:** Every player who enters the Shadow Realm registers an AI "Shadow Echo" — a fully-accurate clone of their current build, stat-for-stat, skill-for-skill — that other players can fight at any time.
+
+**Strategy Profile Detection (auto from build):**
+- `berserker` — very high Str + 2+ damage skills
+- `mage` — Int > Str × 1.5 + at least 1 skill
+- `defensive` — 2+ heal or buff skills
+- `aggressive` — 3+ damage/AOE skills
+- `balanced` — default
+
+**Combat Simulator (`shared/shadow-echo-combat.ts`):**
+- Fully server-side, auto-resolved in a single POST — no round-trip
+- Both combatants act each round (speed determines order within round)
+- AI selects: attack / defend / dodge / skill — weighted by strategy profile
+- Skill AI: offensive, heal, and buff skills selected from pool, respecting cooldowns and mana
+- Status effects: burn, poison, regen, stun, freeze, shield, stat boosts — all tick each round
+- Crit rolls: `min(40%, 5% + Luck/400)`
+- Shield absorption before HP damage
+- 25-round cap; timed out → highest HP% wins
+- Reward scaling: `(rankIndex + 1) × 5,000 gold × (1 + prestige)` on victory
+
+**API Routes:**
+- `POST /api/accounts/:id/snapshot` — capture/refresh player's echo snapshot
+- `GET /api/shadow-echoes?rank=&exclude=` — browse available echoes
+- `GET /api/shadow-echoes/mine/:accountId` — own echo status
+- `POST /api/shadow-echoes/:snapshotId/battle` — run battle, award gold + shards to winner
+
+**Frontend features:**
+- Rank filter dropdown + difficulty indicator (Easy/Fair/Dangerous vs your rank)
+- Echo profile card: stats grid, strategy badge, W/L record, reward preview
+- Battle log with animated replay (350ms/event) + HP bars updating in real-time
+- Rematch button
+
+### Navigation
+- World Map: "Shadow Realm" zone (hard, east side at 78, 35)
+
 ## Recent Changes
 
+- May 2026: Shadow Echoes system (AI player clones, strategy profiles, auto-combat simulator)
 - May 2026: Prestige system (10 tiers, permanent bonuses, shop, combat integration)
 - May 2026: Modular ability workshop (upgrade / modifiers / fusion), combat modifier integration
 - May 2026: Casino system (3 games + history), Skill Tree (210 nodes × 14 races), passive combat integration

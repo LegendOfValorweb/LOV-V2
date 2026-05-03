@@ -22,7 +22,7 @@ import {
 } from "./server-achievements";
 import { storage, evictAccountCache } from "./storage";
 import { db } from "./db";
-import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, type CombatLogEntry, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, shardEvents, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage, worldBosses, worldBossDamage, inventoryItems, playerSkills, casinoHistory, skillTreeNodes, playerModifiers, prestigeHistory } from "@shared/schema";
+import { insertAccountSchema, insertInventoryItemSchema, playerRanks, playerStatsSchema, equippedSchema, insertEventSchema, insertChallengeSchema, challenges as challengesTable, petElements, type GuildBank, type GuildBuff, playerRaces, playerGenders, raceModifiers, accounts, type CombatLogEntry, calculateCarryCapacity, ITEM_WEIGHT_BY_TIER, FISH_WEIGHT_BY_RARITY, RESOURCE_WEIGHT_BY_RARITY, MAX_HERITAGE_REBIRTHS, HERITAGE_BONUS_PER_REBIRTH, HERITAGE_TITLES, monsterSpawnLog, BASE_TIER_COSTS, BASE_TIER_NAMES, BASE_TIER_RANK_REQUIREMENTS, ROOM_MAX_LEVEL_BY_TIER, OFFLINE_TRAINING_XP_PER_HOUR, VAULT_INTEREST_RATE, VAULT_MAX_GOLD, ROOM_UPGRADE_BASE_COST, DAILY_CATCH_LIMIT_BY_RANK, PET_FEED_CAP_BY_RANK, getRodForRank, FISH_SELL_PRICES, FISH_PET_STAT_GAIN, FISH_CRAFTING_MATERIAL, GUILD_DUNGEON_TIERS, GUILD_PERKS, guilds as guildsTable, valorpediaDiscoveries, valorpediaMilestonesClaimed, VALORPEDIA_ENTRIES, VALORPEDIA_MILESTONES, valorpediaCategories, playerTitles, PET_MUTATION_TRAITS, PET_MUTATION_CHANCE, PET_COOKING_RECIPES, PET_REVIVE_CONSUMABLE_COST, type PetMutationTrait, ZONE_DUNGEON_CONFIGS, getZoneDungeonConfig, zoneDungeonRuns, ZONE_DUNGEON_RANK_INDEX, guildQuests, guildQuestContributions, insertGuildQuestSchema, insertGuildQuestContributionSchema, tournamentBetting, shards, shardTypes, shardEvents, hellZoneSessions, hellZoneParticipants, zoneConquests, bounties, zoneNpcProgress, coopSessions, type CoopChatMessage, worldBosses, worldBossDamage, inventoryItems, playerSkills, casinoHistory, skillTreeNodes, playerModifiers, prestigeHistory, playerSnapshots } from "@shared/schema";
 import { ZONE_NPCS, getZoneNPC, calculateNPCStats, calculateNPCRewards } from "@shared/zone-npcs";
 import { z } from "zod";
 import type { Account, Event, Challenge, PlayerRace, PlayerGender } from "@shared/schema";
@@ -19373,6 +19373,226 @@ export async function registerRoutes(
     } catch (e) {
       if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
       res.status(500).json({ error: "Failed to fuse skills" });
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════
+  // SHADOW ECHOES — AI clones of real players
+  // ══════════════════════════════════════════════════════════════════════
+
+  // Helper: build + upsert a player's snapshot
+  async function upsertSnapshot(accountId: string): Promise<void> {
+    const account = await storage.getAccount(accountId);
+    if (!account) return;
+    const { ALL_SKILLS } = await import("@shared/skills-data");
+    const { detectStrategyProfile, calcMaxHp } = await import("@shared/shadow-echo-combat");
+
+    // Fetch equipped skills
+    const equipped = await db.select().from(playerSkills)
+      .where(and(eq(playerSkills.accountId, accountId), eq(playerSkills.isEquipped, true)))
+      .limit(8);
+
+    const skillDefs = equipped
+      .map(es => ALL_SKILLS.find((s: any) => s.id === es.skillId))
+      .filter(Boolean) as any[];
+
+    const shadowSkills = skillDefs.map((s: any) => ({
+      id: s.id,
+      name: s.name,
+      spellCategory: s.spellCategory,
+      spellPower: s.spellPower ?? 1.0,
+      cooldown: s.cooldown ?? 5,
+      manaCost: s.manaCost ?? 20,
+      effects: s.effects ?? [],
+    }));
+
+    const stats = (account.stats ?? { Str:10, Def:10, Spd:10, Int:10, Luck:10, Pot:0 }) as any;
+    const profile = detectStrategyProfile(shadowSkills, stats);
+    const hp = calcMaxHp(stats, (account as any).race ?? "human", account.rank);
+
+    // Upsert
+    const existing = await db.select({ id: playerSnapshots.id })
+      .from(playerSnapshots)
+      .where(eq(playerSnapshots.accountId, accountId))
+      .limit(1);
+
+    if (existing.length > 0) {
+      await db.update(playerSnapshots)
+        .set({
+          capturedAt: new Date(),
+          username: account.username,
+          race: (account as any).race ?? "human",
+          gender: (account as any).gender ?? "male",
+          portrait: (account as any).portrait ?? null,
+          rank: account.rank,
+          prestigeLevel: (account as any).prestigeLevel ?? 0,
+          stats: stats,
+          skills: equipped.map(e => e.skillId),
+          strategyProfile: profile,
+          hp,
+        })
+        .where(eq(playerSnapshots.accountId, accountId));
+    } else {
+      await db.insert(playerSnapshots).values({
+        accountId,
+        username: account.username,
+        race: (account as any).race ?? "human",
+        gender: (account as any).gender ?? "male",
+        portrait: (account as any).portrait ?? null,
+        rank: account.rank,
+        prestigeLevel: (account as any).prestigeLevel ?? 0,
+        stats,
+        skills: equipped.map(e => e.skillId),
+        strategyProfile: profile,
+        hp,
+      });
+    }
+  }
+
+  // POST /api/accounts/:id/snapshot — refresh the player's shadow echo snapshot
+  app.post("/api/accounts/:accountId/snapshot", async (req, res) => {
+    try {
+      await upsertSnapshot(req.params.accountId);
+      const snap = await db.select().from(playerSnapshots)
+        .where(eq(playerSnapshots.accountId, req.params.accountId))
+        .limit(1);
+      res.json(snap[0] ?? { message: "Snapshot created" });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to update snapshot" });
+    }
+  });
+
+  // GET /api/shadow-echoes/mine/:accountId — own snapshot info
+  app.get("/api/shadow-echoes/mine/:accountId", async (req, res) => {
+    try {
+      const rows = await db.select().from(playerSnapshots)
+        .where(eq(playerSnapshots.accountId, req.params.accountId))
+        .limit(1);
+      if (!rows.length) return res.json(null);
+      res.json(rows[0]);
+    } catch {
+      res.status(500).json({ error: "Failed to fetch snapshot" });
+    }
+  });
+
+  // GET /api/shadow-echoes — browse all echoes (exclude self, optional rank filter)
+  app.get("/api/shadow-echoes", async (req, res) => {
+    try {
+      const { rank, exclude } = req.query as { rank?: string; exclude?: string };
+      let q = db.select().from(playerSnapshots).$dynamic();
+      const conditions: any[] = [];
+      if (exclude) conditions.push(ne(playerSnapshots.accountId, exclude));
+      if (rank && rank !== "all") conditions.push(eq(playerSnapshots.rank, rank));
+      if (conditions.length) q = q.where(and(...conditions));
+      const rows = await q.orderBy(desc(playerSnapshots.capturedAt)).limit(50);
+      res.json(rows);
+    } catch {
+      res.status(500).json({ error: "Failed to fetch echoes" });
+    }
+  });
+
+  // POST /api/shadow-echoes/:snapshotId/battle — auto-resolve a full fight
+  app.post("/api/shadow-echoes/:snapshotId/battle", async (req, res) => {
+    try {
+      const { challengerId } = z.object({ challengerId: z.string() }).parse(req.body);
+      const [snap] = await db.select().from(playerSnapshots)
+        .where(eq(playerSnapshots.id, req.params.snapshotId))
+        .limit(1);
+      if (!snap) return res.status(404).json({ error: "Echo not found" });
+
+      const challenger = await storage.getAccount(challengerId);
+      if (!challenger) return res.status(404).json({ error: "Challenger not found" });
+
+      const { ALL_SKILLS } = await import("@shared/skills-data");
+      const { runShadowEchoBattle, calcMaxHp, detectStrategyProfile } = await import("@shared/shadow-echo-combat");
+
+      // Build challenger's equipped skills
+      const cEquipped = await db.select().from(playerSkills)
+        .where(and(eq(playerSkills.accountId, challengerId), eq(playerSkills.isEquipped, true)))
+        .limit(8);
+      const cSkillDefs = cEquipped
+        .map(es => ALL_SKILLS.find((s: any) => s.id === es.skillId))
+        .filter(Boolean) as any[];
+      const challengerSkills = cSkillDefs.map((s: any) => ({
+        id: s.id, name: s.name, spellCategory: s.spellCategory,
+        spellPower: s.spellPower ?? 1.0, cooldown: s.cooldown ?? 5,
+        manaCost: s.manaCost ?? 20, effects: s.effects ?? [],
+      }));
+
+      // Build echo's skills from snapshot
+      const echoSkillIds: string[] = (snap.skills ?? []) as string[];
+      const echoSkills = echoSkillIds
+        .map(id => ALL_SKILLS.find((s: any) => s.id === id))
+        .filter(Boolean)
+        .map((s: any) => ({
+          id: s.id, name: s.name, spellCategory: s.spellCategory,
+          spellPower: s.spellPower ?? 1.0, cooldown: s.cooldown ?? 5,
+          manaCost: s.manaCost ?? 20, effects: s.effects ?? [],
+        }));
+
+      const cStats = (challenger.stats ?? { Str:10, Def:10, Spd:10, Int:10, Luck:10, Pot:0 }) as any;
+      // Apply prestige multiplier to challenger stats
+      const prestigeLvl = (challenger as any).prestigeLevel ?? 0;
+      const permBonus = (challenger as any).permanentStatBonus ?? 0;
+      if (prestigeLvl > 0 || permBonus > 0) {
+        const { getPrestigeStatMult } = await import("@shared/prestige-data");
+        const mult = getPrestigeStatMult(prestigeLvl) * (1 + permBonus / 100);
+        cStats.Str  = Math.round((cStats.Str  ?? 10) * mult);
+        cStats.Def  = Math.round((cStats.Def  ?? 10) * mult);
+        cStats.Spd  = Math.round((cStats.Spd  ?? 10) * mult);
+        cStats.Int  = Math.round((cStats.Int  ?? 10) * mult);
+        cStats.Luck = Math.round((cStats.Luck ?? 10) * mult);
+      }
+
+      const eStats = (snap.stats ?? { Str:10, Def:10, Spd:10, Int:10, Luck:10, Pot:0 }) as any;
+      const cProfile = detectStrategyProfile(challengerSkills, cStats);
+      const cHp = calcMaxHp(cStats, (challenger as any).race ?? "human", challenger.rank);
+      const eHp = calcMaxHp(eStats, (snap.race ?? "human") as string, snap.rank);
+
+      const challengerCombatant = {
+        id: challengerId, label: "challenger" as const,
+        name: challenger.username,
+        hp: cHp, maxHp: cHp, mana: 100, maxMana: 200,
+        stats: cStats, rank: challenger.rank,
+        race: (challenger as any).race ?? "human",
+        skills: challengerSkills, cooldowns: {}, status: [],
+        strategyProfile: cProfile,
+      };
+
+      const echoCombatant = {
+        id: snap.id, label: "echo" as const,
+        name: `Echo of ${snap.username}`,
+        hp: eHp, maxHp: eHp, mana: 100, maxMana: 200,
+        stats: eStats, rank: snap.rank,
+        race: (snap.race ?? "human") as string,
+        skills: echoSkills, cooldowns: {}, status: [],
+        strategyProfile: (snap.strategyProfile ?? "balanced") as any,
+        prestigeLevel: snap.prestigeLevel,
+      };
+
+      const result = runShadowEchoBattle(challengerCombatant, echoCombatant);
+
+      // Update echo W/L record
+      if (result.winner === "challenger") {
+        await db.update(playerSnapshots)
+          .set({ echoLosses: (snap.echoLosses ?? 0) + 1 })
+          .where(eq(playerSnapshots.id, snap.id));
+        // Award gold and shards to challenger
+        await storage.updateAccount(challengerId, {
+          gold: (challenger.gold ?? 0) + result.goldReward,
+          soulShards: ((challenger as any).soulShards ?? 0) + result.shardReward,
+        } as any);
+        evictAccountCache(challengerId);
+      } else if (result.winner === "echo") {
+        await db.update(playerSnapshots)
+          .set({ echoWins: (snap.echoWins ?? 0) + 1 })
+          .where(eq(playerSnapshots.id, snap.id));
+      }
+
+      res.json({ ...result, echoUsername: snap.username });
+    } catch (e) {
+      if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors[0].message });
+      res.status(500).json({ error: "Failed to run shadow battle" });
     }
   });
 
