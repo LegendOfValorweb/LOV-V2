@@ -1455,29 +1455,19 @@ export async function runAutoCombat(
 }
 
 function selectAIAction(combatant: Combatant, currentHP: number, fullCombatant: Combatant, ccTracker?: CCTracker): CombatAction {
-  const maxHP = calculateMaxHP(combatant.stats, combatant.level, combatant.race, combatant.rank);
-  const hpPercent = currentHP / maxHP;
-  const roll = Math.random();
+  // Determine behavior type from race/stats profile
+  let behavior: AIBehaviorType = "aggressive";
+  const { Str, Def, Spd, Int, Luck } = combatant.stats;
+  const topStat = Math.max(Str, Def, Spd, Int, Luck);
+  if (Def === topStat && Def > Str)          behavior = "defensive";
+  else if (Int === topStat && Int > Str)     behavior = "trickster";
+  else if (Luck === topStat && Luck > Str)   behavior = "trickster";
+  else if (combatant.rank === "Champion" || combatant.rank === "Overlord" ||
+           combatant.rank === "Sovereign"  || combatant.rank === "Ascendant" ||
+           combatant.rank === "Legend"     || combatant.rank === "Mythic"    ||
+           combatant.rank === "Mythical Legend")                behavior = "boss";
 
-  const silenced = ccTracker ? isSilenced(ccTracker, combatant.id) : false;
-
-  if (hpPercent < 0.3 && roll < 0.4) {
-    return { type: "defend" };
-  }
-
-  if (!silenced && fullCombatant.spell && combatant.stats.Int > combatant.stats.Str && roll < 0.35) {
-    return { type: "spell" };
-  }
-
-  if (combatant.stats.Spd > 30 && roll < 0.2) {
-    return { type: "dodge" };
-  }
-
-  if (combatant.stats.Luck > 25 && roll < 0.25) {
-    return { type: "trick" };
-  }
-
-  return { type: "attack" };
+  return selectSmartAIAction(combatant, currentHP, ccTracker, behavior);
 }
 
 export function calculateCombatRewards(
@@ -2349,4 +2339,452 @@ export function calculatePvPDamage(
     lifeSteal, reaction, reactionBonusDamage, reactSelfHeal,
     missed: false, logParts,
   };
+}
+
+// ================================================================
+// STRATEGIC ENEMY AI — Behavior Types, Context-Aware Decisions
+// ================================================================
+
+export type AIBehaviorType = "aggressive" | "defensive" | "trickster" | "boss";
+export type PvPActionType = "attack" | "defend" | "dodge" | "trick" | "ability";
+
+/** Context snapshot fed into the AI decision engine */
+export interface PvPAIContext {
+  selfHpPct:             number;    // 0–1
+  selfStatusEffects:     PvPStatusEffect[];
+  selfComboCount:        number;
+  selfAbilityCooldown:   number;
+  selfRace:              string;
+  selfStats:             { Str: number; Def: number; Spd: number; Int: number; Luck: number };
+  opponentHpPct:         number;    // 0–1
+  opponentStatusEffects: PvPStatusEffect[];
+  opponentLastAction:    string | null;
+  opponentComboCount:    number;
+  round:                 number;
+}
+
+/** Map NPC usernames → behavior archetype */
+export const NPC_BEHAVIOR_MAP: Record<string, AIBehaviorType> = {
+  Guardian_Kira: "trickster",   // Elf — arcane trickery + blind chains
+  Shadow_Vex:    "aggressive",  // Demon — relentless pressure
+  Iron_Magnus:   "defensive",   // Dwarf — impenetrable fortress
+  Storm_Lyra:    "boss",        // Elemental — multi-phase tactician
+};
+
+// ─── Shared helpers ───────────────────────────────────────────────
+
+function hasEffect(effects: PvPStatusEffect[], type: string): boolean {
+  return effects.some(e => e.type === type && e.duration > 0);
+}
+
+function countEffectStacks(effects: PvPStatusEffect[], type: string): number {
+  return effects.filter(e => e.type === type && e.duration > 0).length;
+}
+
+/**
+ * Weighted random selector — weights are non-negative numbers.
+ * Returns the chosen key.
+ */
+function weightedChoice<T extends string>(weights: Record<T, number>): T {
+  const entries = Object.entries(weights) as [T, number][];
+  const total = entries.reduce((s, [, w]) => s + Math.max(0, w), 0);
+  if (total === 0) return entries[0][0];
+  let r = Math.random() * total;
+  for (const [key, w] of entries) {
+    r -= Math.max(0, w);
+    if (r <= 0) return key;
+  }
+  return entries[entries.length - 1][0];
+}
+
+// ─── AGGRESSIVE AI ───────────────────────────────────────────────
+// Shadow_Vex-style: relentless pressure, punish defenders with tricks,
+// berserk when wounded, ability on cooldown optimally.
+
+function aggressiveAI(ctx: PvPAIContext): PvPActionType {
+  const {
+    selfHpPct, selfStatusEffects, selfComboCount, selfAbilityCooldown,
+    opponentHpPct, opponentStatusEffects, opponentLastAction, opponentComboCount,
+  } = ctx;
+
+  const isStunned   = hasEffect(selfStatusEffects, "stun");
+  const isBlinded   = hasEffect(selfStatusEffects, "blind");
+  const isEmpowered = hasEffect(selfStatusEffects, "empower");
+  const opBlinded   = hasEffect(opponentStatusEffects, "blind");
+  const opStunned   = hasEffect(opponentStatusEffects, "stun");
+  const opShielded  = hasEffect(opponentStatusEffects, "shield");
+
+  // Stunned — can't act, but still "submit" attack (server handles skip)
+  if (isStunned) return "attack";
+
+  // Ability logic: use aggressively when —
+  // • Ready AND (opponent below 40% OR self is empowered already for chain)
+  // • OR self HP critical — use as hail mary
+  const abilityReady = selfAbilityCooldown === 0;
+  if (abilityReady) {
+    if (opponentHpPct < 0.40) return "ability"; // kill shot
+    if (selfHpPct < 0.20)     return "ability"; // desperation
+    if (selfHpPct > 0.60 && opponentHpPct > 0.60 && !isEmpowered) return "ability"; // early power spike
+  }
+
+  // If opponent is stunned/blinded → spam attack, guaranteed hits
+  if (opStunned || opBlinded) return "attack";
+
+  // Hard counters based on opponent's last action
+  if (opponentLastAction === "defend")  return "trick";  // trick bypasses defend
+  if (opponentLastAction === "dodge")   return "attack"; // attack forces engagement
+  if (opponentLastAction === "trick")   return "attack"; // attack beats trick
+
+  // Maintain combo streak if ≥ 2
+  if (selfComboCount >= 2) return "attack";
+
+  // If opponent has a shield, use trick to partially bypass
+  if (opShielded) return "trick";
+
+  // Berserk below 25% — never stop attacking
+  if (selfHpPct < 0.25) return isBlinded ? "trick" : "attack";
+
+  // Base weights with aggressive bias
+  return weightedChoice<PvPActionType>({
+    attack:  isEmpowered ? 70 : 55,
+    trick:   25,
+    defend:  opponentComboCount >= 3 ? 15 : 5,
+    dodge:   10,
+    ability: 0, // already handled above
+  });
+}
+
+// ─── DEFENSIVE AI ────────────────────────────────────────────────
+// Iron_Magnus-style: survive everything, punish overextension,
+// ability used for shields/heals, counterattack from safety.
+
+function defensiveAI(ctx: PvPAIContext): PvPActionType {
+  const {
+    selfHpPct, selfStatusEffects, selfComboCount, selfAbilityCooldown,
+    opponentHpPct, opponentStatusEffects, opponentLastAction, opponentComboCount,
+  } = ctx;
+
+  const isStunned   = hasEffect(selfStatusEffects, "stun");
+  const isSlow      = hasEffect(selfStatusEffects, "slow");
+  const isShielded  = hasEffect(selfStatusEffects, "shield");
+  const isEmpowered = hasEffect(selfStatusEffects, "empower");
+  const opBlinded   = hasEffect(opponentStatusEffects, "blind");
+  const opStunned   = hasEffect(opponentStatusEffects, "stun");
+  const opEmpowered = hasEffect(opponentStatusEffects, "empower");
+
+  if (isStunned) return "defend";
+
+  // Ability logic: use defensively —
+  // • Ability ready AND self is wounded → ability (dwarf gets fortress)
+  // • Also use if opponent is on a big combo to disrupt
+  const abilityReady = selfAbilityCooldown === 0;
+  if (abilityReady) {
+    if (selfHpPct < 0.45)              return "ability"; // defensive shield/heal
+    if (opponentComboCount >= 3)       return "ability"; // interrupt combo
+    if (opponentHpPct < 0.30 && selfHpPct > 0.55) return "ability"; // finish them safely
+  }
+
+  // Safe window: shielded or opponent stunned/blinded → press attack
+  if (isShielded || opStunned || opBlinded) return "attack";
+
+  // Danger zone: opponent empowered or has big combo → turtle
+  if (opEmpowered || opponentComboCount >= 4) return "defend";
+
+  // Hard counters to opponent's last action
+  if (opponentLastAction === "attack")  return Math.random() < 0.5 ? "defend" : "dodge";
+  if (opponentLastAction === "trick")   return "attack"; // attack beats trick
+  if (opponentLastAction === "ability") return "defend"; // unknown effect, shield
+  if (opponentLastAction === "dodge")   return "trick";  // catch them repositioning
+
+  // Manage own HP
+  if (selfHpPct < 0.30) return Math.random() < 0.6 ? "defend" : "dodge";
+  if (selfHpPct < 0.50) return Math.random() < 0.4 ? "defend" : "attack";
+
+  // Healthy window with empower → attack
+  if (isEmpowered) return "attack";
+
+  // Slow debuff — use trick (less speed-dependent) over dodge
+  if (isSlow) return Math.random() < 0.5 ? "trick" : "attack";
+
+  return weightedChoice<PvPActionType>({
+    attack:  35,
+    defend:  25,
+    dodge:   20,
+    trick:   15,
+    ability: 5,
+  });
+}
+
+// ─── TRICKSTER AI ─────────────────────────────────────────────────
+// Guardian_Kira-style: status fishing, exploit debuffs, dodge to build
+// advantage, ability for blind/empower chains.
+
+function tricksterAI(ctx: PvPAIContext): PvPActionType {
+  const {
+    selfHpPct, selfStatusEffects, selfComboCount, selfAbilityCooldown,
+    opponentHpPct, opponentStatusEffects, opponentLastAction, opponentComboCount, round,
+  } = ctx;
+
+  const isStunned   = hasEffect(selfStatusEffects, "stun");
+  const isBlinded   = hasEffect(selfStatusEffects, "blind");
+  const isEmpowered = hasEffect(selfStatusEffects, "empower");
+  const opBlinded   = hasEffect(opponentStatusEffects, "blind");
+  const opStunned   = hasEffect(opponentStatusEffects, "stun");
+  const opBurning   = countEffectStacks(opponentStatusEffects, "burn") > 0;
+  const opPoisoned  = countEffectStacks(opponentStatusEffects, "poison") > 0;
+  const opBleeding  = countEffectStacks(opponentStatusEffects, "bleed") > 0;
+
+  if (isStunned) return "dodge"; // try to dodge through stun logic
+
+  // Ability logic: use to apply blind/empower at strategic moments —
+  // • Round 1-2: open with ability for early advantage
+  // • When opponent has no debuffs AND self is healthy
+  // • When own empower is about to be useful (pre-combo)
+  const abilityReady = selfAbilityCooldown === 0;
+  if (abilityReady) {
+    if (round <= 2)                                     return "ability"; // opening gambit
+    if (!opBlinded && selfHpPct > 0.50)                return "ability"; // apply blind
+    if (selfHpPct < 0.30 && !isEmpowered)              return "ability"; // desperate empower
+    if (opponentHpPct < 0.35 && isEmpowered)           return "ability"; // layered pressure
+  }
+
+  // Exploit opponent status effects
+  if (opStunned) return "trick"; // free trick hit vs stunned (can't counter)
+  if (opBlinded) return "attack"; // press when they can't hit back
+
+  // Empower active → attack to use the buff
+  if (isEmpowered) return selfComboCount >= 1 ? "attack" : "trick";
+
+  // Blinded self → switch to trick (less accuracy dependent)
+  if (isBlinded) return "trick";
+
+  // Hard counters to last action
+  if (opponentLastAction === "attack")  return "dodge";  // sidestep into counter
+  if (opponentLastAction === "defend")  return "trick";  // trick cuts through defence
+  if (opponentLastAction === "trick")   return "attack"; // attack beats trick
+  if (opponentLastAction === "dodge")   return "trick";  // trick works on repositioning
+  if (opponentLastAction === "ability") return "dodge";  // avoid unknown ability
+
+  // DoT stacking: opponent has multiple DoTs → dodge to drag out the fight
+  const opDoTCount = [opBurning, opPoisoned, opBleeding].filter(Boolean).length;
+  if (opDoTCount >= 2 && selfHpPct > 0.40) return "dodge"; // let DoTs work
+
+  // Break opponent's combo with dodge
+  if (opponentComboCount >= 3) return "dodge";
+
+  // Low HP survival: dodge-kite
+  if (selfHpPct < 0.25) return Math.random() < 0.5 ? "dodge" : "trick";
+
+  return weightedChoice<PvPActionType>({
+    attack:  isEmpowered ? 40 : 20,
+    trick:   35,
+    dodge:   25,
+    defend:  10,
+    ability: abilityReady ? 10 : 0,
+  });
+}
+
+// ─── BOSS AI ─────────────────────────────────────────────────────
+// Storm_Lyra-style: four phases based on own HP, reads opponent patterns,
+// uses ability at maximum impact moments, never predictable.
+
+function bossAI(ctx: PvPAIContext): PvPActionType {
+  const {
+    selfHpPct, selfStatusEffects, selfComboCount, selfAbilityCooldown,
+    opponentHpPct, opponentStatusEffects, opponentLastAction, opponentComboCount, round,
+    selfStats,
+  } = ctx;
+
+  const isStunned   = hasEffect(selfStatusEffects, "stun");
+  const isEmpowered = hasEffect(selfStatusEffects, "empower");
+  const isShielded  = hasEffect(selfStatusEffects, "shield");
+  const opStunned   = hasEffect(opponentStatusEffects, "stun");
+  const opBlinded   = hasEffect(opponentStatusEffects, "blind");
+  const opEmpowered = hasEffect(opponentStatusEffects, "empower");
+  const abilityReady = selfAbilityCooldown === 0;
+
+  if (isStunned) return opponentComboCount >= 2 ? "defend" : "attack";
+
+  // ── ABILITY TIMING (boss uses ability at maximum impact) ──
+  if (abilityReady) {
+    // Guaranteed kill window
+    if (opponentHpPct < 0.20) return "ability";
+    // Desperate survival
+    if (selfHpPct < 0.15)     return "ability";
+    // Phase transition power spike (at roughly 70%, 40%, and 20%)
+    const inTransition =
+      (selfHpPct >= 0.68 && selfHpPct <= 0.72) ||
+      (selfHpPct >= 0.38 && selfHpPct <= 0.42) ||
+      (selfHpPct >= 0.18 && selfHpPct <= 0.22);
+    if (inTransition) return "ability";
+    // Opponent is on a dangerous combo — interrupt
+    if (opponentComboCount >= 4) return "ability";
+  }
+
+  // ── PHASE 1: DOMINANCE (HP > 70%) ───────────────────────────
+  if (selfHpPct > 0.70) {
+    // Pure aggression in early rounds
+    if (round <= 3) return "attack";
+    // Counter-play
+    if (opponentLastAction === "defend") return "trick";
+    if (opponentLastAction === "dodge")  return "attack";
+    if (opponentLastAction === "trick")  return "attack";
+    // Build combo
+    if (selfComboCount >= 1) return "attack";
+    // Use top stat
+    return selfStats.Int > selfStats.Str ? "trick" : "attack";
+  }
+
+  // ── PHASE 2: TACTICAL (HP 40–70%) ───────────────────────────
+  if (selfHpPct > 0.40) {
+    // Exploit opponent debuffs
+    if (opStunned || opBlinded) return "attack";
+    // React to opponent strategy
+    if (opponentLastAction === "attack" && opponentComboCount >= 2) return "dodge";
+    if (opponentLastAction === "defend")   return "trick";
+    if (opponentLastAction === "trick")    return "attack";
+    if (opponentLastAction === "ability")  return "defend";
+    if (opponentLastAction === "dodge")    return "trick";
+    // Empower window → press attack
+    if (isEmpowered) return "attack";
+    // Tactical mix
+    return weightedChoice<PvPActionType>({
+      attack: 40,
+      trick:  25,
+      dodge:  20,
+      defend: 15,
+      ability: 0,
+    });
+  }
+
+  // ── PHASE 3: SURVIVAL (HP 20–40%) ───────────────────────────
+  if (selfHpPct > 0.20) {
+    // Ability for shield/heal
+    if (abilityReady && selfHpPct < 0.35) return "ability";
+    // Counter heavy combo with dodge
+    if (opponentComboCount >= 3) return "dodge";
+    // Shielded window → counterattack
+    if (isShielded) return "attack";
+    if (opEmpowered) return "defend"; // weather the storm
+    // React to last action
+    if (opponentLastAction === "attack") return Math.random() < 0.5 ? "defend" : "dodge";
+    if (opponentLastAction === "trick")  return "attack";
+    if (opponentLastAction === "dodge")  return "trick";
+    return weightedChoice<PvPActionType>({
+      attack:  25,
+      defend:  30,
+      dodge:   30,
+      trick:   15,
+      ability: 0,
+    });
+  }
+
+  // ── PHASE 4: BERSERK (HP < 20%) ──────────────────────────────
+  // Last stand: forget defense, go all-in
+  if (abilityReady) return "ability"; // use everything available
+  if (opponentLastAction === "defend") return "trick"; // still counter-plays
+  if (selfComboCount >= 2) return "attack"; // finish the combo
+  return Math.random() < 0.75 ? "attack" : "trick";
+}
+
+/**
+ * Central PvP NPC action selector.
+ * Call this with the combat context to get the NPC's strategic action.
+ */
+export function selectPvPNPCAction(ctx: PvPAIContext, behavior: AIBehaviorType): PvPActionType {
+  switch (behavior) {
+    case "aggressive": return aggressiveAI(ctx);
+    case "defensive":  return defensiveAI(ctx);
+    case "trickster":  return tricksterAI(ctx);
+    case "boss":       return bossAI(ctx);
+    default:           return aggressiveAI(ctx);
+  }
+}
+
+// ─── Improved Auto-Combat AI ──────────────────────────────────────
+// Upgrades selectAIAction with behavior-aware logic.
+// Used in runAutoCombat (NPC tower/zone battles).
+
+export function selectSmartAIAction(
+  combatant: Combatant,
+  currentHP: number,
+  ccTracker: CCTracker | undefined,
+  behavior: AIBehaviorType = "aggressive",
+): CombatAction {
+  const maxHP = calculateMaxHP(combatant.stats, combatant.level, combatant.race, combatant.rank);
+  const hpPct = currentHP / Math.max(1, maxHP);
+  const silenced  = ccTracker ? isSilenced(ccTracker, combatant.id) : false;
+  const stunned   = ccTracker ? isStunned(ccTracker, combatant.id) : false;
+  const frozen    = ccTracker ? isFrozen(ccTracker, combatant.id) : false;
+  const { Str, Def, Spd, Int, Luck } = combatant.stats;
+
+  // CC prevents action
+  if (stunned || frozen) return { type: "defend" };
+
+  // Build a simple context using stats as proxies
+  const ctx: PvPAIContext = {
+    selfHpPct:             hpPct,
+    selfStatusEffects:     [], // CC tracker has different format; use simple checks
+    selfComboCount:        0,
+    selfAbilityCooldown:   0,  // auto-combat doesn't use PvP abilities
+    selfRace:              combatant.race || "human",
+    selfStats:             { Str, Def, Spd, Int, Luck },
+    opponentHpPct:         0.5,  // unknown in auto-combat; use neutral
+    opponentStatusEffects: [],
+    opponentLastAction:    null,
+    opponentComboCount:    0,
+    round:                 1,
+  };
+
+  // Behaviour-specific decisions; map to CombatAction types
+  // Note: auto-combat uses "spell" not "ability"
+  const hasMagic = !silenced && combatant.spell && Int > Str;
+
+  switch (behavior) {
+    case "aggressive": {
+      if (hpPct < 0.25) return { type: "attack" }; // berserk
+      if (hasMagic && hpPct > 0.5 && Math.random() < 0.4) return { type: "spell" };
+      if (Luck > 30 && Math.random() < 0.25) return { type: "trick" };
+      return { type: "attack" };
+    }
+    case "defensive": {
+      if (hpPct < 0.35 && Math.random() < 0.55) return { type: "defend" };
+      if (Spd > 30 && hpPct < 0.5 && Math.random() < 0.35) return { type: "dodge" };
+      if (hasMagic && Math.random() < 0.3) return { type: "spell" };
+      if (hpPct > 0.6 && Math.random() < 0.4) return { type: "attack" };
+      return { type: "defend" };
+    }
+    case "trickster": {
+      if (hpPct < 0.25) return { type: "dodge" };
+      if (hasMagic && Math.random() < 0.45) return { type: "spell" };
+      if (Luck > 20 && Math.random() < 0.45) return { type: "trick" };
+      if (Spd > 25 && Math.random() < 0.30) return { type: "dodge" };
+      return { type: "attack" };
+    }
+    case "boss": {
+      // Boss shifts based on HP phase
+      if (hpPct > 0.70) {
+        if (hasMagic && Math.random() < 0.35) return { type: "spell" };
+        return { type: "attack" };
+      }
+      if (hpPct > 0.40) {
+        const r = Math.random();
+        if (hasMagic && r < 0.30) return { type: "spell" };
+        if (r < 0.40) return { type: "attack" };
+        if (r < 0.60) return { type: "trick" };
+        return { type: "dodge" };
+      }
+      if (hpPct > 0.20) {
+        const r = Math.random();
+        if (r < 0.35) return { type: "defend" };
+        if (r < 0.55) return { type: "dodge" };
+        if (hasMagic && r < 0.70) return { type: "spell" };
+        return { type: "attack" };
+      }
+      // Berserk phase
+      if (hasMagic && Math.random() < 0.5) return { type: "spell" };
+      return { type: "attack" };
+    }
+  }
+  return { type: "attack" };
 }

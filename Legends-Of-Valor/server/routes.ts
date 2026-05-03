@@ -91,8 +91,12 @@ import {
   calculatePvPDamage,
   executePvPRaceAbility,
   getPvPAbilityInfo,
+  selectPvPNPCAction,
+  NPC_BEHAVIOR_MAP,
   type PvPStatusEffect,
   type PvPReaction,
+  type PvPAIContext,
+  type AIBehaviorType,
 } from "./combat-engine";
 import { craftItem, socketGem } from "./crafting-system";
 import { 
@@ -2908,31 +2912,62 @@ export async function registerRoutes(
             return stats;
           };
           
-          // NPC auto-selects an action based on their total stats (including pets/birds)
+          // ── Strategic NPC AI — behavior-aware decision making ──────────
           const npcStats = await getNPCTotalStats(opponentAccount);
-          const actions = ["attack", "defend", "dodge", "trick"] as const;
-          
-          // Weight action selection based on NPC total stats
-          const weights = {
-            attack: npcStats.Str / 10,
-            defend: npcStats.Def / 10,
-            dodge: npcStats.Spd / 10,
-            trick: npcStats.Int / 10,
-          };
-          
-          // Also factor in some randomness
-          const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0) + 4;
-          let random = Math.random() * totalWeight;
-          let npcAction: typeof actions[number] = "attack";
-          
-          for (const act of actions) {
-            random -= weights[act] + 1;
-            if (random <= 0) {
-              npcAction = act;
-              break;
-            }
+
+          // Identify which combat state belongs to NPC vs player
+          const npcCombatPlayer  = isChallenger ? combatState.player2 : combatState.player1;
+          const humanCombatPlayer = isChallenger ? combatState.player1 : combatState.player2;
+
+          // Parse opponent's last action from the most recent log entry
+          // Log format: "Round N: P1 → action | P2 → action"
+          let opponentLastAction: string | null = null;
+          if (combatState.log && combatState.log.length > 0) {
+            const lastEntry = combatState.log[combatState.log.length - 1];
+            // Extract the human player's action from the log
+            const sideLabel = isChallenger
+              ? (humanCombatPlayer?.name || challengerName)
+              : (humanCombatPlayer?.name || challengedName);
+            const afterPipe = lastEntry.split("·")[0]; // first segment before details
+            const actionMatch = afterPipe.match(new RegExp(`${sideLabel}\\s*→\\s*(\\w+)`, "i"));
+            if (actionMatch) opponentLastAction = actionMatch[1].toLowerCase();
           }
-          
+
+          // Build AI context from live combat state
+          const npcHpPct      = npcCombatPlayer
+            ? Math.max(0, npcCombatPlayer.hp / Math.max(1, npcCombatPlayer.maxHp))
+            : 1.0;
+          const opponentHpPct = humanCombatPlayer
+            ? Math.max(0, humanCombatPlayer.hp / Math.max(1, humanCombatPlayer.maxHp))
+            : 1.0;
+
+          const aiCtx: PvPAIContext = {
+            selfHpPct:             npcHpPct,
+            selfStatusEffects:     (npcCombatPlayer?.statusEffects || []) as PvPStatusEffect[],
+            selfComboCount:        npcCombatPlayer?.comboCount || 0,
+            selfAbilityCooldown:   npcCombatPlayer?.abilityCooldown || 0,
+            selfRace:              opponentAccount.race || "human",
+            selfStats:             npcStats,
+            opponentHpPct,
+            opponentStatusEffects: (humanCombatPlayer?.statusEffects || []) as PvPStatusEffect[],
+            opponentLastAction,
+            opponentComboCount:    humanCombatPlayer?.comboCount || 0,
+            round:                 combatState.round || 1,
+          };
+
+          // Look up behavior from NPC name map, fall back to stat-based heuristic
+          let behavior: AIBehaviorType =
+            NPC_BEHAVIOR_MAP[opponentAccount.username] ?? "aggressive";
+
+          // Stat-based fallback for unknown NPCs
+          if (!NPC_BEHAVIOR_MAP[opponentAccount.username]) {
+            const top = Math.max(npcStats.Str, npcStats.Def, npcStats.Int, npcStats.Luck);
+            if (npcStats.Def === top && npcStats.Def > npcStats.Str) behavior = "defensive";
+            else if (npcStats.Int === top || npcStats.Luck === top)  behavior = "trickster";
+          }
+
+          const npcAction = selectPvPNPCAction(aiCtx, behavior);
+
           // Set NPC action only if not already set
           if (isChallenger && !combatState.challengedAction) {
             combatState.challengedAction = npcAction;
